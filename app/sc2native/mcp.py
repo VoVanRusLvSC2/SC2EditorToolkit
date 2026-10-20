@@ -9,6 +9,9 @@ PROPERTIES={'template':{'type':'string'},'map':{'type':'string'},'startup_module
  'output':{'type':'string'},'overwrite':{'type':'boolean'},'scene':{'type':'string'},'camera':{'type':'string'},
  'time_ms':{'type':'number','minimum':0,'maximum':600000},'allow_empty':{'type':'boolean'},
  'size':{'type':'integer','enum':[512,1024,2048,4096],'default':2048},'include_units':{'type':'boolean','default':True},'include_doodads':{'type':'boolean','default':True},
+ 'query':{'type':'string','maxLength':256},'kinds':{'type':'array','minItems':1,'items':{'type':'string','enum':['unit','doodad','point','camera','other']}},
+ 'owner':{'type':'integer','minimum':0,'maximum':255},'offset':{'type':'integer','minimum':0,'maximum':500000},'limit':{'type':'integer','minimum':1,'maximum':500,'default':100},
+ 'bounds':{'type':'object','properties':{k:{'type':'number'} for k in ('left','bottom','right','top')},'required':['left','bottom','right','top'],'additionalProperties':False},
  'start_ms':{'type':'number','minimum':0,'maximum':600000},'end_ms':{'type':'number','minimum':0,'maximum':600000},
  'fps':{'type':'integer','minimum':1,'maximum':60},'keep_frames':{'type':'boolean'},'include_audio':{'type':'boolean','default':True}}
 TOOLS=[
@@ -25,6 +28,8 @@ TOOLS=[
  ('sc2_capture_terrain','Capture the original Terrain viewport to PNG in the background. Optional map opens a private .SC2Map copy. Uses the current native map view; a .SC2Mod has no terrain.','capture_terrain',[]),
  ('sc2_export_map_image','EXPERIMENTAL (rendered-map acceptance pending): export the COMPLETE map from above with the original Editor Map Image Export: full bounds, all quadrants, 90 degree camera, terrain/water/shadows and units/doodads enabled by default. Optional map autostarts a hidden worker. size is horizontal pixel resolution; native bounds determine height. Returns full PNG download plus bounded preview.','export_map_image',[]),
  ('sc2_export_video','Export the entire cutscene or start_ms..end_ms (exclusive) to H.264 MP4 with the selected camera. Original native frames and original Editor audio (AAC by default; include_audio=false for silent video), requires FFmpeg/ffprobe.','export_video',[]),
+ ('sc2_search_objects','Read saved map Objects XML without starting an Editor. Supply map or use this worker current saved .SC2Map. Search case-insensitive query over saved ID/type/name, kinds, owner and optional map XY bounds; paginate with offset/limit. Returns original XYZ (Z may be a placement offset), unique snapshot object keys and map SHA-256. Excludes unsaved/live/runtime-created objects and inherited dependency placements.','search_objects',[]),
+ ('sc2_capture_map_region','EXPERIMENTAL: capture a map XY rectangle from the original hidden full-map overhead export. Required bounds={left,bottom,right,top}; optional map, size (resolution of the FULL map), include_units/include_doodads and output. Crops original pixels without upscaling or input injection. Native render and north/up coordinate calibration remain pending live test; coordinateMappingValidated is false. Returns PNG download and bounded preview.','capture_map_region',['bounds']),
 ]
 
 def restore_pipes():
@@ -54,7 +59,7 @@ def main():
                 if method=='initialize':
                     version=params.get('protocolVersion','2025-06-18')
                     if version not in ('2024-11-05','2025-03-26','2025-06-18'):version='2025-06-18'
-                    result={'protocolVersion':version,'serverInfo':{'name':'sc2-native-toolkit','version':'0.7.0-rc.1'},'capabilities':{'tools':{'listChanged':False}},
+                    result={'protocolVersion':version,'serverInfo':{'name':'sc2-native-toolkit','version':'0.7.0-rc.2'},'capabilities':{'tools':{'listChanged':False}},
                         'instructions':'Use an installed SC2 Editor. Load a cutscene using scene and a map/mod template, select a unique camera and time_ms, then capture its renderer. Time is sampled on the native 33 ms frame grid. Every editor window remains on a private desktop.'};initialized=True
                 elif method=='ping':result={}
                 elif not initialized:raise ValueError('Initialize the MCP session first')
@@ -69,7 +74,7 @@ def main():
                         content=[{'type':'text','text':json.dumps(compact,ensure_ascii=False)}]
                         if name in ('sc2_capture_frame','sc2_capture_terrain') and data.get('artifact'):
                             content.append({'type':'image','mimeType':'image/png','data':base64.b64encode(Path(data['artifact']['path']).read_bytes()).decode('ascii')})
-                        if name in ('sc2_export_video','sc2_export_map_image') and data.get('preview'):
+                        if name in ('sc2_export_video','sc2_export_map_image','sc2_capture_map_region') and data.get('preview'):
                             content.append({'type':'image','mimeType':'image/png','data':base64.b64encode(Path(data['preview']['path']).read_bytes()).decode('ascii')})
                         result={'content':content,'structuredContent':compact,'isError':data.get('status')=='FAILED'}
                     except Exception as e:result={'content':[{'type':'text','text':str(e)}],'isError':True}

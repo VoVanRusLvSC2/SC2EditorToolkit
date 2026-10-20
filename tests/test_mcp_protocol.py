@@ -17,5 +17,8 @@ class Mcp(unittest.TestCase):
             self.assertIn('sc2_export_galaxy',{t['name'] for t in output[1]['result']['tools']})
             self.assertIn('sc2_capture_terrain',{t['name'] for t in output[1]['result']['tools']})
             self.assertIn('sc2_export_map_image',{t['name'] for t in output[1]['result']['tools']})
+            self.assertIn('sc2_search_objects',{t['name'] for t in output[1]['result']['tools']})
+            region=next(t for t in output[1]['result']['tools'] if t['name']=='sc2_capture_map_region')
+            self.assertEqual(region['inputSchema']['required'],['bounds'])
             self.assertFalse(Path(work,'worker.json').exists())
 if __name__=='__main__':unittest.main()

@@ -111,10 +111,24 @@ def main():
             else:
                 raise AssertionError('Existing image accepted without overwrite permission')
             assert sha(target) == before and sha(source) == original_hash
+            found = call('/objects/search', {'map': str(source), 'kinds': ['unit'], 'query': 'CommandCenter'})
+            save('Objects', found)
+            assert found['totalMatches'] == 1 and found['sourceUnchanged'], found
+            landmark = found['objects'][0]['position']
+            bounds = {'left': max(0, landmark['x'] - 5), 'bottom': max(0, landmark['y'] - 5),
+                      'right': landmark['x'] + 5, 'top': landmark['y'] + 5}
+            region = call('/terrain/region', {'map': str(source), 'size': args.size,
+                                            'bounds': bounds, 'output': str(work / 'CornerRegion.png')})
+            save('CornerRegion', region)
+            assert region['status'] == 'MAP_REGION_CAPTURED' and region['regionCropVerified'], region
+            assert not region['region']['resampled'] and region['sourceUnchanged'], region
+            assert not region['coordinateMappingValidated'], region
+            # Automated math is not a native coordinate calibration. A person
+            # must confirm that this southwest crop actually shows CommandCenter.
             save('VERIFICATION', {
                 'status': 'AUTOMATED_MAP_EXPORT_CHECKS_PASSED_VISUAL_REVIEW_REQUIRED',
                 'sourceUnchanged': True, 'pixelDifferences': differences,
-                'visualReviewRequired': 'Check hills, four corner unit landmarks, doodads and full boundaries in All.png',
+                'visualReviewRequired': 'Check hills, four corner unit landmarks, doodads and boundaries in All.png; confirm CommandCenter is in CornerRegion.png',
                 'scope': 'This fixture and installed Editor/device only'})
             print('Automated checks passed. Visually review All.png, NoUnits.png and Ground.png.', flush=True)
         finally:

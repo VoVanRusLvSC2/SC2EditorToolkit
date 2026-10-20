@@ -10,6 +10,7 @@ class Worker:
             result.update(status='FAILED',error='Hidden desktop invariant failed',requestedCutsceneFrameVerified=False)
             if 'requestedTerrainFrameVerified' in result:result['requestedTerrainFrameVerified']=False
             if 'wholeMapVerified' in result:result['wholeMapVerified']=False
+            if 'regionCropVerified' in result:result['regionCropVerified']=False
         return result
     def __init__(self,work):
         self.work=Path(work).resolve();self.work.mkdir(parents=True,exist_ok=True)
@@ -318,9 +319,75 @@ class Worker:
             return result
         finally:self.lock.release()
 
-    def export_map_image(self,request):
-        from .map_images import export_options,inspect_image
+    def _snapshot_map(self,request):
+        supplied=request.get('map') or request.get('template')
+        source=Path(supplied).resolve(strict=True) if supplied else Path(self.state['documentPath']) if self.alive() else None
+        if source is None or not source.is_file() or source.suffix.lower()!='.sc2map':raise ValueError('Supply a saved .SC2Map or open one in this owned worker')
+        digest=files.sha(source)
+        directory=self.work/'map-queries'/uuid.uuid4().hex;directory.mkdir(parents=True)
+        snapshot=directory/'Snapshot.SC2Map';shutil.copyfile(source,snapshot)
+        if files.sha(snapshot)!=digest or files.sha(source)!=digest:raise RuntimeError('Source map changed while creating a read-only snapshot')
+        return source,digest,snapshot,directory
+
+    def search_objects(self,request):
+        from .map_objects import search_options,read_components,placement_records,search_records,terrain_metadata
         if not self.lock.acquire(blocking=False):raise RuntimeError('Worker busy')
+        try:
+            options=search_options(request)
+            source,digest,snapshot,directory=self._snapshot_map(request)
+            components=read_components(snapshot,files.mpq_tool())
+            records=placement_records(components['Objects'])
+            result={'status':'MAP_OBJECTS_FOUND','module':'objects','source':'saved map archive Objects XML; not live Editor state',
+                'map':str(source),'mapSha256':digest,'editorRequired':False,'inputAutomation':False,
+                'scope':'saved placements only; excludes runtime-created units and inherited dependency placements',
+                'coordinateMeaning':'original saved Position XYZ; Z may be a placement offset, not absolute terrain elevation',
+                'nameMeaning':'saved XML name/reference; localized display strings are not resolved',
+                'objectsComponentPresent':'Objects' in components,**search_records(records,options)}
+            if 't3Terrain.xml' in components:result['terrain']=terrain_metadata(components['t3Terrain.xml'])
+            if files.sha(source)!=digest:raise RuntimeError('Source map changed during object search; results discarded')
+            result['sourceUnchanged']=True
+            oracle.save(directory/'search-result.json',result);return result
+        finally:self.lock.release()
+
+    def capture_map_region(self,request):
+        from .map_objects import bounds_option,read_components,terrain_metadata
+        from .map_regions import validate_region,crop_region
+        from .map_images import export_options
+        if not self.lock.acquire(blocking=False):raise RuntimeError('Worker busy')
+        try:
+            options=export_options(request);bounds=bounds_option(request.get('bounds'))
+            output=Path(request['output']).resolve() if request.get('output') else None
+            if output and output.suffix.lower()!='.png':raise ValueError('Output extension must be .png')
+            if output and output.exists() and not request.get('overwrite',False):raise FileExistsError(output)
+            source,digest,snapshot,directory=self._snapshot_map(request)
+            components=read_components(snapshot,files.mpq_tool(),required=('t3Terrain.xml',))
+            metadata=terrain_metadata(components['t3Terrain.xml']);validate_region(bounds,metadata)
+            # Export a private immutable map snapshot. Do not publish the full
+            # frame before the region itself passes all validation checks.
+            full=self.export_map_image({**options,'map':str(snapshot)},_locked=True,_publish=False)
+            if full['status']=='FAILED':return full
+            png=directory/'Region.png';preview=directory/'Preview.png'
+            crop=crop_region(full['capturePath'],png,preview,bounds,metadata)
+            result={'status':'MAP_REGION_CAPTURED','module':'terrain','source':'crop of original Editor full-map export',
+                'implementationStatus':'experimental; native rendering and coordinate calibration pending live test',
+                'desktopScreenshot':False,'regionCropVerified':crop['image']['imageHasDetail'],
+                'coordinateMappingValidated':False,'region':crop,'terrain':metadata,'options':options,
+                'map':str(source),'mapSha256':digest,'sourceUnchanged':files.sha(source)==digest,
+                'native':full['native'],'nativeImageSha256':full['nativeImageSha256'],
+                'sourceFullMapPngSha256':files.sha(full['capturePath'])}
+            if not crop['image']['imageHasDetail']:result.update(status='FAILED',regionCropVerified=False,error='Selected region is black or uniform')
+            if not result['sourceUnchanged']:result.update(status='FAILED',regionCropVerified=False,error='Source map changed during region capture')
+            self._background_result(result)
+            if result['status']!='FAILED':
+                result['artifact']=self.artifacts.publish_file(png,suffix='.png',mime='image/png',output=output,overwrite=request.get('overwrite',False))
+                result['preview']=self.artifacts.register_png(preview)
+            else:result['diagnosticImage']=str(png)
+            oracle.save(directory/'region-result.json',result);return result
+        finally:self.lock.release()
+
+    def export_map_image(self,request,_locked=False,_publish=True):
+        from .map_images import export_options,inspect_image
+        if not _locked and not self.lock.acquire(blocking=False):raise RuntimeError('Worker busy')
         try:
             options=export_options(request)
             output=Path(request['output']).resolve() if request.get('output') else None
@@ -344,12 +411,14 @@ class Worker:
             if not image['imageHasDetail']:result.update(status='FAILED',error='Original map exporter returned a black or uniform image',wholeMapVerified=False)
             if not result['sourceUnchanged']:result.update(status='FAILED',error='Source map changed during export',wholeMapVerified=False)
             self._background_result(result)
-            if result['status']!='FAILED':
+            if result['status']!='FAILED' and _publish:
                 result['artifact']=self.artifacts.publish_file(png,suffix='.png',mime='image/png',output=output,overwrite=bool(request.get('overwrite',False)))
                 result['preview']=self.artifacts.register_png(preview)
-            else:result['diagnosticImage']=str(png)
+            elif result['status']=='FAILED':result['diagnosticImage']=str(png)
+            else:result['capturePath']=str(png)
             oracle.save(directory/'export-result.json',result);return result
-        finally:self.lock.release()
+        finally:
+            if not _locked:self.lock.release()
 
     def export_video(self,request):
         from .video import export_video

@@ -6,6 +6,7 @@ import urllib.error
 import urllib.request
 import uuid
 from pathlib import Path
+from map_archive_fixture import create_archive
 
 root = Path(__file__).resolve().parents[1]
 work = root / 'local-tests' / ('packaged-http-' + uuid.uuid4().hex)
@@ -35,13 +36,29 @@ with (work / 'stdout.log').open('wb') as stdout, (work / 'stderr.log').open('wb'
             time.sleep(.1)
         info = json.loads((work / 'runtime' / 'api-info.json').read_text())
         code, health = call('/health', authorized=False)
-        assert code == 200 and health['version'] == '0.7.0-rc.1' and not health['workerRunning'], health
+        assert code == 200 and health['version'] == '0.7.0-rc.2' and not health['workerRunning'], health
         assert call('/modules', authorized=False)[0] == 403
         assert call('/terrain/export', {'size': 512}, authorized=False)[0] == 403
         code, modules = call('/modules')
         terrain = next(m for m in modules['modules'] if m['id'] == 'terrain')
         assert code == 200 and terrain['fullMap']['experimental']
         assert 'export_map_image' in terrain['methods']
+        assert 'capture_region' in terrain['methods']
+        archive = create_archive(work / 'fixture', root / 'tools/mpqcli/mpqcli.exe')
+        import hashlib
+        before_hash = hashlib.sha256(archive.read_bytes()).hexdigest()
+        code, found = call('/objects/search', {'map': str(archive), 'query': 'marine', 'limit': 1})
+        assert code == 200 and found['totalMatches'] == 2 and found['nextOffset'] == 1, found
+        assert found['objects'][0]['position'] == {'x': 8, 'y': 12, 'z': 0}, found
+        assert not found['editorRequired'] and found['sourceUnchanged'], found
+        assert hashlib.sha256(archive.read_bytes()).hexdigest() == before_hash
+        for bounds in ({'left': 0}, {'left': -1, 'bottom': 0, 'right': 10, 'top': 10}):
+            code, error = call('/terrain/region', {'map': str(archive), 'bounds': bounds})
+            assert code == 400 and error['status'] == 'FAILED', error
+        target_region = work / 'ExistingRegion.png'
+        target_region.write_bytes(b'preserve existing region')
+        code, error = call('/terrain/region', {'bounds': {'left': 0, 'bottom': 0, 'right': 10, 'top': 10}, 'output': str(target_region)})
+        assert code == 409 and target_region.read_bytes() == b'preserve existing region', error
         for request in ({'size': True}, {'size': 8192}, {'include_units': 'false'},
                         {'include_doodads': 1}, {'camera': 'Front'}, {'overwrite': 'false'}):
             code, error = call('/terrain/export', request)
@@ -55,7 +72,8 @@ with (work / 'stdout.log').open('wb') as stdout, (work / 'stderr.log').open('wb'
         (work / 'VERIFICATION.json').write_text(json.dumps({
             'status': 'PACKAGED_HTTP_WITHOUT_EDITOR_PASSED', 'version': health['version'],
             'editorStarted': False, 'checks': ['health', 'auth', 'capabilities', 'export argument validation',
-                                             'existing output preservation']}, indent=2), encoding='utf8')
+                                             'existing output preservation', 'saved object coordinates and pagination',
+                                             'region validation before Editor startup']}, indent=2), encoding='utf8')
         print('Packaged HTTP: passed; no Editor started')
     finally:
         if info:

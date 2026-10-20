@@ -9,6 +9,47 @@ User maps, scenes, PNG/MP4 captures, raw PCM, tokens and complete runtime logs a
 kept local and are excluded from Git and release assets. Documentation and future
 release notes are maintained in English.
 
+## v0.7.0-rc.2: saved object search and experimental map regions
+
+Live Editor testing was explicitly deferred while the user is playing. No new
+Editor worker was started for these RC2 checks. Native DLL/controller code is
+unchanged from RC1; the added operations are in the Python API/MCP frontend.
+
+Object search reads `Objects` and terrain metadata from a byte-checked private
+snapshot using mpqcli. It reports saved XYZ, not sampled terrain elevation or
+unsaved/runtime state. Tests exercise filtering, pagination, duplicate IDs across
+object kinds, missing coordinates, malformed XML and finite bounds. A generated
+XML-only MPQ fixture verifies actual archive reads without starting an Editor;
+that fixture is not a renderable game map and is never passed to the Editor.
+
+Region capture privately obtains the original full-map export, validates its
+aspect ratio against full saved terrain bounds, then crops pixels with outward
+rounding. Synthetic coordinate-gradient tests establish crop math, RGB pixel
+identity, origin conversion and source preservation. Stubbed native results
+exercise publication rejection for failed native export, black crop, changed
+source and visible-worker observation. These are not native rendering evidence.
+
+The native north/up orientation and landmark alignment remain **unvalidated**;
+all region results retain `coordinateMappingValidated:false`. Standard XY
+offset/scale only is accepted. `size` controls full-map resolution; crops are not
+upscaled or rendered by a separate close-up camera. The existing opt-in
+`live_map_image.py` now searches the private fixture's southwest CommandCenter
+and requests a region around it for later visual calibration.
+
+| Final RC2 check, without Editor | Result |
+|---|---|
+| Python regression tests | 27 PASS |
+| Real generated MPQ search | PASS; original XYZ, filters, pagination, unchanged source; no Editor startup |
+| Synthetic region pixels | PASS; exact RGB crop, outward edges, covered bounds, no resampling |
+| Region failure cases | PASS; no publication for native failure, black image, source change or visible worker |
+| Packaged windowed MCP | PASS; 15 tools; actual archive search call returns expected coordinates; no Editor started |
+| Packaged windowed HTTP | PASS; actual archive search, invalid/outside region rejection and existing-output preservation; no Editor started |
+| English documentation | Eight JSON examples parse; README and validation report in English |
+| Native DLL changes | None; RC1 native binaries reused |
+| Native full-map and region render / coordinate landmarks | PENDING; explicitly deferred by user |
+
+Historical RC1/stable live results do not establish RC2 region rendering acceptance.
+
 ## v0.7.0-rc.1: experimental original whole-map export
 
 **A completed whole-map image has not been accepted.** The release is a

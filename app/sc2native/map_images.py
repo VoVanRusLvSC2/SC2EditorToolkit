@@ -14,10 +14,10 @@ def export_options(request):
     if 'camera' in request or 'time_ms' in request:raise ValueError('Full-map export uses its original overhead renderer, not a cutscene camera/time')
     return options
 
-def inspect_image(path,preview=None,png_output=None):
+def inspect_image(path,preview=None,png_output=None,minimum_size=64):
     path=Path(path)
     with Image.open(path) as original:
-        if original.width<64 or original.height<64 or max(original.size)>8192:raise ValueError('Unexpected original map image dimensions')
+        if original.width<minimum_size or original.height<minimum_size or max(original.size)>8192:raise ValueError('Unexpected original map image dimensions')
         original.load()
         image=original.convert('RGB');gray=image.convert('L');histogram=gray.histogram()
         nonblack=sum(histogram[1:]);bins=sum(bool(v) for v in histogram)

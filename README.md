@@ -3,7 +3,7 @@
 A modular backend for the original StarCraft II Editor. Original code author and
 project owner: **VoVanRusLvSC2**.
 
-**v0.7.0-rc.1 is a prerelease.** Whole-map overhead export is experimental:
+**v0.7.0-rc.2 is a prerelease.** Whole-map and coordinate-region export are experimental:
 the original export dialog and settings have been exercised, but a completed
 image showing terrain, placed units and doodads has **not yet been validated**.
 The live rendering test was deferred while the user is playing. See
@@ -31,7 +31,8 @@ Public documentation, setup instructions and release notes are maintained in **E
 | Editor | Hidden startup, private copies of `.SC2Map`/`.SC2Mod`, diagnostics |
 | Triggers | Original `Triggers XML → Galaxy` generation and native compilation |
 | Galaxy | Exact `.galaxy` bytes, SHA-256, artifact download, overwrite protection |
-| Terrain | Current viewport PNG; experimental complete overhead map PNG with placed units/doodads |
+| Objects | Search saved placements by ID/type/name, kind, owner and XY rectangle; no Editor needed |
+| Terrain | Current viewport PNG; experimental complete overhead map PNG and coordinate-region crops |
 | Cutscene | Load `.SC2Cutscene`, select camera/time, export PNG and H.264/AAC MP4 |
 | MCP | Windowed stdio executable exposing the same worker operations |
 
@@ -108,6 +109,8 @@ handler while it is still executing inside the Editor.
 | POST | `/editor/diagnostics` | Read Messages/Console controls |
 | POST | `/terrain/capture` | Capture the current original Terrain viewport |
 | POST | `/terrain/export` | Export the complete map overhead with native units/doodads |
+| POST | `/objects/search` | Search saved placements and return original XYZ without starting Editor |
+| POST | `/terrain/region` | Experimental coordinate rectangle crop of the original overhead export |
 | POST | `/cutscene/open` | Open the module and optionally import a scene |
 | POST | `/cutscene/seek` | Select a unique native camera and time |
 | POST | `/render/capture` | PNG of the selected cutscene frame |
@@ -176,6 +179,67 @@ is neither imported into nor overwritten by the export. A `.SC2Mod` has no surfa
 Install the map's actual asset dependencies. Export is configured for placed units
 and objects resolved by the original Editor; units created only by runtime
 triggers require a running game and are outside this static map export.
+
+## Search saved map objects
+
+`POST /objects/search` or MCP `sc2_search_objects` reads a private snapshot of the
+saved `.SC2Map` archive. **It does not start or require an Editor.** Supply `map`
+or `template`, or omit it to query this worker's current saved map. Unsaved live
+Editor changes are not included.
+
+```json
+{"map":"D:\\MyMap.SC2Map","query":"Marine","kinds":["unit"],"owner":1,"limit":50}
+```
+
+`query` is a case-insensitive substring over saved ID, XML type, name/reference
+and object key. `kinds` accepts `unit`, `doodad`, `point`, `camera`, `other`;
+points/cameras are returned only when represented by placement records in
+`Objects`. Separate region/camera documents are not indexed. Optional `bounds`
+uses the same XY rectangle as region capture. `limit` defaults to 100 (max 500),
+`offset` defaults to zero; follow `nextOffset` until null.
+
+Each result includes the original ID, kind, type, saved name/reference, owner
+when present and `position:{x,y,z}`. XYZ is the **saved placement**, and Z can be
+a terrain-relative placement offset rather than absolute surface elevation.
+Missing/invalid positions remain null and are counted in `objectsWithoutPosition`;
+they cannot match a bounds filter. Names are not resolved through localized
+GameStrings. Runtime-created units and inherited dependency placements are excluded.
+
+The response includes source SHA-256, `sourceUnchanged`, full terrain metadata
+when available, pagination and an `objectKey` unique within that archive snapshot.
+Do not reuse snapshot keys against a different map SHA-256. Reading the archive
+or XML unsuccessfully reports an error rather than a successful empty search.
+
+## Capture a coordinate region
+
+`POST /terrain/region` or MCP `sc2_capture_map_region` exports the full map through
+the owned hidden original Editor, then crops its original pixels. It does not
+move a visible camera, inject input, take a desktop screenshot or upscale pixels.
+
+```json
+{"map":"D:\\MyMap.SC2Map","bounds":{"left":8,"bottom":12,"right":24,"top":36},"size":2048,"output":"D:\\MapRegion.png"}
+```
+
+Bounds are finite map coordinates with `left < right`, `bottom < top`, wholly
+inside the full terrain. Coordinates use bottom-left XY; the crop assumes north
+is up in the native 90° export. **That orientation and landmark alignment have
+not been calibrated in a live Editor test.** Responses retain
+`coordinateMappingValidated:false`; the operation is experimental.
+
+The initial adapter supports terrain XY offset `0,0` and scale `1,1`, as recorded
+in `t3Terrain.xml`. Other transforms and mismatched image aspect ratios fail.
+Bounds are never silently clipped. Pixel edges round outwards; the response
+reports requested bounds, actual covered bounds and the source pixel rectangle.
+
+`size` selects the resolution of the **whole map**, not the final crop. Small
+regions contain fewer pixels; use 4096 for more source detail. This is not an
+independent close-up camera render. Unit/doodad switches, PNG output, artifact
+download/SHA-256, overwrite protection and bounded MCP previews work as for the
+full-map export. A failed native export, black/uniform crop, changed source or
+hidden-window violation cannot publish a successful region artifact.
+
+Use object search first and pass a rectangle around its returned XY to capture
+that location. Live visual verification of the actual landmark remains pending.
 
 ## Current Terrain viewport
 
@@ -290,6 +354,8 @@ scenes and output-device changes require additional validation.
 Tools: `sc2_modules`, `sc2_editor_start`, `sc2_open_document`, `sc2_convert_xml`,
 `sc2_compile_all`, `sc2_export_galaxy`, `sc2_diagnostics`, `sc2_cutscene_open`,
 `sc2_cutscene_seek`, `sc2_capture_frame`, `sc2_capture_terrain`, `sc2_export_map_image`, `sc2_export_video`.
+`sc2_search_objects` and `sc2_capture_map_region` provide saved placement search
+and experimental coordinate-region PNGs (15 tools in total).
 Images are returned as MCP image content and PNG artifacts; complete map exports
 embed the bounded preview and provide the full PNG as a downloadable artifact. Large Galaxy output
 uses the export tool rather than being embedded in MCP text. EOF shuts down the
@@ -333,7 +399,7 @@ and doodads. Its opt-in test checks full output dimensions, native TGA/PNG pixel
 identity, category-switch pixel differences, downloads and overwrite protection.
 Visually review the three PNGs for relief, all corner landmarks and doodads;
 automated detailed-pixel checks alone cannot certify those contents. This live
-acceptance test has not passed for v0.7.0-rc.1 yet.
+acceptance and coordinate-calibration test has not passed for v0.7.0-rc.2 yet.
 
 Tests without Editor validate transport, files, arguments and invariants; only
 live tests confirm native generation, compilation and rendering. See
