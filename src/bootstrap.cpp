@@ -3,6 +3,7 @@
 #include <string>
 #include <cstring>
 #include "graphics_bridge.h"
+#include "audio_protocol.h"
 #pragma comment(lib,"user32.lib")
 static std::wstring suffix,logPath;
 static SRWLOCK logLock=SRWLOCK_INIT;
@@ -63,6 +64,7 @@ extern "C" __declspec(dllexport) DWORD WINAPI BootstrapInit(void* raw){
                      {"NtOpenEvent",reinterpret_cast<void*>(OpenE)},{"NtOpenMutant",reinterpret_cast<void*>(OpenM)},{"NtOpenSection",reinterpret_cast<void*>(OpenS)},{"NtOpenSemaphore",reinterpret_cast<void*>(HookSemaphoreOpen)}};
     config->patches=PatchImports(GetModuleHandleW(L"kernelbase.dll"),patches,_countof(patches))+PatchImports(GetModuleHandleW(L"kernel32.dll"),patches,_countof(patches));
     std::wstring graphicsPath=logPath+L".graphics.log";DWORD graphicsError=StartHiddenGraphics(graphicsPath.c_str());if(graphicsError){config->error=100+graphicsError;return config->error;}
+    DWORD audioError=StartHiddenAudio();if(audioError)Log("audio-bootstrap",L"owned audio tap",L"unavailable; non-audio operations remain usable",audioError);
     return config->patches?0:3;
 }
 BOOL WINAPI DllMain(HINSTANCE,DWORD,LPVOID){return TRUE;}

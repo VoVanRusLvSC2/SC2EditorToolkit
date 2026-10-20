@@ -111,6 +111,61 @@ static void BeginSceneSeek(Block* b,HWND scene){
     if(!task->timer){delete task;Fail(b,55,L"Cannot schedule native scene seek");return;}
     sceneSeekTask=task;
 }
+
+using AudioControl=DWORD(WINAPI*)(AudioRequest*);
+struct SceneAudioTask {Block* b;HWND scene;UINT_PTR timer;ULONGLONG deadline;int stage=0;UINT play=0;bool playing=false;double high=0;int64_t origin=0;AudioControl control;double last=-1;ULONGLONG warmUntil=0;};
+static thread_local SceneAudioTask* sceneAudioTask;
+static void FinishSceneAudio(SceneAudioTask* task){
+ auto b=task->b;KillTimer(nullptr,task->timer);
+ if(task->stage>=3){b->audio.operation=2;task->control(&b->audio);b->audio.sceneStartQpc=task->origin;if(b->audio.error&&!b->error)Fail(b,67,L"Original mixer capture failed");}
+ if(task->playing){SendMessageW(task->scene,WM_COMMAND,task->play,0);UINT restart=FindCommand(task->scene,{L"Animation"},{L"Restart Scene"});if(restart)SendMessageW(task->scene,WM_COMMAND,restart,0);}
+ SceneSnapshot(b,task->scene);b->actualTimeMs=static_cast<int64_t>(llround(task->high*1000));
+ b->foregroundAfter=reinterpret_cast<uint64_t>(GetForegroundWindow());sceneAudioTask=nullptr;delete task;
+ InterlockedExchange(&b->completed,1);UnmapViewOfFile(b);
+}
+static void CALLBACK SceneAudioTimer(HWND,UINT,UINT_PTR,DWORD){
+ auto t=sceneAudioTask;if(!t)return;auto b=t->b;auto scene=t->scene;
+ if(std::filesystem::exists(std::wstring(b->mapPath)+L".cancel")){Fail(b,68,L"Audio export cancelled");FinishSceneAudio(t);return;}
+ if(!IsWindow(scene)||GetTickCount64()>t->deadline){Fail(b,65,L"Native audio playback timed out");FinishSceneAudio(t);return;}
+ if(t->stage==0){
+  UINT restart=FindCommand(scene,{L"Animation"},{L"Restart Scene"});
+  UINT speed=FindCommand(scene,{L"Animation"},{L"Reset Speed"});
+  t->play=FindCommand(scene,{L"Animation"},{L"Play/Pause",L"Play / Pause",L"Play",L"Play/Pause Scene",L"Play Scene"});
+  if(!t->play){HMENU root=GetMenu(scene);for(int i=0;i<GetMenuItemCount(root);i++){HMENU sub=GetSubMenu(root,i);if(!sub)continue;for(int j=0;j<GetMenuItemCount(sub);j++){wchar_t label[512]{};GetMenuStringW(sub,j,label,512,MF_BYPOSITION);Log(b,L"audio menu id=%u label=%s\n",GetMenuItemID(sub,j),label);}}}
+  Log(b,L"audio commands restart=%u speed=%u play=%u\n",restart,speed,t->play);
+  if(!restart||!t->play){Fail(b,66,L"Original playback commands unavailable");FinishSceneAudio(t);return;}
+  if(speed)SendMessageW(scene,WM_COMMAND,speed,0);
+  UINT helpers=SceneNestedCommand(scene,L"Render",L"Show Helpers",L"Show All Helpers");if(helpers&&CheckedCommand(GetMenu(scene),helpers))SendMessageW(scene,WM_COMMAND,helpers,0);
+  SendMessageW(scene,WM_COMMAND,restart,0);t->stage=1;return;
+ }
+ if(t->stage==1){
+  if(SceneTime(scene)>0.021)return;
+  UINT camera=SceneCameraCommand(scene,b->camera);if(!camera){Fail(b,58,L"Requested audio playback camera unavailable");FinishSceneAudio(t);return;}
+  SendMessageW(scene,WM_COMMAND,camera,0);auto checkedCamera=SceneCameraCommand(scene,b->camera);b->cameraConfirmed=checkedCamera&&CheckedCommand(GetMenu(scene),checkedCamera);
+  if(!b->cameraConfirmed){Fail(b,58,L"Native audio camera selection not confirmed");FinishSceneAudio(t);return;}
+  UINT size=SceneNestedCommand(scene,L"View",L"Viewport Size",L"720x480");if(size)SendMessageW(scene,WM_COMMAND,size,0);
+  t->warmUntil=GetTickCount64()+500;t->stage=2;return;
+ }
+ if(t->stage==2){
+  if(GetTickCount64()<t->warmUntil)return;
+  b->audio.operation=1;wcscpy_s(b->audio.path,b->mapPath);LARGE_INTEGER q;QueryPerformanceCounter(&q);b->audio.playQpc=q.QuadPart;
+  if(t->control(&b->audio)){Fail(b,67,L"Original audio output unavailable");FinishSceneAudio(t);return;}
+  t->stage=3;SendMessageW(scene,WM_COMMAND,t->play,0);t->playing=true;return;
+ }
+ double now=SceneTime(scene);if(!t->origin&&now>=.03){LARGE_INTEGER q;QueryPerformanceCounter(&q);t->origin=q.QuadPart-static_cast<int64_t>(now*b->audio.frequency);}t->high=(std::max)(t->high,now);
+ bool wrapped=t->last>=0&&now<t->last-.1;t->last=now;
+ if(wrapped&&t->high<b->timeMs/1000.0-.12){Fail(b,69,L"Native scene jumped before requested audio end");FinishSceneAudio(t);return;}
+ if(t->high>=b->timeMs/1000.0-.021||(wrapped&&t->high>=b->timeMs/1000.0-.12)){b->timeConfirmed=1;FinishSceneAudio(t);}
+}
+static void BeginSceneAudio(Block* b,HWND scene){
+ if(sceneSeekTask||sceneAudioTask){Fail(b,60,L"Another scene task owns this GUI thread");return;}
+ auto bootstrapModule=GetModuleHandleW(L"SC2StartupBootstrap.dll");auto control=bootstrapModule?reinterpret_cast<AudioControl>(GetProcAddress(bootstrapModule,"BootstrapAudioControl")):nullptr;
+ if(!control){Fail(b,67,L"Owned audio bootstrap missing");return;}
+ b->audio.operation=0;control(&b->audio);if(!b->audio.ready){Log(b,L"audio init error=%u version=%x rate=%u channels=%u\n",b->audio.error,b->audio.version,b->audio.rate,b->audio.channels);Fail(b,67,L"Original Windows audio output tap not ready");return;}
+ HMODULE pinned=nullptr;if(!GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS|GET_MODULE_HANDLE_EX_FLAG_PIN,reinterpret_cast<LPCWSTR>(&BeginSceneAudio),&pinned)){Fail(b,55,L"Cannot retain audio callback");return;}
+ auto t=new SceneAudioTask{b,scene,0,GetTickCount64()+30000+static_cast<ULONGLONG>(b->timeMs)*3};t->control=control;
+ t->timer=SetTimer(nullptr,0,15,SceneAudioTimer);if(!t->timer){delete t;Fail(b,55,L"Cannot schedule audio playback");return;}sceneAudioTask=t;
+}
 struct SceneLoadTask {Block* b;HWND scene;ULONGLONG deadline;HWND dialog=nullptr;bool submitted=false;};
 static thread_local SceneLoadTask* sceneLoadTask;
 static void CALLBACK SceneLoadTimer(HWND,UINT,UINT_PTR,DWORD){
@@ -144,6 +199,7 @@ static void SceneOperation(Block* b){
         b->sceneLoaded=task.submitted&&title.find(stem)!=std::wstring::npos;
         if(!b->error&&!b->sceneLoaded)Fail(b,56,L"Import returned but requested scene identity not confirmed");
     }
+    if(b->operation==SceneAudio){if(b->timeMs<=0||b->timeMs>600000||!b->mapPath[0]||!b->camera[0]){Fail(b,57,L"Audio output and end time required");return;}BeginSceneAudio(b,scene);return;}
     if(b->operation==SceneSeek||b->operation==SceneAdvance){
         if(b->timeMs<0||b->timeMs>600000||!b->camera[0]){Fail(b,57,L"Camera and time 0..600000 ms required");return;}
         BeginSceneSeek(b,scene);return;

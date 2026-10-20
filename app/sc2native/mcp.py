@@ -9,7 +9,7 @@ PROPERTIES={'template':{'type':'string'},'map':{'type':'string'},'triggers_xml':
  'output':{'type':'string'},'overwrite':{'type':'boolean'},'scene':{'type':'string'},'camera':{'type':'string'},
  'time_ms':{'type':'number','minimum':0,'maximum':600000},'allow_empty':{'type':'boolean'},
  'start_ms':{'type':'number','minimum':0,'maximum':600000},'end_ms':{'type':'number','minimum':0,'maximum':600000},
- 'fps':{'type':'integer','minimum':1,'maximum':60},'keep_frames':{'type':'boolean'}}
+ 'fps':{'type':'integer','minimum':1,'maximum':60},'keep_frames':{'type':'boolean'},'include_audio':{'type':'boolean','default':True}}
 TOOLS=[
  ('sc2_modules','List native modules and implemented capabilities.',None,[]),
  ('sc2_editor_start','Start an owned hidden original SC2 Editor using a map/mod template.','start',['template']),
@@ -21,7 +21,7 @@ TOOLS=[
  ('sc2_cutscene_open','Load a private copy of a native cutscene in the hidden original Editor. Supply scene and optional template.','cutscene_open',[]),
  ('sc2_cutscene_seek','Select a unique native camera and time_ms. Return actual Editor time and confirmation.','cutscene_seek',[]),
  ('sc2_capture_frame','Capture the selected cutscene renderer to PNG. Optional camera/time_ms selects a frame first. Black frames fail by default.','capture_frame',[]),
- ('sc2_export_video','Export the entire cutscene or start_ms..end_ms (exclusive) to H.264 MP4 with the selected camera. Original native frames, silent video, requires FFmpeg/ffprobe.','export_video',[]),
+ ('sc2_export_video','Export the entire cutscene or start_ms..end_ms (exclusive) to H.264 MP4 with the selected camera. Original native frames and original Editor audio (AAC by default; include_audio=false for silent video), requires FFmpeg/ffprobe.','export_video',[]),
 ]
 
 def restore_pipes():
@@ -51,7 +51,7 @@ def main():
                 if method=='initialize':
                     version=params.get('protocolVersion','2025-06-18')
                     if version not in ('2024-11-05','2025-03-26','2025-06-18'):version='2025-06-18'
-                    result={'protocolVersion':version,'serverInfo':{'name':'sc2-native-toolkit','version':'0.4.0'},'capabilities':{'tools':{'listChanged':False}},
+                    result={'protocolVersion':version,'serverInfo':{'name':'sc2-native-toolkit','version':'0.5.0'},'capabilities':{'tools':{'listChanged':False}},
                         'instructions':'Use an installed SC2 Editor. Load a cutscene using scene and a map/mod template, select a unique camera and time_ms, then capture its renderer. Time is sampled on the native 33 ms frame grid. Every editor window remains on a private desktop.'};initialized=True
                 elif method=='ping':result={}
                 elif not initialized:raise ValueError('Initialize the MCP session first')

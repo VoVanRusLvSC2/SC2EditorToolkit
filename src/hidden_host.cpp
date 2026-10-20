@@ -69,12 +69,13 @@ int wmain(int argc,wchar_t** argv){
     if(!InjectBootstrap(process,bootstrap,out/L"bootstrap.log",patches)){TerminateProcess(process.hProcess,42);CloseHandle(process.hThread);CloseHandle(process.hProcess);return E("Private worker singleton bootstrap failed");}
     ResumeThread(process.hThread);CloseHandle(process.hThread);
     std::string state;std::wstring currentDocument;DWORD exitCode=STILL_ACTIVE;ULONGLONG deadline=GetTickCount64()+ULONGLONG(timeout)*1000;
-    bool ready=false,singleton=false,graphics=false;
+    bool ready=false,singleton=false,graphics=false,busy=false;
     while(GetTickCount64()<deadline){
-        windows.clear();EnumWindows(Enum,0);ready=false;singleton=false;graphics=false;
+        windows.clear();EnumWindows(Enum,0);ready=false;singleton=false;graphics=false;busy=false;
         std::ostringstream snapshots;snapshots<<"[";bool comma=false;
         for(HWND w:windows){
-            auto title=Text(w);if(title.empty())continue;if(comma)snapshots<<",";comma=true;
+            auto title=Text(w);if(title.empty())continue;
+            if(title==L"Activity - StarCraft II Editor"&&IsWindowVisible(w))busy=true;if(comma)snapshots<<",";comma=true;
             snapshots<<"{\"hwnd\":"<<reinterpret_cast<uint64_t>(w)<<",\"title\":"<<Q(title)<<",\"enabled\":"<<(IsWindowEnabled(w)?"true":"false")<<",\"texts\":[";
             std::vector<HWND> children;EnumChildWindows(w,Children,reinterpret_cast<LPARAM>(&children));bool sep=false;
             for(HWND c:children)if(Class(c)==L"Static"||Class(c)==L"Button"){
@@ -84,6 +85,7 @@ int wmain(int argc,wchar_t** argv){
             }snapshots<<"]}";
             if(title.rfind(L"Terrain - [",0)==0&&IsWindowEnabled(w)){ready=true;auto close=title.find(L']');currentDocument=title.substr(11,close-11);}
         }snapshots<<"]";
+        ready=ready&&!busy;
         GetExitCodeProcess(process.hProcess,&exitCode);
         auto status=ready?L"HIDDEN_EDITOR_READY":singleton?L"BLOCKED_BY_EDITOR_SINGLETON":graphics?L"GRAPHICS_STARTUP_FAILED":exitCode!=STILL_ACTIVE?L"EDITOR_EXITED":L"STARTING";
         std::ostringstream r;r<<"{\"status\":"<<Q(status)<<",\"pid\":"<<childPid<<",\"createTimeFiletime\":"<<((uint64_t(creation.dwHighDateTime)<<32)|creation.dwLowDateTime)<<",\"desktop\":"<<Q(desktop)<<",\"inputDesktopBefore\":"<<Q(inputBefore)<<",\"currentDocument\":"<<Q(currentDocument)<<",\"exitCode\":"<<exitCode<<",\"desktopSwitched\":false,\"inputInjectionUsed\":false,\"windows\":"<<snapshots.str()<<"}";

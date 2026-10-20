@@ -1,4 +1,4 @@
-param([string]$Python='python',[string]$OutputDirectory='dist',[string]$MpqCli=(Join-Path $PSScriptRoot 'tools\mpqcli\mpqcli.exe'))
+param([string]$Python='python',[string]$OutputDirectory='dist',[string]$BinaryDirectory='bin-release',[string]$MpqCli=(Join-Path $PSScriptRoot 'tools\mpqcli\mpqcli.exe'))
 $ErrorActionPreference='Stop'
 if(-not (Test-Path -LiteralPath $MpqCli)){throw 'Run scripts/install-mpqcli.ps1 or pass -MpqCli'}
 $binaries=@('HiddenEditorHost.exe','SC2StartupBootstrap.dll','SC2NativeBridge.exe','SC2NativeBridge.dll','RenderCapture.exe')
@@ -6,7 +6,7 @@ foreach($program in @(@{Name='SC2NativeAPI';Entry='hidden_api.py'},@{Name='SC2Na
  $pyArgs=@('-m','PyInstaller','--noconfirm','--clean','--onefile','--windowed','--name',$program.Name,
   '--distpath',(Join-Path $PSScriptRoot $OutputDirectory),'--workpath',(Join-Path $PSScriptRoot 'pyinstaller-build'),
   '--specpath',$PSScriptRoot,'--paths',(Join-Path $PSScriptRoot 'app'))
- foreach($file in $binaries){$pyArgs+=@('--add-binary',((Join-Path $PSScriptRoot "bin-release\$file")+';.'))}
+ foreach($file in $binaries){$pyArgs+=@('--add-binary',((Join-Path $PSScriptRoot "$BinaryDirectory\$file")+';.'))}
  $pyArgs+=@('--add-binary',($MpqCli+';.'),(Join-Path $PSScriptRoot ('app\'+$program.Entry)))
  & $Python @pyArgs
  if($LASTEXITCODE){throw ('Package failed: '+$program.Name)}

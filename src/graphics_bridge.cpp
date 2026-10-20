@@ -4,6 +4,7 @@
 #include <mutex>
 #include <unordered_map>
 #include <functional>
+#include <atomic>
 #include <string>
 #include <vector>
 #include <wincodec.h>
@@ -28,11 +29,20 @@ static void Log(const wchar_t* line,HRESULT status=0){
     if(f!=INVALID_HANDLE_VALUE){DWORD written;WriteFile(f,bytes,n-1,&written,nullptr);CloseHandle(f);}
 }
 static void Trace(const wchar_t* line){static volatile LONG count=0;if(InterlockedIncrement(&count)<1000)Log(line);}
+static std::atomic<bool> audioRenderFast{false};
+void SetAudioRenderFast(bool enabled){audioRenderFast=enabled;}
+static bool AudioQueueEnabled(){return audioRenderFast&&GetCurrentThreadId()!=renderTid;}
+static bool QueueAudioState(const std::function<void()>& fn){
+    if(!audioRenderFast||GetCurrentThreadId()==renderTid)return false;
+    auto task=new Task{fn,nullptr};{std::lock_guard<std::mutex> guard(queueLock);queue.push_back(task);}SetEvent(workEvent);return true;
+}
 static void Invoke(const std::function<void()>& fn){
     if(GetCurrentThreadId()==renderTid){fn();return;}
-    Task task{fn,CreateEventW(nullptr,FALSE,FALSE,nullptr)};
+    struct ThreadEvent{HANDLE value=CreateEventW(nullptr,FALSE,FALSE,nullptr);~ThreadEvent(){if(value)CloseHandle(value);}};
+    static thread_local ThreadEvent done;
+    Task task{fn,done.value};
     {std::lock_guard<std::mutex> lock(queueLock);queue.push_back(&task);}SetEvent(workEvent);
-    WaitForSingleObject(task.done,INFINITE);CloseHandle(task.done);
+    WaitForSingleObject(task.done,INFINITE);
 }
 static LRESULT CALLBACK Guard(int n,WPARAM w,LPARAM l){
     if(n==HCBT_ACTIVATE||n==HCBT_SETFOCUS||n==HCBT_MINMAX)return 1;
@@ -49,7 +59,7 @@ static DWORD WINAPI RenderThread(void*){
         MsgWaitForMultipleObjects(1,&workEvent,FALSE,INFINITE,QS_ALLINPUT);
         MSG m{};while(PeekMessageW(&m,nullptr,0,0,PM_REMOVE)){TranslateMessage(&m);DispatchMessageW(&m);}
         for(;;){Task* task=nullptr;{std::lock_guard<std::mutex> lock(queueLock);if(!queue.empty()){task=queue.front();queue.pop_front();}}
-            if(!task)break;task->fn();SetEvent(task->done);
+            if(!task)break;task->fn();if(task->done)SetEvent(task->done);else delete task;
         }
     }
     UnhookWindowsHookEx(guard);return 0;

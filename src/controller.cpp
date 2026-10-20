@@ -90,7 +90,7 @@ int wmain(int argc,wchar_t** argv){
     }
     if(!target)return Error("Expected Triggers test-document workspace not found");
     DWORD tid=GetWindowThreadProcessId(target,nullptr);if(!tid)return Error("No owner thread");
-    if(op!=L"inspect"&&op!=L"generate"&&op!=L"compile"&&op!=L"read"&&op!=L"freshness-probe"&&op!=L"load"&&op!=L"cancel-load"&&op!=L"diagnostics"&&op!=L"cutscene"&&op!=L"scene-inspect"&&op!=L"scene-load"&&op!=L"scene-seek"&&op!=L"scene-advance")return Error("Unsupported operation");
+    if(op!=L"inspect"&&op!=L"generate"&&op!=L"compile"&&op!=L"read"&&op!=L"freshness-probe"&&op!=L"load"&&op!=L"cancel-load"&&op!=L"diagnostics"&&op!=L"cutscene"&&op!=L"scene-inspect"&&op!=L"scene-load"&&op!=L"scene-seek"&&op!=L"scene-advance"&&op!=L"scene-audio")return Error("Unsupported operation");
     if(op==L"load"&&(map.empty()||!map.is_absolute()||!fs::is_regular_file(map)))return Error("Existing absolute --map archive required");
     fs::create_directories(out);
     std::ofstream inventory(out/"windows-before.json",std::ios::binary);inventory<<"[";
@@ -99,8 +99,8 @@ int wmain(int argc,wchar_t** argv){
     std::wstring mappingName=L"Local\\SC2NativeBridge-"+std::to_wstring(wantedPid)+L"-"+guid;
     HANDLE mapping=CreateFileMappingW(INVALID_HANDLE_VALUE,nullptr,PAGE_READWRITE,0,sizeof(Block),mappingName.c_str());if(!mapping||GetLastError()==ERROR_ALREADY_EXISTS)return Error("Cannot create unique IPC mapping");
     auto b=static_cast<Block*>(MapViewOfFile(mapping,FILE_MAP_ALL_ACCESS,0,0,sizeof(Block)));if(!b)return Error("Cannot map IPC");
-    ZeroMemory(b,sizeof(Block));b->compilerErrors=-1;b->magic=kMagic;b->version=6;b->pid=wantedPid;b->tid=tid;b->target=reinterpret_cast<uint64_t>(target);
-    b->operation=op==L"generate"?Generate:op==L"compile"?Compile:op==L"read"?ReadSource:op==L"freshness-probe"?FreshnessProbe:op==L"load"?LoadDocument:op==L"cancel-load"?CancelLoad:op==L"diagnostics"?Diagnostics:op==L"cutscene"?OpenCutscene:op==L"scene-inspect"?SceneInspect:op==L"scene-load"?SceneLoad:op==L"scene-seek"?SceneSeek:op==L"scene-advance"?SceneAdvance:Inspect;
+    ZeroMemory(b,sizeof(Block));b->compilerErrors=-1;b->magic=kMagic;b->version=7;b->pid=wantedPid;b->tid=tid;b->target=reinterpret_cast<uint64_t>(target);
+    b->operation=op==L"generate"?Generate:op==L"compile"?Compile:op==L"read"?ReadSource:op==L"freshness-probe"?FreshnessProbe:op==L"load"?LoadDocument:op==L"cancel-load"?CancelLoad:op==L"diagnostics"?Diagnostics:op==L"cutscene"?OpenCutscene:op==L"scene-inspect"?SceneInspect:op==L"scene-load"?SceneLoad:op==L"scene-seek"?SceneSeek:op==L"scene-advance"?SceneAdvance:op==L"scene-audio"?SceneAudio:Inspect;
     wcsncpy_s(b->expectedDocument,expected.c_str(),_TRUNCATE);wcsncpy_s(b->expectedMarker,marker.c_str(),_TRUNCATE);
     wcsncpy_s(b->mapPath,map.c_str(),_TRUNCATE);
     wcsncpy_s(b->contextLabel,context.c_str(),_TRUNCATE);
@@ -146,6 +146,7 @@ int wmain(int argc,wchar_t** argv){
     auto ending=json.rfind("\n}");json.insert(ending,",\n\"sceneLoaded\":"+std::to_string(b->sceneLoaded)+",\n\"cameraConfirmed\":"+std::to_string(b->cameraConfirmed)+",\n\"timeConfirmed\":"+std::to_string(b->timeConfirmed)+",\n\"viewport\":"+std::to_string(b->viewport)+",\n\"sceneStatus\":"+Q(b->sceneStatus)+",\n\"actualTimeMs\":"+std::to_string(b->actualTimeMs));
     json.insert(ending,",\n\"privateDesktopFocusUsed\":"+std::string(b->privateFocusUsed?"true":"false")+",\n\"diagnosticWindows\":"+std::to_string(b->diagnosticWindows)+",\n\"diagnosticsTruncated\":"+std::to_string(b->diagnosticsTruncated)+",\n\"moduleCommandId\":"+std::to_string(b->moduleCommand));
     ending=json.rfind("\n}");json.insert(ending,",\n\"privateDesktopActivationEvents\":"+std::to_string(privateForegroundEvents.load())+",\n\"userDesktopActivationApiUsed\":false");
+    ending=json.rfind("\n}");auto& a=b->audio;json.insert(ending,",\n\"audio\":{\"error\":"+std::to_string(a.error)+",\"ready\":"+std::to_string(a.ready)+",\"version\":"+std::to_string(a.version)+",\"rate\":"+std::to_string(a.rate)+",\"channels\":"+std::to_string(a.channels)+",\"frames\":"+std::to_string(a.frames)+",\"nonzero\":"+std::to_string(a.nonzero)+",\"peak\":"+std::to_string(a.peak)+",\"sumSquares\":"+std::to_string(a.sumSquares)+",\"firstQpc\":"+std::to_string(a.firstQpc)+",\"lastQpc\":"+std::to_string(a.lastQpc)+",\"playQpc\":"+std::to_string(a.playQpc)+",\"frequency\":"+std::to_string(a.frequency)+",\"sceneStartQpc\":"+std::to_string(a.sceneStartQpc)+",\"bufferCalls\":"+std::to_string(a.bufferCalls)+",\"submitCalls\":"+std::to_string(a.submitCalls)+",\"renderedFrames\":"+std::to_string(a.renderedFrames)+",\"idleFrames\":"+std::to_string(a.idleFrames)+"}");
     std::ofstream result(out/"result.json",std::ios::binary);result<<json;result.close();std::cout<<json;
     UnmapViewOfFile(b);CloseHandle(mapping);FreeLibrary(dll);return !success?2:op==L"compile"&&!compilePassed?1:0;
 }

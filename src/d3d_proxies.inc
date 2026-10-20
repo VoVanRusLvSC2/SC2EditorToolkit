@@ -156,6 +156,7 @@ static HRESULT STDMETHODCALLTYPE P_IDirect3DDevice9_GetDisplayMode(void* bridgeS
 static HRESULT STDMETHODCALLTYPE P_IDirect3DDevice9_SetCursorProperties(void* bridgeSelf, UINT XHotSpot, UINT YHotSpot, IDirect3DSurface9* pCursorBitmap) {
   Trace(L"IDirect3DDevice9::SetCursorProperties");
   auto bridgeFn=Original<HRESULT(STDMETHODCALLTYPE*)(void*, UINT, UINT, IDirect3DSurface9*)>(bridgeSelf,10);
+  if(QueueAudioState([=]{bridgeFn(bridgeSelf, XHotSpot, YHotSpot, pCursorBitmap);}))return D3D_OK;
   HRESULT bridgeResult{};
   Invoke([&]{bridgeResult=bridgeFn(bridgeSelf, XHotSpot, YHotSpot, pCursorBitmap);});
   return bridgeResult;
@@ -205,6 +206,7 @@ static HRESULT STDMETHODCALLTYPE P_IDirect3DDevice9_GetRasterStatus(void* bridge
 static HRESULT STDMETHODCALLTYPE P_IDirect3DDevice9_SetDialogBoxMode(void* bridgeSelf, BOOL bEnableDialogs) {
   Trace(L"IDirect3DDevice9::SetDialogBoxMode");
   auto bridgeFn=Original<HRESULT(STDMETHODCALLTYPE*)(void*, BOOL)>(bridgeSelf,20);
+  if(QueueAudioState([=]{bridgeFn(bridgeSelf, bEnableDialogs);}))return D3D_OK;
   HRESULT bridgeResult{};
   Invoke([&]{bridgeResult=bridgeFn(bridgeSelf, bEnableDialogs);});
   return bridgeResult;
@@ -328,6 +330,7 @@ static HRESULT STDMETHODCALLTYPE P_IDirect3DDevice9_CreateOffscreenPlainSurface(
 static HRESULT STDMETHODCALLTYPE P_IDirect3DDevice9_SetRenderTarget(void* bridgeSelf, DWORD RenderTargetIndex, IDirect3DSurface9* pRenderTarget) {
   Trace(L"IDirect3DDevice9::SetRenderTarget");
   auto bridgeFn=Original<HRESULT(STDMETHODCALLTYPE*)(void*, DWORD, IDirect3DSurface9*)>(bridgeSelf,37);
+  if(QueueAudioState([=]{bridgeFn(bridgeSelf, RenderTargetIndex, pRenderTarget);}))return D3D_OK;
   HRESULT bridgeResult{};
   Invoke([&]{bridgeResult=bridgeFn(bridgeSelf, RenderTargetIndex, pRenderTarget);});
   return bridgeResult;
@@ -343,6 +346,7 @@ static HRESULT STDMETHODCALLTYPE P_IDirect3DDevice9_GetRenderTarget(void* bridge
 static HRESULT STDMETHODCALLTYPE P_IDirect3DDevice9_SetDepthStencilSurface(void* bridgeSelf, IDirect3DSurface9* pNewZStencil) {
   Trace(L"IDirect3DDevice9::SetDepthStencilSurface");
   auto bridgeFn=Original<HRESULT(STDMETHODCALLTYPE*)(void*, IDirect3DSurface9*)>(bridgeSelf,39);
+  if(QueueAudioState([=]{bridgeFn(bridgeSelf, pNewZStencil);}))return D3D_OK;
   HRESULT bridgeResult{};
   Invoke([&]{bridgeResult=bridgeFn(bridgeSelf, pNewZStencil);});
   return bridgeResult;
@@ -358,6 +362,7 @@ static HRESULT STDMETHODCALLTYPE P_IDirect3DDevice9_GetDepthStencilSurface(void*
 static HRESULT STDMETHODCALLTYPE P_IDirect3DDevice9_BeginScene(void* bridgeSelf) {
   Trace(L"IDirect3DDevice9::BeginScene");
   auto bridgeFn=Original<HRESULT(STDMETHODCALLTYPE*)(void*)>(bridgeSelf,41);
+  if(QueueAudioState([=]{bridgeFn(bridgeSelf);}))return D3D_OK;
   HRESULT bridgeResult{};
   Invoke([&]{bridgeResult=bridgeFn(bridgeSelf);});
   return bridgeResult;
@@ -365,6 +370,7 @@ static HRESULT STDMETHODCALLTYPE P_IDirect3DDevice9_BeginScene(void* bridgeSelf)
 static HRESULT STDMETHODCALLTYPE P_IDirect3DDevice9_EndScene(void* bridgeSelf) {
   Trace(L"IDirect3DDevice9::EndScene");
   auto bridgeFn=Original<HRESULT(STDMETHODCALLTYPE*)(void*)>(bridgeSelf,42);
+  if(QueueAudioState([=]{bridgeFn(bridgeSelf);}))return D3D_OK;
   HRESULT bridgeResult{};
   Invoke([&]{bridgeResult=bridgeFn(bridgeSelf);});
   return bridgeResult;
@@ -379,6 +385,8 @@ static HRESULT STDMETHODCALLTYPE P_IDirect3DDevice9_Clear(void* bridgeSelf, DWOR
 static HRESULT STDMETHODCALLTYPE P_IDirect3DDevice9_SetTransform(void* bridgeSelf, D3DTRANSFORMSTATETYPE State, CONST D3DMATRIX* pMatrix) {
   Trace(L"IDirect3DDevice9::SetTransform");
   auto bridgeFn=Original<HRESULT(STDMETHODCALLTYPE*)(void*, D3DTRANSFORMSTATETYPE, CONST D3DMATRIX*)>(bridgeSelf,44);
+  if(AudioQueueEnabled()&&pMatrix){D3DMATRIX copy=*pMatrix;
+    QueueAudioState([=]{bridgeFn(bridgeSelf, State, &copy);});return D3D_OK;}
   HRESULT bridgeResult{};
   Invoke([&]{bridgeResult=bridgeFn(bridgeSelf, State, pMatrix);});
   return bridgeResult;
@@ -400,6 +408,8 @@ static HRESULT STDMETHODCALLTYPE P_IDirect3DDevice9_MultiplyTransform(void* brid
 static HRESULT STDMETHODCALLTYPE P_IDirect3DDevice9_SetViewport(void* bridgeSelf, CONST D3DVIEWPORT9* pViewport) {
   Trace(L"IDirect3DDevice9::SetViewport");
   auto bridgeFn=Original<HRESULT(STDMETHODCALLTYPE*)(void*, CONST D3DVIEWPORT9*)>(bridgeSelf,47);
+  if(AudioQueueEnabled()&&pViewport){D3DVIEWPORT9 copy=*pViewport;
+    QueueAudioState([=]{bridgeFn(bridgeSelf, &copy);});return D3D_OK;}
   HRESULT bridgeResult{};
   Invoke([&]{bridgeResult=bridgeFn(bridgeSelf, pViewport);});
   return bridgeResult;
@@ -414,6 +424,8 @@ static HRESULT STDMETHODCALLTYPE P_IDirect3DDevice9_GetViewport(void* bridgeSelf
 static HRESULT STDMETHODCALLTYPE P_IDirect3DDevice9_SetMaterial(void* bridgeSelf, CONST D3DMATERIAL9* pMaterial) {
   Trace(L"IDirect3DDevice9::SetMaterial");
   auto bridgeFn=Original<HRESULT(STDMETHODCALLTYPE*)(void*, CONST D3DMATERIAL9*)>(bridgeSelf,49);
+  if(AudioQueueEnabled()&&pMaterial){D3DMATERIAL9 copy=*pMaterial;
+    QueueAudioState([=]{bridgeFn(bridgeSelf, &copy);});return D3D_OK;}
   HRESULT bridgeResult{};
   Invoke([&]{bridgeResult=bridgeFn(bridgeSelf, pMaterial);});
   return bridgeResult;
@@ -428,6 +440,8 @@ static HRESULT STDMETHODCALLTYPE P_IDirect3DDevice9_GetMaterial(void* bridgeSelf
 static HRESULT STDMETHODCALLTYPE P_IDirect3DDevice9_SetLight(void* bridgeSelf, DWORD Index, CONST D3DLIGHT9* unnamed1) {
   Trace(L"IDirect3DDevice9::SetLight");
   auto bridgeFn=Original<HRESULT(STDMETHODCALLTYPE*)(void*, DWORD, CONST D3DLIGHT9*)>(bridgeSelf,51);
+  if(AudioQueueEnabled()&&unnamed1){D3DLIGHT9 copy=*unnamed1;
+    QueueAudioState([=]{bridgeFn(bridgeSelf, Index, &copy);});return D3D_OK;}
   HRESULT bridgeResult{};
   Invoke([&]{bridgeResult=bridgeFn(bridgeSelf, Index, unnamed1);});
   return bridgeResult;
@@ -470,6 +484,7 @@ static HRESULT STDMETHODCALLTYPE P_IDirect3DDevice9_GetClipPlane(void* bridgeSel
 static HRESULT STDMETHODCALLTYPE P_IDirect3DDevice9_SetRenderState(void* bridgeSelf, D3DRENDERSTATETYPE State, DWORD Value) {
   Trace(L"IDirect3DDevice9::SetRenderState");
   auto bridgeFn=Original<HRESULT(STDMETHODCALLTYPE*)(void*, D3DRENDERSTATETYPE, DWORD)>(bridgeSelf,57);
+  if(QueueAudioState([=]{bridgeFn(bridgeSelf, State, Value);}))return D3D_OK;
   HRESULT bridgeResult{};
   Invoke([&]{bridgeResult=bridgeFn(bridgeSelf, State, Value);});
   return bridgeResult;
@@ -529,6 +544,7 @@ static HRESULT STDMETHODCALLTYPE P_IDirect3DDevice9_GetTexture(void* bridgeSelf,
 static HRESULT STDMETHODCALLTYPE P_IDirect3DDevice9_SetTexture(void* bridgeSelf, DWORD Stage, IDirect3DBaseTexture9* pTexture) {
   Trace(L"IDirect3DDevice9::SetTexture");
   auto bridgeFn=Original<HRESULT(STDMETHODCALLTYPE*)(void*, DWORD, IDirect3DBaseTexture9*)>(bridgeSelf,65);
+  if(QueueAudioState([=]{bridgeFn(bridgeSelf, Stage, pTexture);}))return D3D_OK;
   HRESULT bridgeResult{};
   Invoke([&]{bridgeResult=bridgeFn(bridgeSelf, Stage, pTexture);});
   return bridgeResult;
@@ -543,6 +559,7 @@ static HRESULT STDMETHODCALLTYPE P_IDirect3DDevice9_GetTextureStageState(void* b
 static HRESULT STDMETHODCALLTYPE P_IDirect3DDevice9_SetTextureStageState(void* bridgeSelf, DWORD Stage, D3DTEXTURESTAGESTATETYPE Type, DWORD Value) {
   Trace(L"IDirect3DDevice9::SetTextureStageState");
   auto bridgeFn=Original<HRESULT(STDMETHODCALLTYPE*)(void*, DWORD, D3DTEXTURESTAGESTATETYPE, DWORD)>(bridgeSelf,67);
+  if(QueueAudioState([=]{bridgeFn(bridgeSelf, Stage, Type, Value);}))return D3D_OK;
   HRESULT bridgeResult{};
   Invoke([&]{bridgeResult=bridgeFn(bridgeSelf, Stage, Type, Value);});
   return bridgeResult;
@@ -557,6 +574,7 @@ static HRESULT STDMETHODCALLTYPE P_IDirect3DDevice9_GetSamplerState(void* bridge
 static HRESULT STDMETHODCALLTYPE P_IDirect3DDevice9_SetSamplerState(void* bridgeSelf, DWORD Sampler, D3DSAMPLERSTATETYPE Type, DWORD Value) {
   Trace(L"IDirect3DDevice9::SetSamplerState");
   auto bridgeFn=Original<HRESULT(STDMETHODCALLTYPE*)(void*, DWORD, D3DSAMPLERSTATETYPE, DWORD)>(bridgeSelf,69);
+  if(QueueAudioState([=]{bridgeFn(bridgeSelf, Sampler, Type, Value);}))return D3D_OK;
   HRESULT bridgeResult{};
   Invoke([&]{bridgeResult=bridgeFn(bridgeSelf, Sampler, Type, Value);});
   return bridgeResult;
@@ -585,6 +603,7 @@ static HRESULT STDMETHODCALLTYPE P_IDirect3DDevice9_GetPaletteEntries(void* brid
 static HRESULT STDMETHODCALLTYPE P_IDirect3DDevice9_SetCurrentTexturePalette(void* bridgeSelf, UINT PaletteNumber) {
   Trace(L"IDirect3DDevice9::SetCurrentTexturePalette");
   auto bridgeFn=Original<HRESULT(STDMETHODCALLTYPE*)(void*, UINT)>(bridgeSelf,73);
+  if(QueueAudioState([=]{bridgeFn(bridgeSelf, PaletteNumber);}))return D3D_OK;
   HRESULT bridgeResult{};
   Invoke([&]{bridgeResult=bridgeFn(bridgeSelf, PaletteNumber);});
   return bridgeResult;
@@ -599,6 +618,8 @@ static HRESULT STDMETHODCALLTYPE P_IDirect3DDevice9_GetCurrentTexturePalette(voi
 static HRESULT STDMETHODCALLTYPE P_IDirect3DDevice9_SetScissorRect(void* bridgeSelf, CONST RECT* pRect) {
   Trace(L"IDirect3DDevice9::SetScissorRect");
   auto bridgeFn=Original<HRESULT(STDMETHODCALLTYPE*)(void*, CONST RECT*)>(bridgeSelf,75);
+  if(AudioQueueEnabled()&&pRect){RECT copy=*pRect;
+    QueueAudioState([=]{bridgeFn(bridgeSelf, &copy);});return D3D_OK;}
   HRESULT bridgeResult{};
   Invoke([&]{bridgeResult=bridgeFn(bridgeSelf, pRect);});
   return bridgeResult;
@@ -613,6 +634,7 @@ static HRESULT STDMETHODCALLTYPE P_IDirect3DDevice9_GetScissorRect(void* bridgeS
 static HRESULT STDMETHODCALLTYPE P_IDirect3DDevice9_SetSoftwareVertexProcessing(void* bridgeSelf, BOOL bSoftware) {
   Trace(L"IDirect3DDevice9::SetSoftwareVertexProcessing");
   auto bridgeFn=Original<HRESULT(STDMETHODCALLTYPE*)(void*, BOOL)>(bridgeSelf,77);
+  if(QueueAudioState([=]{bridgeFn(bridgeSelf, bSoftware);}))return D3D_OK;
   HRESULT bridgeResult{};
   Invoke([&]{bridgeResult=bridgeFn(bridgeSelf, bSoftware);});
   return bridgeResult;
@@ -627,6 +649,7 @@ static BOOL STDMETHODCALLTYPE P_IDirect3DDevice9_GetSoftwareVertexProcessing(voi
 static HRESULT STDMETHODCALLTYPE P_IDirect3DDevice9_SetNPatchMode(void* bridgeSelf, float nSegments) {
   Trace(L"IDirect3DDevice9::SetNPatchMode");
   auto bridgeFn=Original<HRESULT(STDMETHODCALLTYPE*)(void*, float)>(bridgeSelf,79);
+  if(QueueAudioState([=]{bridgeFn(bridgeSelf, nSegments);}))return D3D_OK;
   HRESULT bridgeResult{};
   Invoke([&]{bridgeResult=bridgeFn(bridgeSelf, nSegments);});
   return bridgeResult;
@@ -641,6 +664,7 @@ static float STDMETHODCALLTYPE P_IDirect3DDevice9_GetNPatchMode(void* bridgeSelf
 static HRESULT STDMETHODCALLTYPE P_IDirect3DDevice9_DrawPrimitive(void* bridgeSelf, D3DPRIMITIVETYPE PrimitiveType, UINT StartVertex, UINT PrimitiveCount) {
   Trace(L"IDirect3DDevice9::DrawPrimitive");
   auto bridgeFn=Original<HRESULT(STDMETHODCALLTYPE*)(void*, D3DPRIMITIVETYPE, UINT, UINT)>(bridgeSelf,81);
+  if(QueueAudioState([=]{bridgeFn(bridgeSelf, PrimitiveType, StartVertex, PrimitiveCount);}))return D3D_OK;
   HRESULT bridgeResult{};
   Invoke([&]{bridgeResult=bridgeFn(bridgeSelf, PrimitiveType, StartVertex, PrimitiveCount);});
   return bridgeResult;
@@ -648,6 +672,7 @@ static HRESULT STDMETHODCALLTYPE P_IDirect3DDevice9_DrawPrimitive(void* bridgeSe
 static HRESULT STDMETHODCALLTYPE P_IDirect3DDevice9_DrawIndexedPrimitive(void* bridgeSelf, D3DPRIMITIVETYPE unnamed0, INT BaseVertexIndex, UINT MinVertexIndex, UINT NumVertices, UINT startIndex, UINT primCount) {
   Trace(L"IDirect3DDevice9::DrawIndexedPrimitive");
   auto bridgeFn=Original<HRESULT(STDMETHODCALLTYPE*)(void*, D3DPRIMITIVETYPE, INT, UINT, UINT, UINT, UINT)>(bridgeSelf,82);
+  if(QueueAudioState([=]{bridgeFn(bridgeSelf, unnamed0, BaseVertexIndex, MinVertexIndex, NumVertices, startIndex, primCount);}))return D3D_OK;
   HRESULT bridgeResult{};
   Invoke([&]{bridgeResult=bridgeFn(bridgeSelf, unnamed0, BaseVertexIndex, MinVertexIndex, NumVertices, startIndex, primCount);});
   return bridgeResult;
@@ -684,6 +709,7 @@ static HRESULT STDMETHODCALLTYPE P_IDirect3DDevice9_CreateVertexDeclaration(void
 static HRESULT STDMETHODCALLTYPE P_IDirect3DDevice9_SetVertexDeclaration(void* bridgeSelf, IDirect3DVertexDeclaration9* pDecl) {
   Trace(L"IDirect3DDevice9::SetVertexDeclaration");
   auto bridgeFn=Original<HRESULT(STDMETHODCALLTYPE*)(void*, IDirect3DVertexDeclaration9*)>(bridgeSelf,87);
+  if(QueueAudioState([=]{bridgeFn(bridgeSelf, pDecl);}))return D3D_OK;
   HRESULT bridgeResult{};
   Invoke([&]{bridgeResult=bridgeFn(bridgeSelf, pDecl);});
   return bridgeResult;
@@ -699,6 +725,7 @@ static HRESULT STDMETHODCALLTYPE P_IDirect3DDevice9_GetVertexDeclaration(void* b
 static HRESULT STDMETHODCALLTYPE P_IDirect3DDevice9_SetFVF(void* bridgeSelf, DWORD FVF) {
   Trace(L"IDirect3DDevice9::SetFVF");
   auto bridgeFn=Original<HRESULT(STDMETHODCALLTYPE*)(void*, DWORD)>(bridgeSelf,89);
+  if(QueueAudioState([=]{bridgeFn(bridgeSelf, FVF);}))return D3D_OK;
   HRESULT bridgeResult{};
   Invoke([&]{bridgeResult=bridgeFn(bridgeSelf, FVF);});
   return bridgeResult;
@@ -721,6 +748,7 @@ static HRESULT STDMETHODCALLTYPE P_IDirect3DDevice9_CreateVertexShader(void* bri
 static HRESULT STDMETHODCALLTYPE P_IDirect3DDevice9_SetVertexShader(void* bridgeSelf, IDirect3DVertexShader9* pShader) {
   Trace(L"IDirect3DDevice9::SetVertexShader");
   auto bridgeFn=Original<HRESULT(STDMETHODCALLTYPE*)(void*, IDirect3DVertexShader9*)>(bridgeSelf,92);
+  if(QueueAudioState([=]{bridgeFn(bridgeSelf, pShader);}))return D3D_OK;
   HRESULT bridgeResult{};
   Invoke([&]{bridgeResult=bridgeFn(bridgeSelf, pShader);});
   return bridgeResult;
@@ -736,6 +764,8 @@ static HRESULT STDMETHODCALLTYPE P_IDirect3DDevice9_GetVertexShader(void* bridge
 static HRESULT STDMETHODCALLTYPE P_IDirect3DDevice9_SetVertexShaderConstantF(void* bridgeSelf, UINT StartRegister, CONST float* pConstantData, UINT Vector4fCount) {
   Trace(L"IDirect3DDevice9::SetVertexShaderConstantF");
   auto bridgeFn=Original<HRESULT(STDMETHODCALLTYPE*)(void*, UINT, CONST float*, UINT)>(bridgeSelf,94);
+  if(AudioQueueEnabled()&&pConstantData&&Vector4fCount<=4096){std::vector<float> copy(pConstantData,pConstantData+Vector4fCount*4);
+    QueueAudioState([=]{bridgeFn(bridgeSelf, StartRegister, copy.data(), Vector4fCount);});return D3D_OK;}
   HRESULT bridgeResult{};
   Invoke([&]{bridgeResult=bridgeFn(bridgeSelf, StartRegister, pConstantData, Vector4fCount);});
   return bridgeResult;
@@ -750,6 +780,8 @@ static HRESULT STDMETHODCALLTYPE P_IDirect3DDevice9_GetVertexShaderConstantF(voi
 static HRESULT STDMETHODCALLTYPE P_IDirect3DDevice9_SetVertexShaderConstantI(void* bridgeSelf, UINT StartRegister, CONST int* pConstantData, UINT Vector4iCount) {
   Trace(L"IDirect3DDevice9::SetVertexShaderConstantI");
   auto bridgeFn=Original<HRESULT(STDMETHODCALLTYPE*)(void*, UINT, CONST int*, UINT)>(bridgeSelf,96);
+  if(AudioQueueEnabled()&&pConstantData&&Vector4iCount<=4096){std::vector<int> copy(pConstantData,pConstantData+Vector4iCount*4);
+    QueueAudioState([=]{bridgeFn(bridgeSelf, StartRegister, copy.data(), Vector4iCount);});return D3D_OK;}
   HRESULT bridgeResult{};
   Invoke([&]{bridgeResult=bridgeFn(bridgeSelf, StartRegister, pConstantData, Vector4iCount);});
   return bridgeResult;
@@ -764,6 +796,8 @@ static HRESULT STDMETHODCALLTYPE P_IDirect3DDevice9_GetVertexShaderConstantI(voi
 static HRESULT STDMETHODCALLTYPE P_IDirect3DDevice9_SetVertexShaderConstantB(void* bridgeSelf, UINT StartRegister, CONST BOOL* pConstantData, UINT BoolCount) {
   Trace(L"IDirect3DDevice9::SetVertexShaderConstantB");
   auto bridgeFn=Original<HRESULT(STDMETHODCALLTYPE*)(void*, UINT, CONST BOOL*, UINT)>(bridgeSelf,98);
+  if(AudioQueueEnabled()&&pConstantData&&BoolCount<=4096){std::vector<int> copy(pConstantData,pConstantData+BoolCount*1);
+    QueueAudioState([=]{bridgeFn(bridgeSelf, StartRegister, copy.data(), BoolCount);});return D3D_OK;}
   HRESULT bridgeResult{};
   Invoke([&]{bridgeResult=bridgeFn(bridgeSelf, StartRegister, pConstantData, BoolCount);});
   return bridgeResult;
@@ -778,6 +812,7 @@ static HRESULT STDMETHODCALLTYPE P_IDirect3DDevice9_GetVertexShaderConstantB(voi
 static HRESULT STDMETHODCALLTYPE P_IDirect3DDevice9_SetStreamSource(void* bridgeSelf, UINT StreamNumber, IDirect3DVertexBuffer9* pStreamData, UINT OffsetInBytes, UINT Stride) {
   Trace(L"IDirect3DDevice9::SetStreamSource");
   auto bridgeFn=Original<HRESULT(STDMETHODCALLTYPE*)(void*, UINT, IDirect3DVertexBuffer9*, UINT, UINT)>(bridgeSelf,100);
+  if(QueueAudioState([=]{bridgeFn(bridgeSelf, StreamNumber, pStreamData, OffsetInBytes, Stride);}))return D3D_OK;
   HRESULT bridgeResult{};
   Invoke([&]{bridgeResult=bridgeFn(bridgeSelf, StreamNumber, pStreamData, OffsetInBytes, Stride);});
   return bridgeResult;
@@ -793,6 +828,7 @@ static HRESULT STDMETHODCALLTYPE P_IDirect3DDevice9_GetStreamSource(void* bridge
 static HRESULT STDMETHODCALLTYPE P_IDirect3DDevice9_SetStreamSourceFreq(void* bridgeSelf, UINT StreamNumber, UINT Setting) {
   Trace(L"IDirect3DDevice9::SetStreamSourceFreq");
   auto bridgeFn=Original<HRESULT(STDMETHODCALLTYPE*)(void*, UINT, UINT)>(bridgeSelf,102);
+  if(QueueAudioState([=]{bridgeFn(bridgeSelf, StreamNumber, Setting);}))return D3D_OK;
   HRESULT bridgeResult{};
   Invoke([&]{bridgeResult=bridgeFn(bridgeSelf, StreamNumber, Setting);});
   return bridgeResult;
@@ -807,6 +843,7 @@ static HRESULT STDMETHODCALLTYPE P_IDirect3DDevice9_GetStreamSourceFreq(void* br
 static HRESULT STDMETHODCALLTYPE P_IDirect3DDevice9_SetIndices(void* bridgeSelf, IDirect3DIndexBuffer9* pIndexData) {
   Trace(L"IDirect3DDevice9::SetIndices");
   auto bridgeFn=Original<HRESULT(STDMETHODCALLTYPE*)(void*, IDirect3DIndexBuffer9*)>(bridgeSelf,104);
+  if(QueueAudioState([=]{bridgeFn(bridgeSelf, pIndexData);}))return D3D_OK;
   HRESULT bridgeResult{};
   Invoke([&]{bridgeResult=bridgeFn(bridgeSelf, pIndexData);});
   return bridgeResult;
@@ -830,6 +867,7 @@ static HRESULT STDMETHODCALLTYPE P_IDirect3DDevice9_CreatePixelShader(void* brid
 static HRESULT STDMETHODCALLTYPE P_IDirect3DDevice9_SetPixelShader(void* bridgeSelf, IDirect3DPixelShader9* pShader) {
   Trace(L"IDirect3DDevice9::SetPixelShader");
   auto bridgeFn=Original<HRESULT(STDMETHODCALLTYPE*)(void*, IDirect3DPixelShader9*)>(bridgeSelf,107);
+  if(QueueAudioState([=]{bridgeFn(bridgeSelf, pShader);}))return D3D_OK;
   HRESULT bridgeResult{};
   Invoke([&]{bridgeResult=bridgeFn(bridgeSelf, pShader);});
   return bridgeResult;
@@ -845,6 +883,8 @@ static HRESULT STDMETHODCALLTYPE P_IDirect3DDevice9_GetPixelShader(void* bridgeS
 static HRESULT STDMETHODCALLTYPE P_IDirect3DDevice9_SetPixelShaderConstantF(void* bridgeSelf, UINT StartRegister, CONST float* pConstantData, UINT Vector4fCount) {
   Trace(L"IDirect3DDevice9::SetPixelShaderConstantF");
   auto bridgeFn=Original<HRESULT(STDMETHODCALLTYPE*)(void*, UINT, CONST float*, UINT)>(bridgeSelf,109);
+  if(AudioQueueEnabled()&&pConstantData&&Vector4fCount<=4096){std::vector<float> copy(pConstantData,pConstantData+Vector4fCount*4);
+    QueueAudioState([=]{bridgeFn(bridgeSelf, StartRegister, copy.data(), Vector4fCount);});return D3D_OK;}
   HRESULT bridgeResult{};
   Invoke([&]{bridgeResult=bridgeFn(bridgeSelf, StartRegister, pConstantData, Vector4fCount);});
   return bridgeResult;
@@ -859,6 +899,8 @@ static HRESULT STDMETHODCALLTYPE P_IDirect3DDevice9_GetPixelShaderConstantF(void
 static HRESULT STDMETHODCALLTYPE P_IDirect3DDevice9_SetPixelShaderConstantI(void* bridgeSelf, UINT StartRegister, CONST int* pConstantData, UINT Vector4iCount) {
   Trace(L"IDirect3DDevice9::SetPixelShaderConstantI");
   auto bridgeFn=Original<HRESULT(STDMETHODCALLTYPE*)(void*, UINT, CONST int*, UINT)>(bridgeSelf,111);
+  if(AudioQueueEnabled()&&pConstantData&&Vector4iCount<=4096){std::vector<int> copy(pConstantData,pConstantData+Vector4iCount*4);
+    QueueAudioState([=]{bridgeFn(bridgeSelf, StartRegister, copy.data(), Vector4iCount);});return D3D_OK;}
   HRESULT bridgeResult{};
   Invoke([&]{bridgeResult=bridgeFn(bridgeSelf, StartRegister, pConstantData, Vector4iCount);});
   return bridgeResult;
@@ -873,6 +915,8 @@ static HRESULT STDMETHODCALLTYPE P_IDirect3DDevice9_GetPixelShaderConstantI(void
 static HRESULT STDMETHODCALLTYPE P_IDirect3DDevice9_SetPixelShaderConstantB(void* bridgeSelf, UINT StartRegister, CONST BOOL* pConstantData, UINT BoolCount) {
   Trace(L"IDirect3DDevice9::SetPixelShaderConstantB");
   auto bridgeFn=Original<HRESULT(STDMETHODCALLTYPE*)(void*, UINT, CONST BOOL*, UINT)>(bridgeSelf,113);
+  if(AudioQueueEnabled()&&pConstantData&&BoolCount<=4096){std::vector<int> copy(pConstantData,pConstantData+BoolCount*1);
+    QueueAudioState([=]{bridgeFn(bridgeSelf, StartRegister, copy.data(), BoolCount);});return D3D_OK;}
   HRESULT bridgeResult{};
   Invoke([&]{bridgeResult=bridgeFn(bridgeSelf, StartRegister, pConstantData, BoolCount);});
   return bridgeResult;
@@ -1158,6 +1202,7 @@ static DWORD STDMETHODCALLTYPE P_IDirect3DBaseTexture9_GetLevelCount(void* bridg
 static HRESULT STDMETHODCALLTYPE P_IDirect3DBaseTexture9_SetAutoGenFilterType(void* bridgeSelf, D3DTEXTUREFILTERTYPE FilterType) {
   Trace(L"IDirect3DBaseTexture9::SetAutoGenFilterType");
   auto bridgeFn=Original<HRESULT(STDMETHODCALLTYPE*)(void*, D3DTEXTUREFILTERTYPE)>(bridgeSelf,14);
+  if(QueueAudioState([=]{bridgeFn(bridgeSelf, FilterType);}))return D3D_OK;
   HRESULT bridgeResult{};
   Invoke([&]{bridgeResult=bridgeFn(bridgeSelf, FilterType);});
   return bridgeResult;
@@ -1253,6 +1298,7 @@ static DWORD STDMETHODCALLTYPE P_IDirect3DTexture9_GetLevelCount(void* bridgeSel
 static HRESULT STDMETHODCALLTYPE P_IDirect3DTexture9_SetAutoGenFilterType(void* bridgeSelf, D3DTEXTUREFILTERTYPE FilterType) {
   Trace(L"IDirect3DTexture9::SetAutoGenFilterType");
   auto bridgeFn=Original<HRESULT(STDMETHODCALLTYPE*)(void*, D3DTEXTUREFILTERTYPE)>(bridgeSelf,14);
+  if(QueueAudioState([=]{bridgeFn(bridgeSelf, FilterType);}))return D3D_OK;
   HRESULT bridgeResult{};
   Invoke([&]{bridgeResult=bridgeFn(bridgeSelf, FilterType);});
   return bridgeResult;
@@ -1384,6 +1430,7 @@ static DWORD STDMETHODCALLTYPE P_IDirect3DVolumeTexture9_GetLevelCount(void* bri
 static HRESULT STDMETHODCALLTYPE P_IDirect3DVolumeTexture9_SetAutoGenFilterType(void* bridgeSelf, D3DTEXTUREFILTERTYPE FilterType) {
   Trace(L"IDirect3DVolumeTexture9::SetAutoGenFilterType");
   auto bridgeFn=Original<HRESULT(STDMETHODCALLTYPE*)(void*, D3DTEXTUREFILTERTYPE)>(bridgeSelf,14);
+  if(QueueAudioState([=]{bridgeFn(bridgeSelf, FilterType);}))return D3D_OK;
   HRESULT bridgeResult{};
   Invoke([&]{bridgeResult=bridgeFn(bridgeSelf, FilterType);});
   return bridgeResult;
@@ -1515,6 +1562,7 @@ static DWORD STDMETHODCALLTYPE P_IDirect3DCubeTexture9_GetLevelCount(void* bridg
 static HRESULT STDMETHODCALLTYPE P_IDirect3DCubeTexture9_SetAutoGenFilterType(void* bridgeSelf, D3DTEXTUREFILTERTYPE FilterType) {
   Trace(L"IDirect3DCubeTexture9::SetAutoGenFilterType");
   auto bridgeFn=Original<HRESULT(STDMETHODCALLTYPE*)(void*, D3DTEXTUREFILTERTYPE)>(bridgeSelf,14);
+  if(QueueAudioState([=]{bridgeFn(bridgeSelf, FilterType);}))return D3D_OK;
   HRESULT bridgeResult{};
   Invoke([&]{bridgeResult=bridgeFn(bridgeSelf, FilterType);});
   return bridgeResult;
@@ -2074,6 +2122,7 @@ static HRESULT STDMETHODCALLTYPE P_IDirect3DDevice9Ex_GetDisplayMode(void* bridg
 static HRESULT STDMETHODCALLTYPE P_IDirect3DDevice9Ex_SetCursorProperties(void* bridgeSelf, UINT XHotSpot, UINT YHotSpot, IDirect3DSurface9* pCursorBitmap) {
   Trace(L"IDirect3DDevice9Ex::SetCursorProperties");
   auto bridgeFn=Original<HRESULT(STDMETHODCALLTYPE*)(void*, UINT, UINT, IDirect3DSurface9*)>(bridgeSelf,10);
+  if(QueueAudioState([=]{bridgeFn(bridgeSelf, XHotSpot, YHotSpot, pCursorBitmap);}))return D3D_OK;
   HRESULT bridgeResult{};
   Invoke([&]{bridgeResult=bridgeFn(bridgeSelf, XHotSpot, YHotSpot, pCursorBitmap);});
   return bridgeResult;
@@ -2123,6 +2172,7 @@ static HRESULT STDMETHODCALLTYPE P_IDirect3DDevice9Ex_GetRasterStatus(void* brid
 static HRESULT STDMETHODCALLTYPE P_IDirect3DDevice9Ex_SetDialogBoxMode(void* bridgeSelf, BOOL bEnableDialogs) {
   Trace(L"IDirect3DDevice9Ex::SetDialogBoxMode");
   auto bridgeFn=Original<HRESULT(STDMETHODCALLTYPE*)(void*, BOOL)>(bridgeSelf,20);
+  if(QueueAudioState([=]{bridgeFn(bridgeSelf, bEnableDialogs);}))return D3D_OK;
   HRESULT bridgeResult{};
   Invoke([&]{bridgeResult=bridgeFn(bridgeSelf, bEnableDialogs);});
   return bridgeResult;
@@ -2246,6 +2296,7 @@ static HRESULT STDMETHODCALLTYPE P_IDirect3DDevice9Ex_CreateOffscreenPlainSurfac
 static HRESULT STDMETHODCALLTYPE P_IDirect3DDevice9Ex_SetRenderTarget(void* bridgeSelf, DWORD RenderTargetIndex, IDirect3DSurface9* pRenderTarget) {
   Trace(L"IDirect3DDevice9Ex::SetRenderTarget");
   auto bridgeFn=Original<HRESULT(STDMETHODCALLTYPE*)(void*, DWORD, IDirect3DSurface9*)>(bridgeSelf,37);
+  if(QueueAudioState([=]{bridgeFn(bridgeSelf, RenderTargetIndex, pRenderTarget);}))return D3D_OK;
   HRESULT bridgeResult{};
   Invoke([&]{bridgeResult=bridgeFn(bridgeSelf, RenderTargetIndex, pRenderTarget);});
   return bridgeResult;
@@ -2261,6 +2312,7 @@ static HRESULT STDMETHODCALLTYPE P_IDirect3DDevice9Ex_GetRenderTarget(void* brid
 static HRESULT STDMETHODCALLTYPE P_IDirect3DDevice9Ex_SetDepthStencilSurface(void* bridgeSelf, IDirect3DSurface9* pNewZStencil) {
   Trace(L"IDirect3DDevice9Ex::SetDepthStencilSurface");
   auto bridgeFn=Original<HRESULT(STDMETHODCALLTYPE*)(void*, IDirect3DSurface9*)>(bridgeSelf,39);
+  if(QueueAudioState([=]{bridgeFn(bridgeSelf, pNewZStencil);}))return D3D_OK;
   HRESULT bridgeResult{};
   Invoke([&]{bridgeResult=bridgeFn(bridgeSelf, pNewZStencil);});
   return bridgeResult;
@@ -2276,6 +2328,7 @@ static HRESULT STDMETHODCALLTYPE P_IDirect3DDevice9Ex_GetDepthStencilSurface(voi
 static HRESULT STDMETHODCALLTYPE P_IDirect3DDevice9Ex_BeginScene(void* bridgeSelf) {
   Trace(L"IDirect3DDevice9Ex::BeginScene");
   auto bridgeFn=Original<HRESULT(STDMETHODCALLTYPE*)(void*)>(bridgeSelf,41);
+  if(QueueAudioState([=]{bridgeFn(bridgeSelf);}))return D3D_OK;
   HRESULT bridgeResult{};
   Invoke([&]{bridgeResult=bridgeFn(bridgeSelf);});
   return bridgeResult;
@@ -2283,6 +2336,7 @@ static HRESULT STDMETHODCALLTYPE P_IDirect3DDevice9Ex_BeginScene(void* bridgeSel
 static HRESULT STDMETHODCALLTYPE P_IDirect3DDevice9Ex_EndScene(void* bridgeSelf) {
   Trace(L"IDirect3DDevice9Ex::EndScene");
   auto bridgeFn=Original<HRESULT(STDMETHODCALLTYPE*)(void*)>(bridgeSelf,42);
+  if(QueueAudioState([=]{bridgeFn(bridgeSelf);}))return D3D_OK;
   HRESULT bridgeResult{};
   Invoke([&]{bridgeResult=bridgeFn(bridgeSelf);});
   return bridgeResult;
@@ -2297,6 +2351,8 @@ static HRESULT STDMETHODCALLTYPE P_IDirect3DDevice9Ex_Clear(void* bridgeSelf, DW
 static HRESULT STDMETHODCALLTYPE P_IDirect3DDevice9Ex_SetTransform(void* bridgeSelf, D3DTRANSFORMSTATETYPE State, CONST D3DMATRIX* pMatrix) {
   Trace(L"IDirect3DDevice9Ex::SetTransform");
   auto bridgeFn=Original<HRESULT(STDMETHODCALLTYPE*)(void*, D3DTRANSFORMSTATETYPE, CONST D3DMATRIX*)>(bridgeSelf,44);
+  if(AudioQueueEnabled()&&pMatrix){D3DMATRIX copy=*pMatrix;
+    QueueAudioState([=]{bridgeFn(bridgeSelf, State, &copy);});return D3D_OK;}
   HRESULT bridgeResult{};
   Invoke([&]{bridgeResult=bridgeFn(bridgeSelf, State, pMatrix);});
   return bridgeResult;
@@ -2318,6 +2374,8 @@ static HRESULT STDMETHODCALLTYPE P_IDirect3DDevice9Ex_MultiplyTransform(void* br
 static HRESULT STDMETHODCALLTYPE P_IDirect3DDevice9Ex_SetViewport(void* bridgeSelf, CONST D3DVIEWPORT9* pViewport) {
   Trace(L"IDirect3DDevice9Ex::SetViewport");
   auto bridgeFn=Original<HRESULT(STDMETHODCALLTYPE*)(void*, CONST D3DVIEWPORT9*)>(bridgeSelf,47);
+  if(AudioQueueEnabled()&&pViewport){D3DVIEWPORT9 copy=*pViewport;
+    QueueAudioState([=]{bridgeFn(bridgeSelf, &copy);});return D3D_OK;}
   HRESULT bridgeResult{};
   Invoke([&]{bridgeResult=bridgeFn(bridgeSelf, pViewport);});
   return bridgeResult;
@@ -2332,6 +2390,8 @@ static HRESULT STDMETHODCALLTYPE P_IDirect3DDevice9Ex_GetViewport(void* bridgeSe
 static HRESULT STDMETHODCALLTYPE P_IDirect3DDevice9Ex_SetMaterial(void* bridgeSelf, CONST D3DMATERIAL9* pMaterial) {
   Trace(L"IDirect3DDevice9Ex::SetMaterial");
   auto bridgeFn=Original<HRESULT(STDMETHODCALLTYPE*)(void*, CONST D3DMATERIAL9*)>(bridgeSelf,49);
+  if(AudioQueueEnabled()&&pMaterial){D3DMATERIAL9 copy=*pMaterial;
+    QueueAudioState([=]{bridgeFn(bridgeSelf, &copy);});return D3D_OK;}
   HRESULT bridgeResult{};
   Invoke([&]{bridgeResult=bridgeFn(bridgeSelf, pMaterial);});
   return bridgeResult;
@@ -2346,6 +2406,8 @@ static HRESULT STDMETHODCALLTYPE P_IDirect3DDevice9Ex_GetMaterial(void* bridgeSe
 static HRESULT STDMETHODCALLTYPE P_IDirect3DDevice9Ex_SetLight(void* bridgeSelf, DWORD Index, CONST D3DLIGHT9* unnamed1) {
   Trace(L"IDirect3DDevice9Ex::SetLight");
   auto bridgeFn=Original<HRESULT(STDMETHODCALLTYPE*)(void*, DWORD, CONST D3DLIGHT9*)>(bridgeSelf,51);
+  if(AudioQueueEnabled()&&unnamed1){D3DLIGHT9 copy=*unnamed1;
+    QueueAudioState([=]{bridgeFn(bridgeSelf, Index, &copy);});return D3D_OK;}
   HRESULT bridgeResult{};
   Invoke([&]{bridgeResult=bridgeFn(bridgeSelf, Index, unnamed1);});
   return bridgeResult;
@@ -2388,6 +2450,7 @@ static HRESULT STDMETHODCALLTYPE P_IDirect3DDevice9Ex_GetClipPlane(void* bridgeS
 static HRESULT STDMETHODCALLTYPE P_IDirect3DDevice9Ex_SetRenderState(void* bridgeSelf, D3DRENDERSTATETYPE State, DWORD Value) {
   Trace(L"IDirect3DDevice9Ex::SetRenderState");
   auto bridgeFn=Original<HRESULT(STDMETHODCALLTYPE*)(void*, D3DRENDERSTATETYPE, DWORD)>(bridgeSelf,57);
+  if(QueueAudioState([=]{bridgeFn(bridgeSelf, State, Value);}))return D3D_OK;
   HRESULT bridgeResult{};
   Invoke([&]{bridgeResult=bridgeFn(bridgeSelf, State, Value);});
   return bridgeResult;
@@ -2447,6 +2510,7 @@ static HRESULT STDMETHODCALLTYPE P_IDirect3DDevice9Ex_GetTexture(void* bridgeSel
 static HRESULT STDMETHODCALLTYPE P_IDirect3DDevice9Ex_SetTexture(void* bridgeSelf, DWORD Stage, IDirect3DBaseTexture9* pTexture) {
   Trace(L"IDirect3DDevice9Ex::SetTexture");
   auto bridgeFn=Original<HRESULT(STDMETHODCALLTYPE*)(void*, DWORD, IDirect3DBaseTexture9*)>(bridgeSelf,65);
+  if(QueueAudioState([=]{bridgeFn(bridgeSelf, Stage, pTexture);}))return D3D_OK;
   HRESULT bridgeResult{};
   Invoke([&]{bridgeResult=bridgeFn(bridgeSelf, Stage, pTexture);});
   return bridgeResult;
@@ -2461,6 +2525,7 @@ static HRESULT STDMETHODCALLTYPE P_IDirect3DDevice9Ex_GetTextureStageState(void*
 static HRESULT STDMETHODCALLTYPE P_IDirect3DDevice9Ex_SetTextureStageState(void* bridgeSelf, DWORD Stage, D3DTEXTURESTAGESTATETYPE Type, DWORD Value) {
   Trace(L"IDirect3DDevice9Ex::SetTextureStageState");
   auto bridgeFn=Original<HRESULT(STDMETHODCALLTYPE*)(void*, DWORD, D3DTEXTURESTAGESTATETYPE, DWORD)>(bridgeSelf,67);
+  if(QueueAudioState([=]{bridgeFn(bridgeSelf, Stage, Type, Value);}))return D3D_OK;
   HRESULT bridgeResult{};
   Invoke([&]{bridgeResult=bridgeFn(bridgeSelf, Stage, Type, Value);});
   return bridgeResult;
@@ -2475,6 +2540,7 @@ static HRESULT STDMETHODCALLTYPE P_IDirect3DDevice9Ex_GetSamplerState(void* brid
 static HRESULT STDMETHODCALLTYPE P_IDirect3DDevice9Ex_SetSamplerState(void* bridgeSelf, DWORD Sampler, D3DSAMPLERSTATETYPE Type, DWORD Value) {
   Trace(L"IDirect3DDevice9Ex::SetSamplerState");
   auto bridgeFn=Original<HRESULT(STDMETHODCALLTYPE*)(void*, DWORD, D3DSAMPLERSTATETYPE, DWORD)>(bridgeSelf,69);
+  if(QueueAudioState([=]{bridgeFn(bridgeSelf, Sampler, Type, Value);}))return D3D_OK;
   HRESULT bridgeResult{};
   Invoke([&]{bridgeResult=bridgeFn(bridgeSelf, Sampler, Type, Value);});
   return bridgeResult;
@@ -2503,6 +2569,7 @@ static HRESULT STDMETHODCALLTYPE P_IDirect3DDevice9Ex_GetPaletteEntries(void* br
 static HRESULT STDMETHODCALLTYPE P_IDirect3DDevice9Ex_SetCurrentTexturePalette(void* bridgeSelf, UINT PaletteNumber) {
   Trace(L"IDirect3DDevice9Ex::SetCurrentTexturePalette");
   auto bridgeFn=Original<HRESULT(STDMETHODCALLTYPE*)(void*, UINT)>(bridgeSelf,73);
+  if(QueueAudioState([=]{bridgeFn(bridgeSelf, PaletteNumber);}))return D3D_OK;
   HRESULT bridgeResult{};
   Invoke([&]{bridgeResult=bridgeFn(bridgeSelf, PaletteNumber);});
   return bridgeResult;
@@ -2517,6 +2584,8 @@ static HRESULT STDMETHODCALLTYPE P_IDirect3DDevice9Ex_GetCurrentTexturePalette(v
 static HRESULT STDMETHODCALLTYPE P_IDirect3DDevice9Ex_SetScissorRect(void* bridgeSelf, CONST RECT* pRect) {
   Trace(L"IDirect3DDevice9Ex::SetScissorRect");
   auto bridgeFn=Original<HRESULT(STDMETHODCALLTYPE*)(void*, CONST RECT*)>(bridgeSelf,75);
+  if(AudioQueueEnabled()&&pRect){RECT copy=*pRect;
+    QueueAudioState([=]{bridgeFn(bridgeSelf, &copy);});return D3D_OK;}
   HRESULT bridgeResult{};
   Invoke([&]{bridgeResult=bridgeFn(bridgeSelf, pRect);});
   return bridgeResult;
@@ -2531,6 +2600,7 @@ static HRESULT STDMETHODCALLTYPE P_IDirect3DDevice9Ex_GetScissorRect(void* bridg
 static HRESULT STDMETHODCALLTYPE P_IDirect3DDevice9Ex_SetSoftwareVertexProcessing(void* bridgeSelf, BOOL bSoftware) {
   Trace(L"IDirect3DDevice9Ex::SetSoftwareVertexProcessing");
   auto bridgeFn=Original<HRESULT(STDMETHODCALLTYPE*)(void*, BOOL)>(bridgeSelf,77);
+  if(QueueAudioState([=]{bridgeFn(bridgeSelf, bSoftware);}))return D3D_OK;
   HRESULT bridgeResult{};
   Invoke([&]{bridgeResult=bridgeFn(bridgeSelf, bSoftware);});
   return bridgeResult;
@@ -2545,6 +2615,7 @@ static BOOL STDMETHODCALLTYPE P_IDirect3DDevice9Ex_GetSoftwareVertexProcessing(v
 static HRESULT STDMETHODCALLTYPE P_IDirect3DDevice9Ex_SetNPatchMode(void* bridgeSelf, float nSegments) {
   Trace(L"IDirect3DDevice9Ex::SetNPatchMode");
   auto bridgeFn=Original<HRESULT(STDMETHODCALLTYPE*)(void*, float)>(bridgeSelf,79);
+  if(QueueAudioState([=]{bridgeFn(bridgeSelf, nSegments);}))return D3D_OK;
   HRESULT bridgeResult{};
   Invoke([&]{bridgeResult=bridgeFn(bridgeSelf, nSegments);});
   return bridgeResult;
@@ -2559,6 +2630,7 @@ static float STDMETHODCALLTYPE P_IDirect3DDevice9Ex_GetNPatchMode(void* bridgeSe
 static HRESULT STDMETHODCALLTYPE P_IDirect3DDevice9Ex_DrawPrimitive(void* bridgeSelf, D3DPRIMITIVETYPE PrimitiveType, UINT StartVertex, UINT PrimitiveCount) {
   Trace(L"IDirect3DDevice9Ex::DrawPrimitive");
   auto bridgeFn=Original<HRESULT(STDMETHODCALLTYPE*)(void*, D3DPRIMITIVETYPE, UINT, UINT)>(bridgeSelf,81);
+  if(QueueAudioState([=]{bridgeFn(bridgeSelf, PrimitiveType, StartVertex, PrimitiveCount);}))return D3D_OK;
   HRESULT bridgeResult{};
   Invoke([&]{bridgeResult=bridgeFn(bridgeSelf, PrimitiveType, StartVertex, PrimitiveCount);});
   return bridgeResult;
@@ -2566,6 +2638,7 @@ static HRESULT STDMETHODCALLTYPE P_IDirect3DDevice9Ex_DrawPrimitive(void* bridge
 static HRESULT STDMETHODCALLTYPE P_IDirect3DDevice9Ex_DrawIndexedPrimitive(void* bridgeSelf, D3DPRIMITIVETYPE unnamed0, INT BaseVertexIndex, UINT MinVertexIndex, UINT NumVertices, UINT startIndex, UINT primCount) {
   Trace(L"IDirect3DDevice9Ex::DrawIndexedPrimitive");
   auto bridgeFn=Original<HRESULT(STDMETHODCALLTYPE*)(void*, D3DPRIMITIVETYPE, INT, UINT, UINT, UINT, UINT)>(bridgeSelf,82);
+  if(QueueAudioState([=]{bridgeFn(bridgeSelf, unnamed0, BaseVertexIndex, MinVertexIndex, NumVertices, startIndex, primCount);}))return D3D_OK;
   HRESULT bridgeResult{};
   Invoke([&]{bridgeResult=bridgeFn(bridgeSelf, unnamed0, BaseVertexIndex, MinVertexIndex, NumVertices, startIndex, primCount);});
   return bridgeResult;
@@ -2602,6 +2675,7 @@ static HRESULT STDMETHODCALLTYPE P_IDirect3DDevice9Ex_CreateVertexDeclaration(vo
 static HRESULT STDMETHODCALLTYPE P_IDirect3DDevice9Ex_SetVertexDeclaration(void* bridgeSelf, IDirect3DVertexDeclaration9* pDecl) {
   Trace(L"IDirect3DDevice9Ex::SetVertexDeclaration");
   auto bridgeFn=Original<HRESULT(STDMETHODCALLTYPE*)(void*, IDirect3DVertexDeclaration9*)>(bridgeSelf,87);
+  if(QueueAudioState([=]{bridgeFn(bridgeSelf, pDecl);}))return D3D_OK;
   HRESULT bridgeResult{};
   Invoke([&]{bridgeResult=bridgeFn(bridgeSelf, pDecl);});
   return bridgeResult;
@@ -2617,6 +2691,7 @@ static HRESULT STDMETHODCALLTYPE P_IDirect3DDevice9Ex_GetVertexDeclaration(void*
 static HRESULT STDMETHODCALLTYPE P_IDirect3DDevice9Ex_SetFVF(void* bridgeSelf, DWORD FVF) {
   Trace(L"IDirect3DDevice9Ex::SetFVF");
   auto bridgeFn=Original<HRESULT(STDMETHODCALLTYPE*)(void*, DWORD)>(bridgeSelf,89);
+  if(QueueAudioState([=]{bridgeFn(bridgeSelf, FVF);}))return D3D_OK;
   HRESULT bridgeResult{};
   Invoke([&]{bridgeResult=bridgeFn(bridgeSelf, FVF);});
   return bridgeResult;
@@ -2639,6 +2714,7 @@ static HRESULT STDMETHODCALLTYPE P_IDirect3DDevice9Ex_CreateVertexShader(void* b
 static HRESULT STDMETHODCALLTYPE P_IDirect3DDevice9Ex_SetVertexShader(void* bridgeSelf, IDirect3DVertexShader9* pShader) {
   Trace(L"IDirect3DDevice9Ex::SetVertexShader");
   auto bridgeFn=Original<HRESULT(STDMETHODCALLTYPE*)(void*, IDirect3DVertexShader9*)>(bridgeSelf,92);
+  if(QueueAudioState([=]{bridgeFn(bridgeSelf, pShader);}))return D3D_OK;
   HRESULT bridgeResult{};
   Invoke([&]{bridgeResult=bridgeFn(bridgeSelf, pShader);});
   return bridgeResult;
@@ -2654,6 +2730,8 @@ static HRESULT STDMETHODCALLTYPE P_IDirect3DDevice9Ex_GetVertexShader(void* brid
 static HRESULT STDMETHODCALLTYPE P_IDirect3DDevice9Ex_SetVertexShaderConstantF(void* bridgeSelf, UINT StartRegister, CONST float* pConstantData, UINT Vector4fCount) {
   Trace(L"IDirect3DDevice9Ex::SetVertexShaderConstantF");
   auto bridgeFn=Original<HRESULT(STDMETHODCALLTYPE*)(void*, UINT, CONST float*, UINT)>(bridgeSelf,94);
+  if(AudioQueueEnabled()&&pConstantData&&Vector4fCount<=4096){std::vector<float> copy(pConstantData,pConstantData+Vector4fCount*4);
+    QueueAudioState([=]{bridgeFn(bridgeSelf, StartRegister, copy.data(), Vector4fCount);});return D3D_OK;}
   HRESULT bridgeResult{};
   Invoke([&]{bridgeResult=bridgeFn(bridgeSelf, StartRegister, pConstantData, Vector4fCount);});
   return bridgeResult;
@@ -2668,6 +2746,8 @@ static HRESULT STDMETHODCALLTYPE P_IDirect3DDevice9Ex_GetVertexShaderConstantF(v
 static HRESULT STDMETHODCALLTYPE P_IDirect3DDevice9Ex_SetVertexShaderConstantI(void* bridgeSelf, UINT StartRegister, CONST int* pConstantData, UINT Vector4iCount) {
   Trace(L"IDirect3DDevice9Ex::SetVertexShaderConstantI");
   auto bridgeFn=Original<HRESULT(STDMETHODCALLTYPE*)(void*, UINT, CONST int*, UINT)>(bridgeSelf,96);
+  if(AudioQueueEnabled()&&pConstantData&&Vector4iCount<=4096){std::vector<int> copy(pConstantData,pConstantData+Vector4iCount*4);
+    QueueAudioState([=]{bridgeFn(bridgeSelf, StartRegister, copy.data(), Vector4iCount);});return D3D_OK;}
   HRESULT bridgeResult{};
   Invoke([&]{bridgeResult=bridgeFn(bridgeSelf, StartRegister, pConstantData, Vector4iCount);});
   return bridgeResult;
@@ -2682,6 +2762,8 @@ static HRESULT STDMETHODCALLTYPE P_IDirect3DDevice9Ex_GetVertexShaderConstantI(v
 static HRESULT STDMETHODCALLTYPE P_IDirect3DDevice9Ex_SetVertexShaderConstantB(void* bridgeSelf, UINT StartRegister, CONST BOOL* pConstantData, UINT BoolCount) {
   Trace(L"IDirect3DDevice9Ex::SetVertexShaderConstantB");
   auto bridgeFn=Original<HRESULT(STDMETHODCALLTYPE*)(void*, UINT, CONST BOOL*, UINT)>(bridgeSelf,98);
+  if(AudioQueueEnabled()&&pConstantData&&BoolCount<=4096){std::vector<int> copy(pConstantData,pConstantData+BoolCount*1);
+    QueueAudioState([=]{bridgeFn(bridgeSelf, StartRegister, copy.data(), BoolCount);});return D3D_OK;}
   HRESULT bridgeResult{};
   Invoke([&]{bridgeResult=bridgeFn(bridgeSelf, StartRegister, pConstantData, BoolCount);});
   return bridgeResult;
@@ -2696,6 +2778,7 @@ static HRESULT STDMETHODCALLTYPE P_IDirect3DDevice9Ex_GetVertexShaderConstantB(v
 static HRESULT STDMETHODCALLTYPE P_IDirect3DDevice9Ex_SetStreamSource(void* bridgeSelf, UINT StreamNumber, IDirect3DVertexBuffer9* pStreamData, UINT OffsetInBytes, UINT Stride) {
   Trace(L"IDirect3DDevice9Ex::SetStreamSource");
   auto bridgeFn=Original<HRESULT(STDMETHODCALLTYPE*)(void*, UINT, IDirect3DVertexBuffer9*, UINT, UINT)>(bridgeSelf,100);
+  if(QueueAudioState([=]{bridgeFn(bridgeSelf, StreamNumber, pStreamData, OffsetInBytes, Stride);}))return D3D_OK;
   HRESULT bridgeResult{};
   Invoke([&]{bridgeResult=bridgeFn(bridgeSelf, StreamNumber, pStreamData, OffsetInBytes, Stride);});
   return bridgeResult;
@@ -2711,6 +2794,7 @@ static HRESULT STDMETHODCALLTYPE P_IDirect3DDevice9Ex_GetStreamSource(void* brid
 static HRESULT STDMETHODCALLTYPE P_IDirect3DDevice9Ex_SetStreamSourceFreq(void* bridgeSelf, UINT StreamNumber, UINT Setting) {
   Trace(L"IDirect3DDevice9Ex::SetStreamSourceFreq");
   auto bridgeFn=Original<HRESULT(STDMETHODCALLTYPE*)(void*, UINT, UINT)>(bridgeSelf,102);
+  if(QueueAudioState([=]{bridgeFn(bridgeSelf, StreamNumber, Setting);}))return D3D_OK;
   HRESULT bridgeResult{};
   Invoke([&]{bridgeResult=bridgeFn(bridgeSelf, StreamNumber, Setting);});
   return bridgeResult;
@@ -2725,6 +2809,7 @@ static HRESULT STDMETHODCALLTYPE P_IDirect3DDevice9Ex_GetStreamSourceFreq(void* 
 static HRESULT STDMETHODCALLTYPE P_IDirect3DDevice9Ex_SetIndices(void* bridgeSelf, IDirect3DIndexBuffer9* pIndexData) {
   Trace(L"IDirect3DDevice9Ex::SetIndices");
   auto bridgeFn=Original<HRESULT(STDMETHODCALLTYPE*)(void*, IDirect3DIndexBuffer9*)>(bridgeSelf,104);
+  if(QueueAudioState([=]{bridgeFn(bridgeSelf, pIndexData);}))return D3D_OK;
   HRESULT bridgeResult{};
   Invoke([&]{bridgeResult=bridgeFn(bridgeSelf, pIndexData);});
   return bridgeResult;
@@ -2748,6 +2833,7 @@ static HRESULT STDMETHODCALLTYPE P_IDirect3DDevice9Ex_CreatePixelShader(void* br
 static HRESULT STDMETHODCALLTYPE P_IDirect3DDevice9Ex_SetPixelShader(void* bridgeSelf, IDirect3DPixelShader9* pShader) {
   Trace(L"IDirect3DDevice9Ex::SetPixelShader");
   auto bridgeFn=Original<HRESULT(STDMETHODCALLTYPE*)(void*, IDirect3DPixelShader9*)>(bridgeSelf,107);
+  if(QueueAudioState([=]{bridgeFn(bridgeSelf, pShader);}))return D3D_OK;
   HRESULT bridgeResult{};
   Invoke([&]{bridgeResult=bridgeFn(bridgeSelf, pShader);});
   return bridgeResult;
@@ -2763,6 +2849,8 @@ static HRESULT STDMETHODCALLTYPE P_IDirect3DDevice9Ex_GetPixelShader(void* bridg
 static HRESULT STDMETHODCALLTYPE P_IDirect3DDevice9Ex_SetPixelShaderConstantF(void* bridgeSelf, UINT StartRegister, CONST float* pConstantData, UINT Vector4fCount) {
   Trace(L"IDirect3DDevice9Ex::SetPixelShaderConstantF");
   auto bridgeFn=Original<HRESULT(STDMETHODCALLTYPE*)(void*, UINT, CONST float*, UINT)>(bridgeSelf,109);
+  if(AudioQueueEnabled()&&pConstantData&&Vector4fCount<=4096){std::vector<float> copy(pConstantData,pConstantData+Vector4fCount*4);
+    QueueAudioState([=]{bridgeFn(bridgeSelf, StartRegister, copy.data(), Vector4fCount);});return D3D_OK;}
   HRESULT bridgeResult{};
   Invoke([&]{bridgeResult=bridgeFn(bridgeSelf, StartRegister, pConstantData, Vector4fCount);});
   return bridgeResult;
@@ -2777,6 +2865,8 @@ static HRESULT STDMETHODCALLTYPE P_IDirect3DDevice9Ex_GetPixelShaderConstantF(vo
 static HRESULT STDMETHODCALLTYPE P_IDirect3DDevice9Ex_SetPixelShaderConstantI(void* bridgeSelf, UINT StartRegister, CONST int* pConstantData, UINT Vector4iCount) {
   Trace(L"IDirect3DDevice9Ex::SetPixelShaderConstantI");
   auto bridgeFn=Original<HRESULT(STDMETHODCALLTYPE*)(void*, UINT, CONST int*, UINT)>(bridgeSelf,111);
+  if(AudioQueueEnabled()&&pConstantData&&Vector4iCount<=4096){std::vector<int> copy(pConstantData,pConstantData+Vector4iCount*4);
+    QueueAudioState([=]{bridgeFn(bridgeSelf, StartRegister, copy.data(), Vector4iCount);});return D3D_OK;}
   HRESULT bridgeResult{};
   Invoke([&]{bridgeResult=bridgeFn(bridgeSelf, StartRegister, pConstantData, Vector4iCount);});
   return bridgeResult;
@@ -2791,6 +2881,8 @@ static HRESULT STDMETHODCALLTYPE P_IDirect3DDevice9Ex_GetPixelShaderConstantI(vo
 static HRESULT STDMETHODCALLTYPE P_IDirect3DDevice9Ex_SetPixelShaderConstantB(void* bridgeSelf, UINT StartRegister, CONST BOOL* pConstantData, UINT BoolCount) {
   Trace(L"IDirect3DDevice9Ex::SetPixelShaderConstantB");
   auto bridgeFn=Original<HRESULT(STDMETHODCALLTYPE*)(void*, UINT, CONST BOOL*, UINT)>(bridgeSelf,113);
+  if(AudioQueueEnabled()&&pConstantData&&BoolCount<=4096){std::vector<int> copy(pConstantData,pConstantData+BoolCount*1);
+    QueueAudioState([=]{bridgeFn(bridgeSelf, StartRegister, copy.data(), BoolCount);});return D3D_OK;}
   HRESULT bridgeResult{};
   Invoke([&]{bridgeResult=bridgeFn(bridgeSelf, StartRegister, pConstantData, BoolCount);});
   return bridgeResult;
@@ -2855,6 +2947,7 @@ static HRESULT STDMETHODCALLTYPE P_IDirect3DDevice9Ex_GetGPUThreadPriority(void*
 static HRESULT STDMETHODCALLTYPE P_IDirect3DDevice9Ex_SetGPUThreadPriority(void* bridgeSelf, INT Priority) {
   Trace(L"IDirect3DDevice9Ex::SetGPUThreadPriority");
   auto bridgeFn=Original<HRESULT(STDMETHODCALLTYPE*)(void*, INT)>(bridgeSelf,123);
+  if(QueueAudioState([=]{bridgeFn(bridgeSelf, Priority);}))return D3D_OK;
   HRESULT bridgeResult{};
   Invoke([&]{bridgeResult=bridgeFn(bridgeSelf, Priority);});
   return bridgeResult;
@@ -2876,6 +2969,7 @@ static HRESULT STDMETHODCALLTYPE P_IDirect3DDevice9Ex_CheckResourceResidency(voi
 static HRESULT STDMETHODCALLTYPE P_IDirect3DDevice9Ex_SetMaximumFrameLatency(void* bridgeSelf, UINT MaxLatency) {
   Trace(L"IDirect3DDevice9Ex::SetMaximumFrameLatency");
   auto bridgeFn=Original<HRESULT(STDMETHODCALLTYPE*)(void*, UINT)>(bridgeSelf,126);
+  if(QueueAudioState([=]{bridgeFn(bridgeSelf, MaxLatency);}))return D3D_OK;
   HRESULT bridgeResult{};
   Invoke([&]{bridgeResult=bridgeFn(bridgeSelf, MaxLatency);});
   return bridgeResult;

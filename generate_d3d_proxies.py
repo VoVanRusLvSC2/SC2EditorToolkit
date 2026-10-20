@@ -1,4 +1,4 @@
-"""Generate typed, synchronous thread dispatch from the installed SDK ABI."""
+"""Generate typed device-thread dispatch; audio passes queue copied state/draw arguments."""
 import re
 from pathlib import Path
 root=Path(__file__).resolve().parent
@@ -33,6 +33,22 @@ for interface,methods in interfaces.items():
         lines.append(f'static {ret} STDMETHODCALLTYPE P_{interface}_{name}(void* bridgeSelf'+(', '+decl if decl else '')+') {')
         lines.append(f'  Trace(L"{interface}::{name}");')
         lines.append(f'  auto bridgeFn=Original<{ret}(STDMETHODCALLTYPE*)(void*{types})>(bridgeSelf,{slot});')
+        # During audio only: immutable scalar/COM arguments can be queued.
+        # Release remains synchronous on the same FIFO, preserving COM lifetime.
+        by_value=(name.startswith('Set') or name in {'BeginScene','EndScene','DrawPrimitive','DrawIndexedPrimitive'})
+        safe=all('*' not in t or re.fullmatch(r'IDirect3D\w+\s*\*',t) for t,v in params)
+        if by_value and safe and ret=='HRESULT':
+            lines.append(f'  if(QueueAudioState([=]{{bridgeFn(bridgeSelf{args});}}))return D3D_OK;')
+        elif name in {'SetVertexShaderConstantF','SetPixelShaderConstantF','SetVertexShaderConstantI','SetPixelShaderConstantI','SetVertexShaderConstantB','SetPixelShaderConstantB'}:
+            pointer=params[1][1];count=params[2][1];typ='float' if name.endswith('F') else 'int';stride=1 if name.endswith('B') else 4
+            lines.append(f'  if(AudioQueueEnabled()&&{pointer}&&{count}<=4096){{std::vector<{typ}> copy({pointer},{pointer}+{count}*{stride});')
+            forwarded=', '.join('copy.data()' if v==pointer else v for t,v in params)
+            lines.append(f'    QueueAudioState([=]{{bridgeFn(bridgeSelf, {forwarded});}});return D3D_OK;}}')
+        elif name in {'SetTransform','SetViewport','SetScissorRect','SetMaterial','SetLight'}:
+            pointer=params[-1][1];typ=params[-1][0].replace('CONST','').replace('const','').replace('*','').strip()
+            lines.append(f'  if(AudioQueueEnabled()&&{pointer}){{{typ} copy=*{pointer};')
+            forwarded=', '.join('&copy' if v==pointer else v for t,v in params)
+            lines.append(f'    QueueAudioState([=]{{bridgeFn(bridgeSelf, {forwarded});}});return D3D_OK;}}')
         if ret!='void':lines.append(f'  {ret} bridgeResult{{}};')
         lines.append('  Invoke([&]{'+('bridgeResult=' if ret!='void' else '')+f'bridgeFn(bridgeSelf{args});'+'});')
         # The one interface** input in this ABI is CheckResourceResidency.

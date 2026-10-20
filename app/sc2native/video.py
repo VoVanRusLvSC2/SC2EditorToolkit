@@ -7,7 +7,7 @@ from .cutscenes import scene_file,scene_duration,seek_arguments
 NO_WINDOW=getattr(subprocess,'CREATE_NO_WINDOW',0)
 
 def video_plan(request,scene):
-    for flag in ('overwrite','keep_frames'):
+    for flag in ('overwrite','keep_frames','include_audio'):
         if flag in request and not isinstance(request[flag],bool):raise ValueError(flag+' must be a JSON boolean')
     if request.get('output') is not None and (not isinstance(request['output'],str) or not request['output'].strip()):
         raise ValueError('output must be a nonempty MP4 path')
@@ -82,6 +82,10 @@ def export_video(worker,request):
             if opened['status']=='FAILED':raise RuntimeError(opened.get('error','Scene load failed'))
         if not worker.alive() or not worker.scene:raise RuntimeError('Original Editor scene not loaded')
         source=Path(worker.scene['source']);source_hash=worker.scene['sha256'];cancelled()
+        audio_evidence=None;wave=None
+        if request.get('include_audio',True):
+            from .audio import capture_audio
+            update(stage='recordingAudio');wave,audio_evidence=capture_audio(worker,directory,plan);cancelled()
         samples=plan['sampleTimesMs'];previous_time=None;previous_bytes=None;preview_index=None;detailed=0;black=0;duplicates=0;dimensions=None
         temporary=directory/'encoded.mp4';update(stage='rendering')
         with (directory/'encoder.log').open('wb') as error_log,(directory/'frames.jsonl').open('w',encoding='utf8') as manifest:
@@ -128,12 +132,18 @@ def export_video(worker,request):
             cancelled();process.stdin.close()
             if process.wait(timeout=120):raise RuntimeError('MP4 encoder failed; see '+str(directory/'encoder.log'))
         if not detailed or preview_index is None:raise RuntimeError('Entire requested video range is black or uniform')
+        cancelled()
+        audio_verified=None
+        if wave:
+            from .audio import mux_audio
+            update(stage='encodingAudio');muxed=directory/'with-audio.mp4'
+            audio_verified=mux_audio(worker,temporary,wave,muxed,encoder,probe,plan,audio_evidence);temporary=muxed
         cancelled();update(stage='verifying')
         verified=validate_video(temporary,encoder,probe,plan,preview_index);cancelled()
         if hashlib.sha256(source.read_bytes()).hexdigest()!=source_hash:raise RuntimeError('Source scene changed during export')
         result={'status':'CUTSCENE_MP4_EXPORTED','jobId':ident,'range':{k:v for k,v in plan.items() if k!='sampleTimesMs'},
             'firstNativeTimeMs':samples[0],'lastNativeTimeMs':samples[-1],'sourceResolution':list(dimensions),'video':verified,
-            'detailedFrames':detailed,'blackFrames':black,'repeatedSamples':duplicates,'audioIncluded':False,
+            'detailedFrames':detailed,'blackFrames':black,'repeatedSamples':duplicates,'audioIncluded':bool(audio_verified),'audio':audio_verified,
             'source':'original Editor D3D9 cutscene viewport','sourceUnchanged':True,'inputInjectionUsed':False,'desktopScreenshot':False,
             'frameManifest':str(directory/'frames.jsonl'),'elapsedSeconds':round(time.monotonic()-started,1)}
         worker._background_result(result)
