@@ -17,6 +17,7 @@ class Mcp(unittest.TestCase):
             self.assertIn('sc2_export_galaxy',{t['name'] for t in output[1]['result']['tools']})
             self.assertIn('sc2_validate_document',{t['name'] for t in output[1]['result']['tools']})
             self.assertIn('sc2_save_reopen',{t['name'] for t in output[1]['result']['tools']})
+            self.assertIn('sc2_list_map_cameras',{t['name'] for t in output[1]['result']['tools']})
             self.assertIn('sc2_capture_terrain',{t['name'] for t in output[1]['result']['tools']})
             self.assertIn('sc2_export_map_image',{t['name'] for t in output[1]['result']['tools']})
             self.assertIn('sc2_search_objects',{t['name'] for t in output[1]['result']['tools']})

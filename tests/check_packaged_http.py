@@ -36,7 +36,7 @@ with (work / 'stdout.log').open('wb') as stdout, (work / 'stderr.log').open('wb'
             time.sleep(.1)
         info = json.loads((work / 'runtime' / 'api-info.json').read_text())
         code, health = call('/health', authorized=False)
-        assert code == 200 and health['version'] == '0.8.0-rc.1' and not health['workerRunning'], health
+        assert code == 200 and health['version'] == '0.9.0-rc.1' and not health['workerRunning'], health
         assert call('/modules', authorized=False)[0] == 403
         assert call('/terrain/export', {'size': 512}, authorized=False)[0] == 403
         code, modules = call('/modules')
@@ -44,6 +44,7 @@ with (work / 'stdout.log').open('wb') as stdout, (work / 'stderr.log').open('wb'
         assert code == 200 and terrain['fullMap']['experimental']
         assert 'export_map_image' in terrain['methods']
         assert 'capture_region' in terrain['methods']
+        assert 'list_map_cameras' in terrain['methods']
         editor = next(m for m in modules['modules'] if m['id'] == 'editor')
         assert 'save_reopen' in editor['methods'] and 'validate_document' in editor['methods']
         archive = create_archive(work / 'fixture', root / 'tools/mpqcli/mpqcli.exe')
@@ -54,6 +55,14 @@ with (work / 'stdout.log').open('wb') as stdout, (work / 'stderr.log').open('wb'
         assert found['objects'][0]['position'] == {'x': 8, 'y': 12, 'z': 0}, found
         assert not found['editorRequired'] and found['sourceUnchanged'], found
         assert hashlib.sha256(archive.read_bytes()).hexdigest() == before_hash
+        code, cameras = call('/terrain/cameras', {'map': str(archive)})
+        assert code == 200 and cameras['count'] == 1 and not cameras['editorRequired'], cameras
+        assert cameras['cameras'][0]['cameraId'] == '4' and cameras['sourceUnchanged'], cameras
+        code, error = call('/terrain/capture', {'map': str(archive), 'map_camera_id': 'missing'})
+        assert code == 400 and not call('/health')[1]['workerRunning'], error
+        for invalid in ({'overwrite':'false'},{'allow_empty':1},{'output':''}):
+            code, error = call('/terrain/capture', invalid)
+            assert code == 400 and not call('/health')[1]['workerRunning'], error
         for bounds in ({'left': 0}, {'left': -1, 'bottom': 0, 'right': 10, 'top': 10}):
             code, error = call('/terrain/region', {'map': str(archive), 'bounds': bounds})
             assert code == 400 and error['status'] == 'FAILED', error

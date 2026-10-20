@@ -1,11 +1,19 @@
 import shutil,subprocess,sys,tempfile,unittest
 from pathlib import Path
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]/'app'))
-from sc2native.components import snapshot_components,compare_components
+from sc2native.components import snapshot_components,compare_components,read_string_table
 from map_archive_fixture import create_archive
 
 ROOT=Path(__file__).resolve().parents[1]
 class Components(unittest.TestCase):
+    @unittest.skipUnless((ROOT/'tools/mpqcli/mpqcli.exe').is_file(),'mpqcli required')
+    def test_localized_context_uses_exact_stored_member_spelling(self):
+        with tempfile.TemporaryDirectory() as directory:
+            work=Path(directory);tool=ROOT/'tools/mpqcli/mpqcli.exe';source=create_archive(work,tool)
+            payload=work/'strings';payload.write_bytes(b'Variable/Name/1234ABCD=Pretty Display Name\n')
+            subprocess.run([str(tool),'add','-w','-p','enUS.SC2Data\\LocalizedData\\TriggerStrings.txt',str(source),str(payload)],check=True,capture_output=True)
+            strings=read_string_table(source,tool,'enUS.SC2Data/LocalizedData/TriggerStrings.txt',work)
+            self.assertEqual(strings,{'Variable/Name/1234ABCD':'Pretty Display Name'})
     @unittest.skipUnless((ROOT/'tools/mpqcli/mpqcli.exe').is_file(),'mpqcli required')
     def test_native_archive_member_changes_and_text_diff(self):
         with tempfile.TemporaryDirectory() as directory:

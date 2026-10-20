@@ -177,12 +177,9 @@ class Worker:
             scope='library:'+libs[0].get('Id') if not root.findall('./Root/Item') and len(libs)==1 else 'mapRoot'
         name=request.get('context_label')
         if not name:
+            from .components import read_string_table
             locale=request.get('locale','enUS')
-            p=subprocess.run([str(files.mpq_tool()),'read',locale+'.SC2Data/LocalizedData/TriggerStrings.txt',self.state['documentPath']],capture_output=True,creationflags=subprocess.CREATE_NO_WINDOW,timeout=120)
-            strings={}
-            if not p.returncode:
-                for line in p.stdout.decode('utf-8-sig').splitlines():
-                    if '=' in line:k,v=line.split('=',1);strings[k]=v
+            strings=read_string_table(self.state['documentPath'],files.mpq_tool(),locale+'.SC2Data/LocalizedData/TriggerStrings.txt',self.work)
             name=files.context_label(root,scope,strings)
         if not name:raise ValueError('Supply context_label for the authored root/library')
         return scope,name
@@ -328,19 +325,50 @@ class Worker:
     def capture_terrain(self,request):
         if not self.lock.acquire(blocking=False):raise RuntimeError('Worker busy')
         try:
+            for key in ('overwrite','allow_empty'):
+                if key in request and type(request[key]) is not bool:raise ValueError(key+' must be a JSON boolean')
+            if 'output' in request:
+                if not isinstance(request['output'],str) or not request['output'].strip():raise ValueError('output must be a nonempty PNG path')
+                target=Path(request['output']).resolve()
+                if target.suffix.lower()!='.png':raise ValueError('Terrain output must be a .png file')
+                if target.exists() and not request.get('overwrite',False):raise FileExistsError(target)
             # Camera and time_ms refer to cutscenes; never silently reuse those
             # arguments for a terrain screenshot of a different module.
             if 'camera' in request or 'time_ms' in request:raise ValueError('Terrain capture uses the current native map view; cutscene camera/time_ms are not supported')
+            selected=None
+            if 'map_camera_id' in request:
+                from .map_cameras import read_camera_records,choose_camera
+                # Resolve/reject identity before launching the original Editor.
+                source,digest,snapshot,query_dir=self._snapshot_map(request)
+                selected=choose_camera(read_camera_records(snapshot,files.mpq_tool(),request.get('locale','enUS')),request['map_camera_id'])
+                if selected['target'] is None:raise ValueError('Saved camera has no explicit valid CameraTarget XY')
             path,original_hash=self._prepare_terrain(request)
+            if selected and original_hash!=digest:raise RuntimeError('Map changed after camera identity resolution')
             directory=self.work/'terrain'/uuid.uuid4().hex;directory.mkdir(parents=True)
-            native=self._native(directory,'terrain')
+            if selected:
+                # Layer creation and palette binding finish in the original
+                # outer GUI loop, between requests on this owned desktop.
+                self._native(directory,'terrain-camera-layer',camera=selected['name'])
+                time.sleep(.3)
+                self._native(directory,'terrain-camera-select',camera=selected['name'])
+                time.sleep(.3)
+                native=self._native(directory,'terrain-camera',camera=selected['name'])
+            else:native=self._native(directory,'terrain')
             if not native.get('viewport'):raise RuntimeError('Original Terrain viewport was not confirmed')
+            if selected:
+                from .map_cameras import verify_readback
+                actual=native.get('mapCamera',{})
+                verification=verify_readback(selected,actual)
             if self.scene:self.scene['frame']=None
             # Let the outer GUI loop present newly selected Terrain resources.
             time.sleep(.5)
             result=self.capture_frame(request,_locked=True,_directory=directory/'capture',_register=False,_attempts=20,_terrain={
                 'viewport':native['viewport'],'document':self.state['currentDocument'],'nativeTitle':native['loadedTitle'],'view':'current native Terrain view'})
             result.update(nativeSelection=native,sourceUnchanged=files.sha(path)==original_hash)
+            if selected:
+                result['mapCamera']={'saved':selected,'actual':native['mapCamera'],'nativeSelectionVerified':True,
+                    'verification':verification,
+                    'triggerExecution':False,'scope':'saved map camera and editor placement state; no Galaxy/gameplay execution'}
             if not result['sourceUnchanged']:result.update(status='FAILED',error='Source map changed during capture')
             # Publish only after viewport, pixels and background checks passed.
             if result['status']!='FAILED':
@@ -348,6 +376,19 @@ class Worker:
                 result['status']='TERRAIN_FRAME_CAPTURED'
             oracle.save(directory/'terrain-result.json',result)
             return result
+        finally:self.lock.release()
+
+    def list_map_cameras(self,request):
+        from .map_cameras import read_camera_records
+        if not self.lock.acquire(blocking=False):raise RuntimeError('Worker busy')
+        try:
+            source,digest,snapshot,directory=self._snapshot_map(request)
+            cameras=read_camera_records(snapshot,files.mpq_tool(),request.get('locale','enUS'))
+            if files.sha(source)!=digest:raise RuntimeError('Source map changed during camera enumeration')
+            result={'status':'MAP_CAMERAS_LISTED','map':str(source),'mapSha256':digest,'cameras':cameras,
+                    'count':len(cameras),'sourceUnchanged':True,'editorRequired':False,
+                    'scope':'saved map cameras only; excludes cameras created or moved by running triggers'}
+            oracle.save(directory/'cameras.json',result);return result
         finally:self.lock.release()
 
     def _snapshot_map(self,request):

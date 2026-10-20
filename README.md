@@ -3,10 +3,11 @@
 A modular backend for the original StarCraft II Editor. Original code author and
 project owner: **VoVanRusLvSC2**.
 
-**v0.8.0-rc.1 is a prerelease.** Whole-map and coordinate-region export are experimental:
+**v0.9.0-rc.1 is a prerelease.** Whole-map and coordinate-region export are experimental:
 the original full-map export has now been visually verified on a private fixture
 with hills, placed units and doodads. Water and broader map/dependency coverage
-remain untested. Camera-controlled Terrain close-ups are not implemented.
+remain untested. Saved map cameras can drive original Terrain PNG captures.
+Arbitrary Terrain camera overrides and Galaxy-trigger playback are not implemented.
 Operation-scoped load/Data diagnostics and native save/reopen component comparison
 are available. See
 [validation history](docs/VALIDATION.md). The previous stable release is v0.6.0.
@@ -28,7 +29,7 @@ Public documentation, setup instructions and release notes are maintained in **E
 
 For integration with ModKit, see the [five-point native bridge assessment](docs/MODKIT_BRIDGE_STATUS.md).
 It distinguishes existing original-Editor checks from fast ModKit previews,
-unimplemented Terrain camera controls and remaining validation coverage.
+saved map-camera framing, remaining camera controls and validation coverage.
 
 ## Modules
 
@@ -38,7 +39,7 @@ unimplemented Terrain camera controls and remaining validation coverage.
 | Triggers | Original `Triggers XML → Galaxy` generation and native compilation |
 | Galaxy | Exact `.galaxy` bytes, SHA-256, artifact download, overwrite protection |
 | Objects | Search saved placements by ID/type/name, kind, owner and XY rectangle; no Editor needed |
-| Terrain | Current viewport PNG; experimental complete overhead map PNG and coordinate-region crops |
+| Terrain | Current viewport or saved-map-camera PNG with native readback; experimental complete overhead PNG and coordinate-region crops |
 | Cutscene | Load `.SC2Cutscene`, select camera/time, export PNG and H.264/AAC MP4 |
 | MCP | Windowed stdio executable exposing the same worker operations |
 
@@ -116,6 +117,7 @@ handler while it is still executing inside the Editor.
 | POST | `/editor/validate` | Load a private map/mod and original Data module; return new native messages by phase |
 | POST | `/editor/save-reopen` | Native Save As → Close → disk reopen, diagnostics and component hashes/diffs |
 | POST | `/terrain/capture` | Capture the current original Terrain viewport |
+| POST | `/terrain/cameras` | List saved map camera IDs, names, targets and original parameters without starting Editor |
 | POST | `/terrain/export` | Export the complete map overhead with native units/doodads |
 | POST | `/objects/search` | Search saved placements and return original XYZ without starting Editor |
 | POST | `/terrain/region` | Experimental coordinate rectangle crop of the original overhead export |
@@ -194,6 +196,43 @@ and optional `output` are published only when the whole check is verified and
 native diagnostics are known clear. Existing output requires `overwrite:true`;
 source and baseline archives cannot be export targets. All phases include the
 archive revision hash being checked. Raw evidence remains local to the worker.
+
+## Saved map cameras
+
+`POST /terrain/cameras` (MCP `sc2_list_map_cameras`) reads saved `ObjectCamera`
+records from a `.SC2Map` archive. It returns exact `cameraId`, name/reference,
+placement position, separate `CameraTarget` XY, original `CameraValue` entries
+and attributes. Optional `locale` (default `enUS`) resolves GameStrings references.
+This read-only operation does not start an Editor.
+
+Use an ID from that list with existing `/terrain/capture` / `sc2_capture_terrain`:
+
+```json
+{"map":"D:\\MyMap.SC2Map","map_camera_id":"2001","output":"D:\\Camera.png"}
+```
+
+The owned original Terrain module selects the exact camera palette entry and
+invokes **View Selected Camera**. **Get Game Camera** reads back its actual
+target, pitch/yaw/roll, distance and FOV. Target XY and available saved core
+parameters must match before a PNG is published. UI readback is rounded; target
+tolerance is 0.02 map units and scalar/angle tolerance is 0.11 native UI units.
+Other saved parameters remain explicitly listed as unverified by readback.
+Duplicate IDs/names, unsupported/missing targets, missing native controls,
+parameter mismatches and black/uniform frames fail instead of returning a
+different/default camera. The current adapter targets the tested English UI
+of Editor 5.0.17.98310. Source archives are preserved.
+
+Omit `map` on later captures to reuse this worker's current map and select another
+`map_camera_id` without reloading it. A `.SC2Mod` has no Terrain. Cutscene `camera`
+and `time_ms` arguments remain separate and are rejected for Terrain capture.
+
+This evaluates the **saved camera's framing and editor placements**, using the
+current native Terrain viewport resolution/aspect. It does **not** play a
+trigger cinematic: Galaxy execution, trigger-created units/cameras, camera
+interpolation over time and gameplay animation/state require a separate game
+test. Responses explicitly return `triggerExecution:false` and
+`timelineControl:false`; a successful static shot does not certify a running
+trigger movie.
 
 ## Complete overhead map image
 
@@ -418,8 +457,8 @@ Tools: `sc2_modules`, `sc2_editor_start`, `sc2_open_document`, `sc2_convert_xml`
 `sc2_cutscene_seek`, `sc2_capture_frame`, `sc2_capture_terrain`, `sc2_export_map_image`, `sc2_export_video`.
 `sc2_search_objects` and `sc2_capture_map_region` provide saved placement search
 and experimental coordinate-region PNGs. `sc2_validate_document` and
-`sc2_save_reopen` provide native load/Data checks and serialization comparison
-(17 tools in total).
+`sc2_save_reopen` provide native load/Data checks and serialization comparison.
+`sc2_list_map_cameras` exposes saved map-camera metadata (18 tools in total).
 Images are returned as MCP image content and PNG artifacts; complete map exports
 embed the bounded preview and provide the full PNG as a downloadable artifact. Large Galaxy output
 uses the export tool rather than being embedded in MCP text. EOF shuts down the
@@ -459,6 +498,11 @@ Live tests are opt-in, use private copies and close owned workers. Examples:
   --base 'D:\EmptyMap.SC2Map' --output 'D:\PrivateFixtures\Hills.SC2Map'
 .venv\Scripts\python.exe tests\live_map_image.py --package `
   --map 'D:\PrivateFixtures\Hills.SC2Map' --work 'D:\FreshWholeMapTest'
+.venv\Scripts\python.exe tests\make_camera_fixture.py `
+  --base 'D:\EmptyMap.SC2Map' --output 'D:\PrivateFixtures\Cameras.SC2Map'
+.venv\Scripts\python.exe tests\live_map_cameras.py --package `
+  --map 'D:\PrivateFixtures\Cameras.SC2Map' --camera-a 2001 --camera-b 2002 `
+  --work 'D:\FreshSavedCameraTest'
 ```
 
 The whole-map fixture contains hills, four different corner buildings, Marines
@@ -469,6 +513,13 @@ automated detailed-pixel checks alone cannot certify those contents. The live
 automated export/download/crop checks passed on the corrected fixture, but visual
 review found category exclusion ineffective and water remains untested. This is
 partial acceptance, not a complete rendering certificate for v0.7.0-rc.2.
+
+The camera fixture builder replaces placements only in a new private copy and
+adds two native-format saved cameras. The camera test checks listing before
+startup, invalid-ID rejection, A → B → A captures, native parameter readback,
+PNG download hashes, source preservation, background observations and subsequent
+native trigger compilation. Review the PNGs visually as well. These fixture
+builders require the supported native, untransformed terrain component format.
 
 Tests without Editor validate transport, files, arguments and invariants; only
 live tests confirm native generation, compilation and rendering. See

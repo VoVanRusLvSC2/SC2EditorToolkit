@@ -1,6 +1,7 @@
 # Validation history
 
-All dates below are 2026-10-20. Live tests use the original installed SC2 Editor
+Unless explicitly dated otherwise, earlier results below are from 2026-10-20.
+Live tests use the original installed SC2 Editor
 5.0.17.98310 on Windows x64. They operate on owned hidden workers and private
 copies, never on the user's visible Editor. Results apply to the version and
 scenario stated; they do not certify every map, asset, device or Editor build.
@@ -8,6 +9,64 @@ scenario stated; they do not certify every map, asset, device or Editor build.
 User maps, scenes, PNG/MP4 captures, raw PCM, tokens and complete runtime logs are
 kept local and are excluded from Git and release assets. Documentation and future
 release notes are maintained in English.
+
+## v0.9.0-rc.1: saved map-camera framing (2026-10-20–21)
+
+Saved `ObjectCamera` listing is read-only and does not require an Editor. The
+existing Terrain capture operation accepts an exact `map_camera_id`. The original
+camera palette, View Selected Camera command and Get Game Camera dialog provide
+selection and actual camera state; the PNG comes from that Terrain viewport's
+D3D9 backbuffer. Native IPC is version 10; use matching new controller/DLL files.
+
+A private 64×48 fixture contains two hills, 14 units, four doodads and two
+native-format camera records. Camera 2001 targets XY (16, 12), with pitch 56,
+yaw 180, distance 34 and FOV 27.8. Camera 2002 targets (48, 36), with pitch 50,
+yaw 90, distance 25 and FOV 27.8. An A → B → A sequence passed native readback
+and produced detailed, different views. Visual inspection confirmed terrain,
+placed buildings and Marines in the southwest view, and the opposite landmark
+and relief in the northeast view. The final captures omit selection manipulators.
+Camera creation uses native `CameraTarget` and indexed `CameraValue` fields;
+marker position is not substituted for the camera target.
+
+Actual target Z was 8.77 and 10.77 respectively, resolved by the original engine
+from its terrain. These are not the placement's saved zero height offset. Target
+XY is compared within 0.02 map units; available saved pitch/yaw/roll, distance and
+FOV values are compared within 0.11 native UI units, accounting for rounded
+readback and wrapped angles. Near/far clip, shadow clip, focal depth and falloff
+remain explicitly unverified by numeric readback.
+
+The native layer, palette selection and view/readback run as separate bounded
+requests so the original outer GUI loop can finish its binding. View-button
+enablement can lag palette selection; the adapter checks the exact unique row
+and verifies the resulting camera numerically before publishing any frame.
+Duplicate IDs/names, missing targets and mismatches are refused. The adapter is
+tested against the English UI profile of Editor 5.0.17.98310.
+
+An initial post-capture compilation attempt stopped before generation because
+automatic context lookup used a normalized slash path instead of the archive's
+exact `TriggerStrings.txt` member spelling. It selected the script identifier
+instead of the GUI display name. Context lookup now uses exact enumerated member
+names/locales with size and UTF-8 checks; a regression test includes backslashes
+and a display name different from the script identifier. This does not change
+the native saved-document (`*`) guard.
+
+The corrected packaged API then passed a fresh cold-start A → B → A run, PNG
+artifact download/hash checks and automatic-context original Galaxy generation
+and compilation with **zero compiler errors**. All three frames were 1297×868,
+with 235–237 luminance bins and the expected native camera readbacks. Source
+archives stayed unchanged. Across 5,784 observations there were zero visible
+worker windows, foreground samples or input-desktop changes; no input injection
+or desktop-switch API was used. The test closed its owned worker. The same
+release passed 45 Python tests, two C++ suites and packaged HTTP/MCP transport
+checks (18 MCP tools).
+
+This covers saved camera composition and static editor placements at the current
+native viewport resolution/aspect. It does not execute Galaxy or evaluate camera
+transitions, trigger-created objects, runtime state or a complete trigger movie.
+Responses retain `triggerExecution:false` and `timelineControl:false`. The Nydus
+map examined for this work had no saved map-camera records, so it is not claimed
+as a saved-camera acceptance case. Existing Nydus cutscene evidence below is a
+different operation.
 
 ## v0.8.0-rc.1: operation diagnostics and native save/reopen
 

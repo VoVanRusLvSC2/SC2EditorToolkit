@@ -25,6 +25,7 @@ assert 'sc2_export_map_image' in {t['name'] for t in result[1]['result']['tools'
 assert 'sc2_capture_map_region' in {t['name'] for t in result[1]['result']['tools']}
 assert 'sc2_validate_document' in {t['name'] for t in result[1]['result']['tools']}
 assert 'sc2_save_reopen' in {t['name'] for t in result[1]['result']['tools']}
+assert 'sc2_list_map_cameras' in {t['name'] for t in result[1]['result']['tools']}
 search=result[3]['result']['structuredContent']
 assert not result[3]['result']['isError'] and search['totalMatches']==1,search
 assert search['objects'][0]['position']=={'x':48,'y':36,'z':0},search

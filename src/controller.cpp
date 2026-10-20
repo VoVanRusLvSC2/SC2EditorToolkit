@@ -91,7 +91,7 @@ int wmain(int argc,wchar_t** argv){
     }
     if(!target)return Error("Expected Triggers test-document workspace not found");
     DWORD tid=GetWindowThreadProcessId(target,nullptr);if(!tid)return Error("No owner thread");
-    if(op!=L"inspect"&&op!=L"generate"&&op!=L"compile"&&op!=L"read"&&op!=L"freshness-probe"&&op!=L"load"&&op!=L"cancel-load"&&op!=L"diagnostics"&&op!=L"cutscene"&&op!=L"scene-inspect"&&op!=L"scene-load"&&op!=L"scene-seek"&&op!=L"scene-advance"&&op!=L"scene-audio"&&op!=L"terrain"&&op!=L"terrain-export"&&op!=L"save-document"&&op!=L"reopen-document"&&op!=L"load-data")return Error("Unsupported operation");
+    if(op!=L"inspect"&&op!=L"generate"&&op!=L"compile"&&op!=L"read"&&op!=L"freshness-probe"&&op!=L"load"&&op!=L"cancel-load"&&op!=L"diagnostics"&&op!=L"cutscene"&&op!=L"scene-inspect"&&op!=L"scene-load"&&op!=L"scene-seek"&&op!=L"scene-advance"&&op!=L"scene-audio"&&op!=L"terrain"&&op!=L"terrain-export"&&op!=L"save-document"&&op!=L"reopen-document"&&op!=L"load-data"&&op!=L"terrain-camera"&&op!=L"terrain-camera-layer"&&op!=L"terrain-camera-select")return Error("Unsupported operation");
     if(op==L"load"&&(map.empty()||!map.is_absolute()||!fs::is_regular_file(map)))return Error("Existing absolute --map archive required");
     fs::create_directories(out);
     std::ofstream inventory(out/"windows-before.json",std::ios::binary);inventory<<"[";
@@ -100,8 +100,8 @@ int wmain(int argc,wchar_t** argv){
     std::wstring mappingName=L"Local\\SC2NativeBridge-"+std::to_wstring(wantedPid)+L"-"+guid;
     HANDLE mapping=CreateFileMappingW(INVALID_HANDLE_VALUE,nullptr,PAGE_READWRITE,0,sizeof(Block),mappingName.c_str());if(!mapping||GetLastError()==ERROR_ALREADY_EXISTS)return Error("Cannot create unique IPC mapping");
     auto b=static_cast<Block*>(MapViewOfFile(mapping,FILE_MAP_ALL_ACCESS,0,0,sizeof(Block)));if(!b)return Error("Cannot map IPC");
-    ZeroMemory(b,sizeof(Block));b->compilerErrors=-1;b->magic=kMagic;b->version=9;b->pid=wantedPid;b->tid=tid;b->target=reinterpret_cast<uint64_t>(target);
-    b->operation=op==L"generate"?Generate:op==L"compile"?Compile:op==L"read"?ReadSource:op==L"freshness-probe"?FreshnessProbe:op==L"load"?LoadDocument:op==L"cancel-load"?CancelLoad:op==L"diagnostics"?Diagnostics:op==L"cutscene"?OpenCutscene:op==L"scene-inspect"?SceneInspect:op==L"scene-load"?SceneLoad:op==L"scene-seek"?SceneSeek:op==L"scene-advance"?SceneAdvance:op==L"scene-audio"?SceneAudio:op==L"terrain"?TerrainView:op==L"terrain-export"?TerrainExport:op==L"save-document"?SaveDocument:op==L"reopen-document"?ReopenDocument:op==L"load-data"?LoadDataModule:Inspect;
+    ZeroMemory(b,sizeof(Block));b->compilerErrors=-1;b->magic=kMagic;b->version=10;b->pid=wantedPid;b->tid=tid;b->target=reinterpret_cast<uint64_t>(target);
+    b->operation=op==L"generate"?Generate:op==L"compile"?Compile:op==L"read"?ReadSource:op==L"freshness-probe"?FreshnessProbe:op==L"load"?LoadDocument:op==L"cancel-load"?CancelLoad:op==L"diagnostics"?Diagnostics:op==L"cutscene"?OpenCutscene:op==L"scene-inspect"?SceneInspect:op==L"scene-load"?SceneLoad:op==L"scene-seek"?SceneSeek:op==L"scene-advance"?SceneAdvance:op==L"scene-audio"?SceneAudio:op==L"terrain"?TerrainView:op==L"terrain-export"?TerrainExport:op==L"save-document"?SaveDocument:op==L"reopen-document"?ReopenDocument:op==L"load-data"?LoadDataModule:op==L"terrain-camera"?TerrainCamera:op==L"terrain-camera-layer"?TerrainCameraLayer:op==L"terrain-camera-select"?TerrainCameraSelect:Inspect;
     wcsncpy_s(b->expectedDocument,expected.c_str(),_TRUNCATE);wcsncpy_s(b->expectedMarker,marker.c_str(),_TRUNCATE);
     wcsncpy_s(b->mapPath,map.c_str(),_TRUNCATE);
     wcsncpy_s(b->contextLabel,context.c_str(),_TRUNCATE);
@@ -152,6 +152,9 @@ int wmain(int argc,wchar_t** argv){
     ending=json.rfind("\n}");auto& t=b->terrain;json.insert(ending,",\n\"terrainExport\":{\"size\":"+std::to_string(t.size)+",\"includeUnits\":"+std::to_string(t.includeUnits)+",\"includeDoodads\":"+std::to_string(t.includeDoodads)+",\"exported\":"+std::to_string(t.exported)+",\"fullMap\":"+std::to_string(t.fullMap)+",\"topDown\":"+std::to_string(t.topDown)+",\"optionsConfirmed\":"+std::to_string(t.optionsConfirmed)+"}");
     auto& io=b->documentIo;ending=json.rfind("\n}");json.insert(ending,",\n\"documentIo\":{\"saveCommandId\":"+std::to_string(io.saveCommand)+",\"closeCommandId\":"+std::to_string(io.closeCommand)+",\"saved\":"+std::to_string(io.saved)+",\"closed\":"+std::to_string(io.closed)+",\"reopened\":"+std::to_string(io.reopened)+",\"dataLoaded\":"+std::to_string(io.dataLoaded)+",\"savedBytes\":"+std::to_string(io.savedBytes)+"}");
     auto& d=b->diagnosticCapture;
+    auto& mc=b->mapCamera;ending=json.rfind("\n}");
+    std::ostringstream cameraJson;cameraJson<<",\n\"mapCamera\":{\"selected\":"<<mc.selected<<",\"valuesRead\":"<<mc.valuesRead<<",\"name\":"<<Q(mc.name)<<",\"target\":{\"x\":"<<mc.x<<",\"y\":"<<mc.y<<",\"z\":"<<mc.z<<"},\"pitch\":"<<mc.pitch<<",\"yaw\":"<<mc.yaw<<",\"roll\":"<<mc.roll<<",\"distance\":"<<mc.distance<<",\"fov\":"<<mc.fov<<"}";
+    json.insert(ending,cameraJson.str());
     for(auto part:{std::make_pair(L"diagnostics-before.json",std::make_pair(d.before,d.beforeBytes)),std::make_pair(L"diagnostics-after.json",std::make_pair(d.after,d.afterBytes)),std::make_pair(L"diagnostics-events.json",std::make_pair(d.events,d.eventBytes))}){
         if(part.second.second&&part.second.second<kDiagnosticCapacity){std::ofstream stream(out/part.first,std::ios::binary);stream.write(part.second.first,part.second.second);}
     }

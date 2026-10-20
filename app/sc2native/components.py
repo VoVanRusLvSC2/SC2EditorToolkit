@@ -44,6 +44,21 @@ def read_member(archive,member,tool,work,*,text=False):
         return {**member,'sha256':digest.hexdigest()},content
 
 
+def read_string_table(archive,tool,component,work):
+    matches=[m for m in list_members(archive,tool) if m['name'].casefold()==component.replace('\\','/').casefold()]
+    if not matches:return {}
+    if len(matches)!=1:raise ValueError('Ambiguous localized string component: '+component)
+    _,content=read_member(archive,matches[0],tool,work,text=True)
+    if content is None:raise ValueError('Localized string component is not bounded UTF-8 text')
+    strings={}
+    for line in content.splitlines():
+        if '=' not in line:continue
+        key,value=line.split('=',1)
+        if key in strings and strings[key]!=value:raise ValueError('Conflicting localized string key')
+        strings[key]=value
+    return strings
+
+
 def snapshot_components(archive,tool,work):
     work=Path(work);work.mkdir(parents=True,exist_ok=True)
     members=list_members(archive,tool);result={}
