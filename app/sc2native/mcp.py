@@ -6,7 +6,8 @@ from .session import Worker
 
 PROPERTIES={'template':{'type':'string'},'map':{'type':'string'},'triggers_xml':{'type':'string'},'triggers_file':{'type':'string'},
  'scope':{'type':'string'},'context_label':{'type':'string'},'locale':{'type':'string'},'compile':{'type':'boolean'},
- 'output':{'type':'string'},'overwrite':{'type':'boolean'}}
+ 'output':{'type':'string'},'overwrite':{'type':'boolean'},'scene':{'type':'string'},'camera':{'type':'string'},
+ 'time_ms':{'type':'number','minimum':0,'maximum':600000},'allow_empty':{'type':'boolean'}}
 TOOLS=[
  ('sc2_modules','List native modules and implemented capabilities.',None,[]),
  ('sc2_editor_start','Start an owned hidden original SC2 Editor using a map/mod template.','start',['template']),
@@ -15,8 +16,9 @@ TOOLS=[
  ('sc2_compile_all','Generate current native script and invoke original Compile All; return compiler/editor diagnostics.','compile_current',[]),
  ('sc2_export_galaxy','Export the last native Galaxy bytes to a file. Existing files require overwrite=true.','export_galaxy',[]),
  ('sc2_diagnostics','Read the current Messages/Console controls from the owned editor.','diagnostics',[]),
- ('sc2_cutscene_open','Open the original Cutscene module on the private desktop. Timeline control is not implemented.','cutscene_open',[]),
- ('sc2_capture_frame','Capture the next presented D3D9 renderer backbuffer to PNG, not desktop pixels.','capture_frame',[]),
+ ('sc2_cutscene_open','Load a private copy of a native cutscene in the hidden original Editor. Supply scene and optional template.','cutscene_open',[]),
+ ('sc2_cutscene_seek','Select a unique native camera and time_ms. Return actual Editor time and confirmation.','cutscene_seek',[]),
+ ('sc2_capture_frame','Capture the selected cutscene renderer to PNG. Optional camera/time_ms selects a frame first. Black frames fail by default.','capture_frame',[]),
 ]
 
 def restore_pipes():
@@ -46,8 +48,8 @@ def main():
                 if method=='initialize':
                     version=params.get('protocolVersion','2025-06-18')
                     if version not in ('2024-11-05','2025-03-26','2025-06-18'):version='2025-06-18'
-                    result={'protocolVersion':version,'serverInfo':{'name':'sc2-native-toolkit','version':'0.2.0'},'capabilities':{'tools':{'listChanged':False}},
-                        'instructions':'Use an installed SC2 Editor. Start/open a template first. Every editor window remains on a private desktop. Capture is a renderer viewport; timeline control is not implemented.'};initialized=True
+                    result={'protocolVersion':version,'serverInfo':{'name':'sc2-native-toolkit','version':'0.3.0'},'capabilities':{'tools':{'listChanged':False}},
+                        'instructions':'Use an installed SC2 Editor. Load a cutscene using scene and a map/mod template, select a unique camera and time_ms, then capture its renderer. Time is sampled on the native 33 ms frame grid. Every editor window remains on a private desktop.'};initialized=True
                 elif method=='ping':result={}
                 elif not initialized:raise ValueError('Initialize the MCP session first')
                 elif method=='tools/list':

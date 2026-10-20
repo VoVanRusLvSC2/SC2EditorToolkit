@@ -37,10 +37,17 @@ static UINT MenuCommand(HMENU menu,const std::wstring& wanted){
         auto sub=GetSubMenu(menu,i);if(sub){UINT id=MenuCommand(sub,wanted);if(id)return id;}
     }return 0;
 }
+static void DumpMenu(std::ostream& out,HMENU menu){
+    out<<"[";for(int i=0;i<GetMenuItemCount(menu);i++){
+        if(i)out<<",";wchar_t text[512]{};GetMenuStringW(menu,i,text,512,MF_BYPOSITION);
+        out<<"{\"text\":"<<Q(text)<<",\"id\":"<<GetMenuItemID(menu,i)<<",\"state\":"<<GetMenuState(menu,i,MF_BYPOSITION)<<",\"children\":";
+        DumpMenu(out,GetSubMenu(menu,i));out<<"}";
+    }out<<"]";
+}
 int wmain(int argc,wchar_t** argv){
     if(argc<3){std::cout<<"SC2NativeBridge.exe inspect|generate|compile|read|freshness-probe --pid PID --expect-document NativeEmitterProbe.SC2Map --marker MARKER --out NEW_DIRECTORY\n";return 2;}
-    std::wstring op=argv[1],expected,marker,context,scope=L"mapRoot",desktop;fs::path out,map;bool resumeDialog=false;
-    for(int i=2;i<argc;i++){std::wstring arg=argv[i];if(i+1>=argc)return Error("Missing option value");std::wstring value=argv[++i];if(arg==L"--pid")wantedPid=std::stoul(value);else if(arg==L"--expect-document")expected=value;else if(arg==L"--marker")marker=value;else if(arg==L"--out")out=value;else if(arg==L"--map")map=value;else if(arg==L"--resume-dialog")resumeDialog=value==L"yes";else if(arg==L"--context-label")context=value;else if(arg==L"--scope")scope=value;else if(arg==L"--desktop")desktop=value;else return Error("Unknown option");}
+    std::wstring op=argv[1],expected,marker,context,scope=L"mapRoot",desktop,camera;int64_t timeMs=0;fs::path out,map;bool resumeDialog=false;
+    for(int i=2;i<argc;i++){std::wstring arg=argv[i];if(i+1>=argc)return Error("Missing option value");std::wstring value=argv[++i];if(arg==L"--pid")wantedPid=std::stoul(value);else if(arg==L"--expect-document")expected=value;else if(arg==L"--marker")marker=value;else if(arg==L"--out")out=value;else if(arg==L"--map")map=value;else if(arg==L"--resume-dialog")resumeDialog=value==L"yes";else if(arg==L"--context-label")context=value;else if(arg==L"--scope")scope=value;else if(arg==L"--desktop")desktop=value;else if(arg==L"--camera")camera=value;else if(arg==L"--time-ms")timeMs=std::stoll(value);else return Error("Unknown option");}
     if(!desktop.empty()){
         if(desktop.rfind(L"SC2Native-",0)!=0)return Error("Only a private SC2Native desktop is allowed");
         HDESK isolated=OpenDesktopW(desktop.c_str(),0,FALSE,GENERIC_ALL);
@@ -58,10 +65,12 @@ int wmain(int argc,wchar_t** argv){
     EnumWindows(Root,0);HWND target=nullptr;
     if(op==L"inventory"){
         fs::create_directories(out);std::ofstream dump(out/"inventory.json");dump<<"[";bool sep=false;
-        for(HWND w:windows){if(sep)dump<<",";sep=true;dump<<"{\"title\":"<<Q(Text(w))<<",\"enabled\":"<<(IsWindowEnabled(w)?"true":"false")<<",\"texts\":[";
+        for(HWND w:windows){if(sep)dump<<",";sep=true;dump<<"{\"hwnd\":"<<reinterpret_cast<uint64_t>(w)<<",\"title\":"<<Q(Text(w))<<",\"enabled\":"<<(IsWindowEnabled(w)?"true":"false")<<",\"menu\":";DumpMenu(dump,GetMenu(w));dump<<",\"controls\":[";
             struct Context{std::ofstream* stream;bool comma;};Context context{&dump,false};
             EnumChildWindows(w,[](HWND child,LPARAM param)->BOOL{auto c=reinterpret_cast<Context*>(param);wchar_t cls[256]{};GetClassNameW(child,cls,256);
-                if(!wcscmp(cls,L"Static")||!wcscmp(cls,L"Button")){auto t=Text(child);if(!t.empty()){if(c->comma)*c->stream<<",";c->comma=true;*c->stream<<Q(t);}}return TRUE;},reinterpret_cast<LPARAM>(&context));dump<<"]}";
+                RECT r{};GetWindowRect(child,&r);if(c->comma)*c->stream<<",";c->comma=true;
+                *c->stream<<"{\"hwnd\":"<<reinterpret_cast<uint64_t>(child)<<",\"parent\":"<<reinterpret_cast<uint64_t>(GetParent(child))<<",\"id\":"<<GetDlgCtrlID(child)<<",\"class\":"<<Q(cls)<<",\"text\":"<<Q(Text(child))<<",\"visible\":"<<(IsWindowVisible(child)?"true":"false")<<",\"rect\":["<<r.left<<","<<r.top<<","<<r.right<<","<<r.bottom<<"]}";
+                return TRUE;},reinterpret_cast<LPARAM>(&context));dump<<"]}";
         }dump<<"]";return 0;
     }
     for(HWND w:windows){auto title=Text(w);if(title.rfind(L"Triggers - [",0)==0&&title.find(expected)!=title.npos){if(target)return Error("Ambiguous Triggers workspace");target=w;}}
@@ -75,7 +84,7 @@ int wmain(int argc,wchar_t** argv){
     }
     if(!target)return Error("Expected Triggers test-document workspace not found");
     DWORD tid=GetWindowThreadProcessId(target,nullptr);if(!tid)return Error("No owner thread");
-    if(op!=L"inspect"&&op!=L"generate"&&op!=L"compile"&&op!=L"read"&&op!=L"freshness-probe"&&op!=L"load"&&op!=L"cancel-load"&&op!=L"diagnostics"&&op!=L"cutscene")return Error("Unsupported operation");
+    if(op!=L"inspect"&&op!=L"generate"&&op!=L"compile"&&op!=L"read"&&op!=L"freshness-probe"&&op!=L"load"&&op!=L"cancel-load"&&op!=L"diagnostics"&&op!=L"cutscene"&&op!=L"scene-inspect"&&op!=L"scene-load"&&op!=L"scene-seek")return Error("Unsupported operation");
     if(op==L"load"&&(map.empty()||!map.is_absolute()||!fs::is_regular_file(map)))return Error("Existing absolute --map archive required");
     fs::create_directories(out);
     std::ofstream inventory(out/"windows-before.json",std::ios::binary);inventory<<"[";
@@ -84,13 +93,13 @@ int wmain(int argc,wchar_t** argv){
     std::wstring mappingName=L"Local\\SC2NativeBridge-"+std::to_wstring(wantedPid)+L"-"+guid;
     HANDLE mapping=CreateFileMappingW(INVALID_HANDLE_VALUE,nullptr,PAGE_READWRITE,0,sizeof(Block),mappingName.c_str());if(!mapping||GetLastError()==ERROR_ALREADY_EXISTS)return Error("Cannot create unique IPC mapping");
     auto b=static_cast<Block*>(MapViewOfFile(mapping,FILE_MAP_ALL_ACCESS,0,0,sizeof(Block)));if(!b)return Error("Cannot map IPC");
-    ZeroMemory(b,sizeof(Block));b->compilerErrors=-1;b->magic=kMagic;b->version=4;b->pid=wantedPid;b->tid=tid;b->target=reinterpret_cast<uint64_t>(target);
-    b->operation=op==L"generate"?Generate:op==L"compile"?Compile:op==L"read"?ReadSource:op==L"freshness-probe"?FreshnessProbe:op==L"load"?LoadDocument:op==L"cancel-load"?CancelLoad:op==L"diagnostics"?Diagnostics:op==L"cutscene"?OpenCutscene:Inspect;
+    ZeroMemory(b,sizeof(Block));b->compilerErrors=-1;b->magic=kMagic;b->version=5;b->pid=wantedPid;b->tid=tid;b->target=reinterpret_cast<uint64_t>(target);
+    b->operation=op==L"generate"?Generate:op==L"compile"?Compile:op==L"read"?ReadSource:op==L"freshness-probe"?FreshnessProbe:op==L"load"?LoadDocument:op==L"cancel-load"?CancelLoad:op==L"diagnostics"?Diagnostics:op==L"cutscene"?OpenCutscene:op==L"scene-inspect"?SceneInspect:op==L"scene-load"?SceneLoad:op==L"scene-seek"?SceneSeek:Inspect;
     wcsncpy_s(b->expectedDocument,expected.c_str(),_TRUNCATE);wcsncpy_s(b->expectedMarker,marker.c_str(),_TRUNCATE);
     wcsncpy_s(b->mapPath,map.c_str(),_TRUNCATE);
     wcsncpy_s(b->contextLabel,context.c_str(),_TRUNCATE);
     wcsncpy_s(b->scope,scope.c_str(),_TRUNCATE);
-    b->resumeDialog=resumeDialog;
+    b->resumeDialog=resumeDialog;b->timeMs=timeMs;wcsncpy_s(b->camera,camera.c_str(),_TRUNCATE);
     wchar_t self[32768]{};GetModuleFileNameW(nullptr,self,32768);auto dllPath=fs::path(self).parent_path()/L"SC2NativeBridge.dll";
     HMODULE dll=LoadLibraryW(dllPath.c_str());if(!dll)return Error("Cannot load bridge DLL locally");
     auto hookProc=reinterpret_cast<HOOKPROC>(GetProcAddress(dll,"BridgeHook"));auto guardProc=reinterpret_cast<HOOKPROC>(GetProcAddress(dll,"BridgeFocusGuard"));
@@ -112,7 +121,7 @@ int wmain(int argc,wchar_t** argv){
     // A timeout does not cancel a native handler. Keep its activation guard alive
     // until it completes instead of permitting a delayed focus-stealing action.
     if(b->started&&!b->completed){
-        std::cerr<<"Native handler pending after transport timeout; keeping focus veto installed until completion.\n";
+        std::cerr<<"Native handler pending; keeping worker hooks installed until completion.\n";
         while(!b->completed&&IsWindow(target)){
             if(b->loadStage!=previousStage){previousStage=b->loadStage;std::cerr<<"loadStage="<<previousStage<<"\n";std::ofstream progress(out/"progress.json");progress<<"{\"loadStage\":"<<previousStage<<",\"error\":"<<b->error<<"}";}
             Pump();MsgWaitForMultipleObjects(0,nullptr,FALSE,25,QS_ALLINPUT);
@@ -128,7 +137,7 @@ int wmain(int argc,wchar_t** argv){
     auto json=r.str();
     const std::string activationFlag="\"activationApiUsed\":false";
     if(b->privateFocusUsed){auto flag=json.find(activationFlag);if(flag!=json.npos)json.replace(flag,activationFlag.size(),"\"activationApiUsed\":true");}
-    auto ending=json.rfind("\n}");
+    auto ending=json.rfind("\n}");json.insert(ending,",\n\"sceneLoaded\":"+std::to_string(b->sceneLoaded)+",\n\"cameraConfirmed\":"+std::to_string(b->cameraConfirmed)+",\n\"timeConfirmed\":"+std::to_string(b->timeConfirmed)+",\n\"viewport\":"+std::to_string(b->viewport)+",\n\"sceneStatus\":"+Q(b->sceneStatus)+",\n\"actualTimeMs\":"+std::to_string(b->actualTimeMs));
     json.insert(ending,",\n\"privateDesktopFocusUsed\":"+std::string(b->privateFocusUsed?"true":"false")+",\n\"diagnosticWindows\":"+std::to_string(b->diagnosticWindows)+",\n\"diagnosticsTruncated\":"+std::to_string(b->diagnosticsTruncated)+",\n\"moduleCommandId\":"+std::to_string(b->moduleCommand));
     ending=json.rfind("\n}");json.insert(ending,",\n\"privateDesktopActivationEvents\":"+std::to_string(privateForegroundEvents.load())+",\n\"userDesktopActivationApiUsed\":false");
     std::ofstream result(out/"result.json",std::ios::binary);result<<json;result.close();std::cout<<json;

@@ -6,8 +6,8 @@
 #include "capture_protocol.h"
 namespace fs=std::filesystem;
 int wmain(int argc,wchar_t** argv){
-    DWORD pid=0;fs::path out;
-    for(int i=1;i<argc;i++){if(i+1>=argc)return 2;std::wstring key=argv[i],value=argv[++i];if(key==L"--pid")pid=std::stoul(value);else if(key==L"--out")out=value;else return 2;}
+    DWORD pid=0;uint64_t targetWindow=0;fs::path out;
+    for(int i=1;i<argc;i++){if(i+1>=argc)return 2;std::wstring key=argv[i],value=argv[++i];if(key==L"--pid")pid=std::stoul(value);else if(key==L"--out")out=value;else if(key==L"--viewport")targetWindow=std::stoull(value);else return 2;}
     if(!pid||out.empty()||!out.is_absolute()||fs::exists(out))return 2;
     HANDLE process=OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION|PROCESS_CREATE_THREAD|PROCESS_VM_READ|PROCESS_VM_WRITE|PROCESS_VM_OPERATION,FALSE,pid);
     if(!process)return 2;wchar_t image[32768]{};DWORD length=32768;
@@ -20,7 +20,7 @@ int wmain(int argc,wchar_t** argv){
     HMODULE local=LoadLibraryW(dll.c_str());if(!local){CloseHandle(process);return 2;}
     auto entry=GetProcAddress(local,"BootstrapCapture");if(!entry){FreeLibrary(local);CloseHandle(process);return 2;}
     auto rva=reinterpret_cast<uintptr_t>(entry)-reinterpret_cast<uintptr_t>(local);FreeLibrary(local);
-    CaptureRequest request;wcsncpy_s(request.output,out.c_str(),_TRUNCATE);
+    CaptureRequest request;request.targetWindow=targetWindow;wcsncpy_s(request.output,out.c_str(),_TRUNCATE);
     void* memory=VirtualAllocEx(process,nullptr,sizeof(request),MEM_COMMIT|MEM_RESERVE,PAGE_READWRITE);SIZE_T transferred=0;
     if(!memory||!WriteProcessMemory(process,memory,&request,sizeof(request),&transferred)){CloseHandle(process);return 2;}
     HANDLE thread=CreateRemoteThread(process,nullptr,0,reinterpret_cast<LPTHREAD_START_ROUTINE>(base+rva),memory,0,nullptr);
@@ -29,6 +29,6 @@ int wmain(int argc,wchar_t** argv){
     WaitForSingleObject(thread,INFINITE);DWORD code=1;GetExitCodeThread(thread,&code);
     bool read=ReadProcessMemory(process,memory,&request,sizeof(request),&transferred)!=0;
     VirtualFreeEx(process,memory,0,MEM_RELEASE);CloseHandle(thread);CloseHandle(process);
-    std::cout<<"{\"status\":\""<<(!code&&read?"NATIVE_FRAME_CAPTURED":"CAPTURE_FAILED")<<"\",\"hresult\":"<<static_cast<unsigned long>(request.result)<<",\"width\":"<<request.width<<",\"height\":"<<request.height<<",\"sequence\":"<<request.sequence<<",\"sourceKind\":"<<request.sourceKind<<",\"nonBlackPixels\":"<<request.nonBlackPixels<<",\"emptyFrame\":"<<(request.nonBlackPixels?"false":"true")<<",\"desktopPixelsRead\":false}\n";
+    std::cout<<"{\"status\":\""<<(!code&&read?"NATIVE_FRAME_CAPTURED":"CAPTURE_FAILED")<<"\",\"hresult\":"<<static_cast<unsigned long>(request.result)<<",\"width\":"<<request.width<<",\"height\":"<<request.height<<",\"sequence\":"<<request.sequence<<",\"sourceWindow\":"<<request.sourceWindow<<",\"sourceKind\":"<<request.sourceKind<<",\"nonBlackPixels\":"<<request.nonBlackPixels<<",\"luminanceBins\":"<<request.luminanceBins<<",\"luminanceMin\":"<<request.luminanceMin<<",\"luminanceMax\":"<<request.luminanceMax<<",\"emptyFrame\":"<<(request.nonBlackPixels?"false":"true")<<",\"desktopPixelsRead\":false}\n";
     return !code&&read&&SUCCEEDED(request.result)?0:2;
 }

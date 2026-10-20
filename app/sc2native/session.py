@@ -1,11 +1,18 @@
 from .runtime import *
 from .artifacts import ArtifactStore
 from .diagnostics import parse_native_diagnostics
+from .cutscenes import scene_file,seek_arguments
 class Worker:
+    def _background_result(self,result):
+        result['desktopObservation']=self.monitor.snapshot()
+        observed=result['desktopObservation']
+        if observed['visibleWindowsOnUserDesktopPeak'] or observed['editorForegroundSamples']:
+            result.update(status='FAILED',error='Hidden desktop invariant failed',requestedCutsceneFrameVerified=False)
+        return result
     def __init__(self,work):
         self.work=Path(work).resolve();self.work.mkdir(parents=True,exist_ok=True)
         self.state=None;self.monitor=None;self.lock=threading.Lock()
-        self.artifacts=ArtifactStore(self.work/'exports');self.last_result=None
+        self.artifacts=ArtifactStore(self.work/'exports');self.last_result=None;self.scene=None
         self.job_name='Local\\SC2NativeApi-'+uuid.uuid4().hex
         self.job_handle=kernel.CreateJobObjectW(None,self.job_name)
         limit=ExtendedLimit();limit.Basic.Flags=0x2000
@@ -15,6 +22,7 @@ class Worker:
     def alive(self):return bool(self.state and process_time(self.state['pid'])==self.state['createTimeFiletime'])
     def ensure(self,template):
         if self.alive():return
+        self.scene=None
         if self.monitor:self.monitor.stop();self.monitor=None
         directory=self.work/'workers'/uuid.uuid4().hex;directory.mkdir(parents=True)
         # Seed is a private archive copy. Never ask the worker to edit the user's source.
@@ -76,6 +84,7 @@ class Worker:
             # Load may succeed even if generation/compilation subsequently fails.
             manifest=Path(args.job)/'manifest.json'
             if result.get('steps',{}).get('load',{}).get('mapLoaded'):
+                self.scene=None
                 self.state['currentDocument']=Path(json.loads(manifest.read_text(encoding='utf-8'))['workingDocument']).name
                 self.state['documentPath']=json.loads(manifest.read_text(encoding='utf-8'))['workingDocument']
                 oracle.save(self.work/'worker.json',self.state)
@@ -108,6 +117,7 @@ class Worker:
             if not native['mapLoaded']:raise RuntimeError('Native loading not confirmed')
             self.state['currentDocument']=archive.name;oracle.save(self.work/'worker.json',self.state)
             self.state['documentPath']=str(archive);self.last_result=None
+            self.scene=None
             result={'status':'HIDDEN_NATIVE_DOCUMENT_OPENED','source':str(source),'openedCopy':str(archive),
                 'sourceUnchanged':files.sha(source)==original_hash,'nativeLoad':native,'desktopObservation':self.monitor.snapshot()}
             observed=result['desktopObservation']
@@ -187,24 +197,75 @@ class Worker:
     def cutscene_open(self,request):
         if not self.lock.acquire(blocking=False):raise RuntimeError('Worker busy')
         try:
+            source=None
+            if request.get('scene'):source,cameras=scene_file(request['scene'])
+            if not self.alive():
+                template=request.get('template') or request.get('map')
+                if not template:raise ValueError('Start a worker or supply a map/mod template')
+                template=Path(template).resolve(strict=True)
+                if not template.is_file() or template.suffix.lower() not in ('.sc2map','.sc2mod'):raise ValueError('Existing .SC2Map/.SC2Mod template required')
+                self.ensure(template)
             directory=self.work/'cutscenes'/uuid.uuid4().hex;directory.mkdir(parents=True)
             native=self._native(directory,'cutscene')
-            return {'status':'CUTSCENE_MODULE_OPEN_REQUESTED','native':native,'timelineControl':False,'desktopObservation':self.monitor.snapshot()}
+            result={'status':'CUTSCENE_MODULE_OPENED','native':native,'timelineControl':True}
+            if source:
+                original_hash=files.sha(source);copy=directory/source.name;shutil.copyfile(source,copy)
+                if files.sha(copy)!=original_hash:raise RuntimeError('Scene changed while copying')
+                self.scene=None
+                loaded=oracle.native_step(directory,'02-scene-load',self.state['pid'],self.state['currentDocument'],map_path=copy)
+                if not loaded.get('sceneLoaded'):raise RuntimeError('Original scene loading not confirmed')
+                self.scene={'source':str(source),'copy':str(copy),'sha256':original_hash,'cameras':cameras,'frame':None}
+                result.update(status='CUTSCENE_LOADED',scene=self.scene.copy(),load=loaded,sourceUnchanged=files.sha(source)==original_hash)
+            return self._background_result(result)
         finally:self.lock.release()
+
+    def cutscene_seek(self,request,_locked=False):
+        if not _locked and not self.lock.acquire(blocking=False):raise RuntimeError('Worker busy')
+        try:
+            if not self.alive() or not self.scene:raise RuntimeError('Load a cutscene first')
+            camera,time_ms=seek_arguments(request)
+            directory=self.work/'cutscenes'/uuid.uuid4().hex;directory.mkdir(parents=True)
+            oracle.ACTIVE_DESKTOP=self.state['desktop']
+            self.scene['frame']=None
+            native=oracle.native_step(directory,'01-scene-seek',self.state['pid'],self.state['currentDocument'],camera=camera,time_ms=time_ms)
+            if not native.get('cameraConfirmed') or not native.get('timeConfirmed'):raise RuntimeError('Native camera/time not confirmed')
+            self.scene['frame']={'camera':camera,'requestedTimeMs':time_ms,'actualTimeMs':native['actualTimeMs'],'nativeStatus':native['sceneStatus'],'viewport':native['viewport'],
+                'timeResolutionMs':33,'timeReadbackResolutionMs':10,'cameraConfirmed':True,'timeConfirmed':True}
+            result={'status':'CUTSCENE_FRAME_SELECTED','frame':self.scene['frame'].copy(),'native':native,'desktopObservation':self.monitor.snapshot()}
+            self._background_result(result);oracle.save(directory/'selection.json',result);return result
+        finally:
+            if not _locked:self.lock.release()
 
     def capture_frame(self,request):
         if not self.lock.acquire(blocking=False):raise RuntimeError('Worker busy')
         try:
             if not self.alive():raise RuntimeError('Start/open the editor first')
+            if 'camera' in request or 'time_ms' in request:self.cutscene_seek(request,_locked=True)
             directory=self.work/'frames'/uuid.uuid4().hex;directory.mkdir(parents=True)
             command=[str(RES/'RenderCapture.exe'),'--pid',str(self.state['pid']),'--out',str(directory/'frame.png')]
-            run=subprocess.run(command,capture_output=True,creationflags=subprocess.CREATE_NO_WINDOW,timeout=90)
-            if run.returncode:raise RuntimeError('Native frame capture failed: '+run.stdout.decode('utf8',errors='replace')+run.stderr.decode('utf8',errors='replace'))
-            evidence=json.loads(run.stdout.decode('utf8'));artifact=self.artifacts.register_png(directory/'frame.png')
+            frame=self.scene and self.scene.get('frame')
+            if self.scene and not frame:raise ValueError('Select a cutscene camera/time first')
+            if frame:command+=['--viewport',str(frame['viewport'])]
+            attempts=[]
+            for attempt in range(8):
+                image=directory/('frame-'+str(attempt)+'.png');command[command.index('--out')+1]=str(image)
+                run=subprocess.run(command,capture_output=True,creationflags=subprocess.CREATE_NO_WINDOW,timeout=90)
+                if run.returncode:raise RuntimeError('Native frame capture failed: '+run.stdout.decode('utf8',errors='replace')+run.stderr.decode('utf8',errors='replace'))
+                evidence=json.loads(run.stdout.decode('utf8'));attempts.append(evidence)
+                if evidence.get('luminanceBins',0)>=8 and evidence.get('nonBlackPixels',0)>evidence.get('width',0)*evidence.get('height',0)//1000:break
+                # Scene import/device resize can present cleared buffers while
+                # assets stream. Wait for more frames at the SAME paused time.
+                time.sleep(.2)
+            artifact=self.artifacts.register_png(image)
             result={'status':'RENDER_FRAME_CAPTURED','artifact':artifact,'native':evidence,
-                'source':'original D3D9 backbuffer','desktopScreenshot':False,'timelineControl':False,
+                'source':'original D3D9 backbuffer','desktopScreenshot':False,'timelineControl':True,
                 'desktopObservation':self.monitor.snapshot()}
-            result['emptyFrame']=evidence.get('emptyFrame',None)
-            result['requestedCutsceneFrameVerified']=False
+            result['emptyFrame']=evidence.get('emptyFrame',None);result['captureAttempts']=attempts
+            result['imageHasDetail']=evidence.get('luminanceBins',0)>=8 and evidence.get('nonBlackPixels',0)>evidence.get('width',0)*evidence.get('height',0)//1000
+            result['requestedCutsceneFrameVerified']=bool(frame and evidence.get('sourceWindow')==frame['viewport'] and result['imageHasDetail'])
+            if frame:result['frame']=frame.copy()
+            if frame and evidence.get('sourceWindow')!=frame['viewport']:result.update(status='FAILED',error='Capture did not match selected native viewport')
+            if (result['emptyFrame'] or not result['imageHasDetail']) and not request.get('allow_empty',False):result.update(status='FAILED',error='Original renderer returned a black or uniform frame')
+            self._background_result(result)
             oracle.save(directory/'capture.json',result);return result
         finally:self.lock.release()

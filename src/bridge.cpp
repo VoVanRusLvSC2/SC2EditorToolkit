@@ -8,6 +8,7 @@
 #include <filesystem>
 #include <shlobj.h>
 #include <sstream>
+#include <cmath>
 #pragma comment(lib,"user32.lib")
 #pragma comment(lib,"comctl32.lib")
 static HMODULE module;
@@ -280,12 +281,14 @@ static void DiagnosticsSnapshot(Block* b){
         }
     }
 }
+#include "cutscene_bridge.inc"
 static void Process(Block* b) {
     b->dllPid=GetCurrentProcessId();b->dllTid=GetCurrentThreadId();b->foregroundBefore=reinterpret_cast<uint64_t>(GetForegroundWindow());
     HWND target=reinterpret_cast<HWND>(b->target);DWORD pid=0;DWORD tid=GetWindowThreadProcessId(target,&pid);
     if(pid!=b->pid||tid!=b->tid||pid!=GetCurrentProcessId()||tid!=GetCurrentThreadId()){Fail(b,10,L"PID/thread/HWND identity mismatch");return;}
     auto title=Text(target);
-    if(b->expectedDocument[0]==0||title.find(b->expectedDocument)==title.npos||title.find(L'*')!=title.npos){Fail(b,11,L"Expected saved test document is not active");return;}
+    bool sceneOperation=b->operation==SceneInspect||b->operation==SceneLoad||b->operation==SceneSeek||b->operation==OpenCutscene;
+    if(b->expectedDocument[0]==0||title.find(b->expectedDocument)==title.npos||(title.find(L'*')!=title.npos&&!(sceneOperation&&PrivateDesktop()))){Fail(b,11,L"Expected saved test document is not active");return;}
     for(HWND w:Roots()){
         Log(b,L"root hwnd=%p enabled=%d class=%s title=%s\n",w,IsWindowEnabled(w),Class(w).c_str(),Text(w).c_str());
         if(w==target)for(HWND c:Children(w))if(Class(c)==L"SysTreeView32"){
@@ -303,6 +306,7 @@ static void Process(Block* b) {
         }
     }
     if(b->operation==Diagnostics){DiagnosticsSnapshot(b);return;}
+    if(b->operation==SceneInspect||b->operation==SceneLoad||b->operation==SceneSeek){SceneOperation(b);return;}
     if(b->operation==OpenCutscene){
         UINT command=FindCommand(target,{L"Modules",L"Модули"},{L"Cutscene Editor",L"Cutscenes",L"Редактор сцен",L"Редактор кат-сцен"});
         if(!command){Fail(b,50,L"Original Cutscene module command not found");return;}
@@ -388,13 +392,14 @@ extern "C" __declspec(dllexport) LRESULT CALLBACK BridgeHook(int n,WPARAM wp,LPA
                 HANDLE mapping=OpenFileMappingW(FILE_MAP_ALL_ACCESS,FALSE,name);
                 if(mapping){
                     auto b=static_cast<Block*>(MapViewOfFile(mapping,FILE_MAP_ALL_ACCESS,0,0,sizeof(Block)));
-                    if(b&&b->magic==kMagic&&b->version==4&&b->target==reinterpret_cast<uint64_t>(message->hwnd)&&!b->started){
+                    if(b&&b->magic==kMagic&&b->version==5&&b->target==reinterpret_cast<uint64_t>(message->hwnd)&&!b->started){
                         processing=true;current=b;InterlockedExchange(&b->started,1);
                         HHOOK guard=SetWindowsHookExW(WH_CBT,FocusGuard,module,GetCurrentThreadId());
                         if(!guard)Fail(b,16,L"Cannot install thread-local focus/activation guard");else GuardedProcess(b);
                         if(guard)UnhookWindowsHookEx(guard);
                         b->foregroundAfter=reinterpret_cast<uint64_t>(GetForegroundWindow());
-                        current=nullptr;processing=false;InterlockedExchange(&b->completed,1);
+                        current=nullptr;processing=false;
+                        if(sceneSeekTask&&sceneSeekTask->b==b){b=nullptr;}else InterlockedExchange(&b->completed,1);
                     }
                     if(b)UnmapViewOfFile(b);CloseHandle(mapping);
                 }

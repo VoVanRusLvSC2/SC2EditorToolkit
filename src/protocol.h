@@ -3,8 +3,8 @@
 #include <cstdint>
 constexpr uint32_t kMagic = 0x53433247;
 constexpr size_t kSourceCapacity = 16 * 1024 * 1024;
-constexpr wchar_t kMessageName[] = L"SC2.NativeGalaxyBridge.20261020.modules.v4";
-enum Operation : uint32_t { Inspect = 0, Generate = 1, Compile = 2, ReadSource = 3, FreshnessProbe = 4, LoadDocument = 5, CancelLoad = 6, Diagnostics=7, OpenCutscene=8 };
+constexpr wchar_t kMessageName[] = L"SC2.NativeGalaxyBridge.20261020.modules.v5";
+enum Operation : uint32_t { Inspect = 0, Generate = 1, Compile = 2, ReadSource = 3, FreshnessProbe = 4, LoadDocument = 5, CancelLoad = 6, Diagnostics=7, OpenCutscene=8, SceneInspect=9, SceneLoad=10, SceneSeek=11 };
 struct Block {
     uint32_t magic, version, operation, pid, tid;
     uint64_t target;
@@ -14,6 +14,11 @@ struct Block {
     wchar_t scope[64];
     wchar_t mapPath[32768];
     wchar_t loadedTitle[2048];
+    wchar_t camera[512],sceneStatus[2048];
+    int64_t timeMs;
+    int64_t actualTimeMs;
+    uint64_t viewport;
+    uint32_t sceneLoaded,cameraConfirmed,timeConfirmed;
     volatile LONG loadStage;
     uint32_t loadCommand, mapLoaded, resumeDialog;
     uint32_t contextSelected;

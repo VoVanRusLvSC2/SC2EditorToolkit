@@ -46,12 +46,14 @@ def prepare(args):
     save(manifest_path,manifest)
     return {**result,'workingDocument':str(new),'packedTriggersByteEqual':True}
 
-def native_step(job,stage,pid,current,marker='',context='',map_path=None,scope='mapRoot'):
+def native_step(job,stage,pid,current,marker='',context='',map_path=None,scope='mapRoot',camera=None,time_ms=None):
     out=job/stage
     command=[str(RES/'SC2NativeBridge.exe'),stage.split('-',1)[1],'--pid',str(pid),'--expect-document',current,'--out',str(out)]
     if marker:command+=['--marker',marker]
     if context:command+=['--context-label',context]
     if map_path:command+=['--map',str(map_path)]
+    if camera is not None:command+=['--camera',camera]
+    if time_ms is not None:command+=['--time-ms',str(time_ms)]
     command+=['--scope',scope]
     if ACTIVE_DESKTOP:command+=['--desktop',ACTIVE_DESKTOP]
     # A child with redirected stdio has no console to activate. Native controls

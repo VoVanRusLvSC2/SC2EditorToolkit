@@ -12,7 +12,7 @@
 #pragma comment(lib,"user32.lib")
 #pragma comment(lib,"windowscodecs.lib")
 #pragma comment(lib,"ole32.lib")
-static void BeforePresent(IDirect3DDevice9* device,IDirect3DSwapChain9* chain=nullptr);
+static void BeforePresent(IDirect3DDevice9* device,IDirect3DSwapChain9* chain=nullptr,HWND window=nullptr);
 static HANDLE workEvent,readyEvent;
 static DWORD renderTid;
 static HWND renderWindow;
@@ -67,11 +67,19 @@ static ULONG STDMETHODCALLTYPE Release(void* self){ULONG n=0;Invoke([&]{
     n=fn(self);if(n)InterlockedExchangePointer(reinterpret_cast<void* volatile*>(self),meta.clone);else Forget(self);
 });return n;}
 static HRESULT STDMETHODCALLTYPE Cooperative(void* self){auto fn=Original<HRESULT(STDMETHODCALLTYPE*)(void*)>(self,3);HRESULT h;Invoke([&]{h=fn(self);});return h;}
-static D3DPRESENT_PARAMETERS Parameters(const D3DPRESENT_PARAMETERS* input){auto p=*input;p.Windowed=TRUE;p.FullScreen_RefreshRateInHz=0;p.hDeviceWindow=renderWindow;return p;}
+static D3DPRESENT_PARAMETERS Parameters(const D3DPRESENT_PARAMETERS* input){
+    auto p=*input;RECT viewport{};
+    // Preserve D3D's original zero-size semantics before replacing the HWND.
+    if(p.hDeviceWindow&&GetClientRect(p.hDeviceWindow,&viewport)){
+        if(!p.BackBufferWidth&&viewport.right>0)p.BackBufferWidth=static_cast<UINT>(viewport.right);
+        if(!p.BackBufferHeight&&viewport.bottom>0)p.BackBufferHeight=static_cast<UINT>(viewport.bottom);
+    }
+    p.Windowed=TRUE;p.FullScreen_RefreshRateInHz=0;p.hDeviceWindow=renderWindow;return p;
+}
 static HRESULT STDMETHODCALLTYPE Reset(void* self,D3DPRESENT_PARAMETERS* p){auto fn=Original<HRESULT(STDMETHODCALLTYPE*)(void*,D3DPRESENT_PARAMETERS*)>(self,16);auto copy=Parameters(p);HRESULT h;Invoke([&]{h=fn(self,&copy);});return h;}
-static HRESULT STDMETHODCALLTYPE Present(void* self,const RECT* source,const RECT* target,HWND,const RGNDATA* dirty){auto fn=Original<HRESULT(STDMETHODCALLTYPE*)(void*,const RECT*,const RECT*,HWND,const RGNDATA*)>(self,17);HRESULT h;Invoke([&]{BeforePresent(static_cast<IDirect3DDevice9*>(self));h=fn(self,source,target,renderWindow,dirty);});return h;}
+static HRESULT STDMETHODCALLTYPE Present(void* self,const RECT* source,const RECT* target,HWND window,const RGNDATA* dirty){auto fn=Original<HRESULT(STDMETHODCALLTYPE*)(void*,const RECT*,const RECT*,HWND,const RGNDATA*)>(self,17);HRESULT h;Invoke([&]{BeforePresent(static_cast<IDirect3DDevice9*>(self),nullptr,window?window:Metadata(self).originalFocus);h=fn(self,source,target,renderWindow,dirty);});return h;}
 static HRESULT STDMETHODCALLTYPE ResetEx(void* self,D3DPRESENT_PARAMETERS* p,D3DDISPLAYMODEEX*){auto fn=Original<HRESULT(STDMETHODCALLTYPE*)(void*,D3DPRESENT_PARAMETERS*,D3DDISPLAYMODEEX*)>(self,132);auto copy=Parameters(p);HRESULT h;Invoke([&]{h=fn(self,&copy,nullptr);});return h;}
-static HRESULT STDMETHODCALLTYPE PresentEx(void* self,const RECT* source,const RECT* target,HWND,const RGNDATA* dirty,DWORD flags){auto fn=Original<HRESULT(STDMETHODCALLTYPE*)(void*,const RECT*,const RECT*,HWND,const RGNDATA*,DWORD)>(self,121);HRESULT h;Invoke([&]{BeforePresent(static_cast<IDirect3DDevice9*>(self));h=fn(self,source,target,renderWindow,dirty,flags);});return h;}
+static HRESULT STDMETHODCALLTYPE PresentEx(void* self,const RECT* source,const RECT* target,HWND window,const RGNDATA* dirty,DWORD flags){auto fn=Original<HRESULT(STDMETHODCALLTYPE*)(void*,const RECT*,const RECT*,HWND,const RGNDATA*,DWORD)>(self,121);HRESULT h;Invoke([&]{BeforePresent(static_cast<IDirect3DDevice9*>(self),nullptr,window?window:Metadata(self).originalFocus);h=fn(self,source,target,renderWindow,dirty,flags);});return h;}
 static HRESULT STDMETHODCALLTYPE CreationParameters(void* self,D3DDEVICE_CREATION_PARAMETERS* p){auto fn=Original<HRESULT(STDMETHODCALLTYPE*)(void*,D3DDEVICE_CREATION_PARAMETERS*)>(self,9);HRESULT h;Invoke([&]{h=fn(self,p);});if(SUCCEEDED(h))p->hFocusWindow=Metadata(self).originalFocus;return h;}
 static void** Clone(void* self,size_t slots,HWND focus,bool ex){
     std::lock_guard<std::mutex> lock(objectLock);if(objects.count(self))return nullptr;auto original=*reinterpret_cast<void***>(self);
@@ -83,7 +91,7 @@ static void** Clone(void* self,size_t slots,HWND focus,bool ex){
     auto clone=static_cast<void**>(HeapAlloc(GetProcessHeap(),0,copied*sizeof(void*)));memcpy(clone,original,copied*sizeof(void*));
     clone[0]=reinterpret_cast<void*>(QI);clone[1]=reinterpret_cast<void*>(AddRef);clone[2]=reinterpret_cast<void*>(Release);objects.emplace(self,Object{original,clone,focus,ex});return clone;
 }
-static HRESULT STDMETHODCALLTYPE SwapPresent(void* self,const RECT* source,const RECT* target,HWND,const RGNDATA* dirty,DWORD flags){auto fn=Original<HRESULT(STDMETHODCALLTYPE*)(void*,const RECT*,const RECT*,HWND,const RGNDATA*,DWORD)>(self,3);HRESULT h;Invoke([&]{auto chain=static_cast<IDirect3DSwapChain9*>(self);IDirect3DDevice9* device=nullptr;if(SUCCEEDED(chain->GetDevice(&device))&&device){BeforePresent(device,chain);device->Release();}h=fn(self,source,target,renderWindow,dirty,flags);});return h;}
+static HRESULT STDMETHODCALLTYPE SwapPresent(void* self,const RECT* source,const RECT* target,HWND window,const RGNDATA* dirty,DWORD flags){auto fn=Original<HRESULT(STDMETHODCALLTYPE*)(void*,const RECT*,const RECT*,HWND,const RGNDATA*,DWORD)>(self,3);HRESULT h;Invoke([&]{auto chain=static_cast<IDirect3DSwapChain9*>(self);IDirect3DDevice9* device=nullptr;if(SUCCEEDED(chain->GetDevice(&device))&&device){BeforePresent(device,chain,window?window:Metadata(self).originalFocus);device->Release();}h=fn(self,source,target,renderWindow,dirty,flags);});return h;}
 #include "d3d_proxies.inc"
 static void Wrap_IDirect3DBaseTexture9(IDirect3DBaseTexture9* value){
     if(!value)return;D3DRESOURCETYPE type;Invoke([&]{type=value->GetType();});
@@ -98,7 +106,7 @@ static void Wrap_IDirect3DResource9(IDirect3DResource9* value){
     else if(type==D3DRTYPE_INDEXBUFFER)Wrap_IDirect3DIndexBuffer9(static_cast<IDirect3DIndexBuffer9*>(value));
     else Wrap_IDirect3DBaseTexture9(static_cast<IDirect3DBaseTexture9*>(value));
 }
-static HRESULT STDMETHODCALLTYPE AdditionalSwapChain(void* self,D3DPRESENT_PARAMETERS* p,IDirect3DSwapChain9** chain){auto fn=Original<HRESULT(STDMETHODCALLTYPE*)(void*,D3DPRESENT_PARAMETERS*,IDirect3DSwapChain9**)>(self,13);auto copy=Parameters(p);HRESULT h;Invoke([&]{h=fn(self,&copy,chain);});if(SUCCEEDED(h)&&*chain)Wrap_IDirect3DSwapChain9(*chain);return h;}
+static HRESULT STDMETHODCALLTYPE AdditionalSwapChain(void* self,D3DPRESENT_PARAMETERS* p,IDirect3DSwapChain9** chain){auto fn=Original<HRESULT(STDMETHODCALLTYPE*)(void*,D3DPRESENT_PARAMETERS*,IDirect3DSwapChain9**)>(self,13);auto copy=Parameters(p);HRESULT h;Invoke([&]{h=fn(self,&copy,chain);});if(SUCCEEDED(h)&&*chain){Wrap_IDirect3DSwapChain9(*chain);std::lock_guard<std::mutex> lock(objectLock);objects.at(*chain).originalFocus=p->hDeviceWindow;}return h;}
 static void WrapDevice(IDirect3DDevice9* device,HWND focus,bool ex){
     auto table=Clone(device,ex?134:119,focus,ex);if(!table)return;
     if(ex)Fill_IDirect3DDevice9Ex(table);else Fill_IDirect3DDevice9(table);
@@ -160,19 +168,25 @@ static HRESULT CaptureSurface(IDirect3DDevice9* device,IDirect3DSwapChain9* chai
         pixels.resize(size_t(desc.Width)*desc.Height*4);
         for(UINT y=0;y<desc.Height;y++)memcpy(pixels.data()+size_t(y)*desc.Width*4,static_cast<BYTE*>(locked.pBits)+size_t(y)*locked.Pitch,size_t(desc.Width)*4);
         staging->UnlockRect();
-        for(size_t i=0;i<pixels.size();i+=4){if(pixels[i]||pixels[i+1]||pixels[i+2])++request.nonBlackPixels;pixels[i+3]=255;}
+        bool bins[256]{};
+        for(size_t i=0;i<pixels.size();i+=4){
+            if(pixels[i]||pixels[i+1]||pixels[i+2])++request.nonBlackPixels;
+            UINT luma=(29*pixels[i]+150*pixels[i+1]+77*pixels[i+2])>>8;
+            if(!bins[luma]){bins[luma]=true;++request.luminanceBins;}
+            request.luminanceMin=(std::min)(request.luminanceMin,luma);request.luminanceMax=(std::max)(request.luminanceMax,luma);pixels[i+3]=255;
+        }
         h=SavePng(request.output,desc.Width,desc.Height,pixels);
         if(SUCCEEDED(h)){request.width=desc.Width;request.height=desc.Height;request.format=desc.Format;request.sequence=frameSequence;request.sourceKind=chain?2:1;}
     }while(false);
     if(staging)staging->Release();if(resolved)resolved->Release();if(back)back->Release();return h;
 }
-static void BeforePresent(IDirect3DDevice9* device,IDirect3DSwapChain9* chain){
+static void BeforePresent(IDirect3DDevice9* device,IDirect3DSwapChain9* chain,HWND window){
     ++frameSequence;if(!pendingCapture)return;
-    auto state=pendingCapture;pendingCapture=nullptr;
+    auto state=pendingCapture;if(state->request->targetWindow&&state->request->targetWindow!=reinterpret_cast<uint64_t>(window))return;pendingCapture=nullptr;state->request->sourceWindow=reinterpret_cast<uint64_t>(window);
     state->request->result=CaptureSurface(device,chain,*state->request);SetEvent(state->done);
 }
 extern "C" __declspec(dllexport) DWORD WINAPI BootstrapCapture(CaptureRequest* request){
-    if(!request||request->size!=sizeof(CaptureRequest)||request->version!=1||!request->output[0])return ERROR_INVALID_PARAMETER;
+    if(!request||request->size!=sizeof(CaptureRequest)||request->version!=2||!request->output[0])return ERROR_INVALID_PARAMETER;
     HANDLE done=CreateEventW(nullptr,TRUE,FALSE,nullptr);if(!done)return GetLastError();
     CaptureState state{request,done};bool busy=false;
     Invoke([&]{busy=pendingCapture!=nullptr;if(!busy)pendingCapture=&state;});
