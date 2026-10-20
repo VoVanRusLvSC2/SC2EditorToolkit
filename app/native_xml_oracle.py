@@ -46,7 +46,7 @@ def prepare(args):
     save(manifest_path,manifest)
     return {**result,'workingDocument':str(new),'packedTriggersByteEqual':True}
 
-def native_step(job,stage,pid,current,marker='',context='',map_path=None,scope='mapRoot',camera=None,time_ms=None):
+def native_step(job,stage,pid,current,marker='',context='',map_path=None,scope='mapRoot',camera=None,time_ms=None,terrain=None):
     out=job/stage
     command=[str(RES/'SC2NativeBridge.exe'),stage.split('-',1)[1],'--pid',str(pid),'--expect-document',current,'--out',str(out)]
     if marker:command+=['--marker',marker]
@@ -54,6 +54,7 @@ def native_step(job,stage,pid,current,marker='',context='',map_path=None,scope='
     if map_path:command+=['--map',str(map_path)]
     if camera is not None:command+=['--camera',camera]
     if time_ms is not None:command+=['--time-ms',str(time_ms)]
+    if terrain is not None:command+=['--image-size',str(terrain['size']),'--include-units','yes' if terrain['include_units'] else 'no','--include-doodads','yes' if terrain['include_doodads'] else 'no']
     command+=['--scope',scope]
     if ACTIVE_DESKTOP:command+=['--desktop',ACTIVE_DESKTOP]
     # A child with redirected stdio has no console to activate. Native controls
@@ -68,7 +69,8 @@ def native_step(job,stage,pid,current,marker='',context='',map_path=None,scope='
     result=json.loads(result_path.read_text(encoding='utf-8'))
     compile_diagnostic=stage.endswith('-compile') and code==1 and result.get('compilerErrors',-1)>0
     if (code and not compile_diagnostic) or result['status']!='NATIVE_DLL_REQUEST_COMPLETED' or result['error']:
-        raise RuntimeError(f'Native {stage} not confirmed: {result.get("failure")}; exit={code}')
+        reason=result.get('failure') or 'Native handler did not finish; no successful output is confirmed'
+        raise RuntimeError(f'Native {stage} not confirmed: {reason}; exit={code}')
     if result['editorForegroundEvents'] or not result['hooksRemoved']:raise RuntimeError('Background invariant not satisfied')
     return result
 

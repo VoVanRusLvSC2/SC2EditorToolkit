@@ -9,6 +9,7 @@ class Worker:
         if observed['visibleWindowsOnUserDesktopPeak'] or observed['editorForegroundSamples']:
             result.update(status='FAILED',error='Hidden desktop invariant failed',requestedCutsceneFrameVerified=False)
             if 'requestedTerrainFrameVerified' in result:result['requestedTerrainFrameVerified']=False
+            if 'wholeMapVerified' in result:result['wholeMapVerified']=False
         return result
     def __init__(self,work):
         self.work=Path(work).resolve();self.work.mkdir(parents=True,exist_ok=True)
@@ -131,10 +132,10 @@ class Worker:
         finally:
             if not _locked:self.lock.release()
 
-    def _native(self,directory,operation,scope='mapRoot',context=''):
+    def _native(self,directory,operation,scope='mapRoot',context='',**options):
         if not self.alive():raise RuntimeError('Start or open a document first')
         oracle.ACTIVE_DESKTOP=self.state['desktop']
-        return oracle.native_step(directory,'01-'+operation,self.state['pid'],self.state['currentDocument'],context=context,scope=scope)
+        return oracle.native_step(directory,'01-'+operation,self.state['pid'],self.state['currentDocument'],context=context,scope=scope,**options)
 
     def start(self,request):
         if not self.lock.acquire(blocking=False):raise RuntimeError('Worker busy')
@@ -281,21 +282,25 @@ class Worker:
         finally:
             if not _locked:self.lock.release()
 
+    def _prepare_terrain(self,request):
+        supplied=request.get('map') or request.get('template')
+        path=Path(supplied).resolve(strict=True) if supplied else Path(self.state['documentPath']) if self.alive() else None
+        if path is None or not path.is_file() or path.suffix.lower()!='.sc2map':raise ValueError('Terrain operations require a .SC2Map; a mod has no terrain')
+        original_hash=files.sha(path)
+        if supplied:
+            if self.alive():self.open_document({'map':str(path)},_locked=True)
+            else:self.ensure(path)
+        if files.sha(self.state['documentPath'])!=original_hash:raise RuntimeError('Opened private map does not match the source archive')
+        return path,original_hash
+
     def capture_terrain(self,request):
         if not self.lock.acquire(blocking=False):raise RuntimeError('Worker busy')
         try:
             # Camera and time_ms refer to cutscenes; never silently reuse those
             # arguments for a terrain screenshot of a different module.
             if 'camera' in request or 'time_ms' in request:raise ValueError('Terrain capture uses the current native map view; cutscene camera/time_ms are not supported')
-            supplied=request.get('map') or request.get('template')
-            path=Path(supplied).resolve(strict=True) if supplied else Path(self.state['documentPath']) if self.alive() else None
-            if path is None or not path.is_file() or path.suffix.lower()!='.sc2map':raise ValueError('Terrain capture requires a .SC2Map; a mod has no terrain')
+            path,original_hash=self._prepare_terrain(request)
             directory=self.work/'terrain'/uuid.uuid4().hex;directory.mkdir(parents=True)
-            original_hash=files.sha(path)
-            if supplied:
-                if self.alive():self.open_document({'map':str(path)},_locked=True)
-                else:self.ensure(path)
-            if files.sha(self.state['documentPath'])!=original_hash:raise RuntimeError('Opened private map does not match the source archive')
             native=self._native(directory,'terrain')
             if not native.get('viewport'):raise RuntimeError('Original Terrain viewport was not confirmed')
             if self.scene:self.scene['frame']=None
@@ -311,6 +316,39 @@ class Worker:
                 result['status']='TERRAIN_FRAME_CAPTURED'
             oracle.save(directory/'terrain-result.json',result)
             return result
+        finally:self.lock.release()
+
+    def export_map_image(self,request):
+        from .map_images import export_options,inspect_image
+        if not self.lock.acquire(blocking=False):raise RuntimeError('Worker busy')
+        try:
+            options=export_options(request)
+            output=Path(request['output']).resolve() if request.get('output') else None
+            if output and output.suffix.lower()!='.png':raise ValueError('Output extension must be .png')
+            if output and output.exists() and not request.get('overwrite',False):raise FileExistsError(output)
+            path,original_hash=self._prepare_terrain(request)
+            directory=self.work/'map-images'/uuid.uuid4().hex;directory.mkdir(parents=True)
+            native_image=directory/('NativeMap-'+directory.name[:12]+'.tga');png=directory/'FullMap.png';preview=directory/'Preview.png'
+            native=self._native(directory,'terrain-export',map_path=native_image,terrain=options)
+            selected=native.get('terrainExport',{})
+            if not all(selected.get(key) for key in ('exported','fullMap','topDown','optionsConfirmed')):raise RuntimeError('Original complete overhead map export was not confirmed')
+            if selected.get('size')!=options['size'] or bool(selected.get('includeUnits'))!=options['include_units'] or bool(selected.get('includeDoodads'))!=options['include_doodads']:raise RuntimeError('Original map export options did not match the request')
+            if self.scene:self.scene['frame']=None
+            image=inspect_image(native_image,preview,png)
+            if image['width']!=options['size']:raise RuntimeError('Native output width did not match the requested image size')
+            result={'status':'MAP_IMAGE_EXPORTED','module':'terrain','source':'original Editor Export Map Image / CMapImageGenerator',
+                'implementationStatus':'experimental; full rendered-map acceptance test pending',
+                'view':'complete map, top down','desktopScreenshot':False,'wholeMapVerified':image['imageHasDetail'],
+                'native':native,'options':options,'image':image,'sourceUnchanged':files.sha(path)==original_hash,
+                'nativeImageSha256':files.sha(native_image),'nativeImageFormat':image['format'],'outputEncoding':'lossless RGB PNG'}
+            if not image['imageHasDetail']:result.update(status='FAILED',error='Original map exporter returned a black or uniform image',wholeMapVerified=False)
+            if not result['sourceUnchanged']:result.update(status='FAILED',error='Source map changed during export',wholeMapVerified=False)
+            self._background_result(result)
+            if result['status']!='FAILED':
+                result['artifact']=self.artifacts.publish_file(png,suffix='.png',mime='image/png',output=output,overwrite=bool(request.get('overwrite',False)))
+                result['preview']=self.artifacts.register_png(preview)
+            else:result['diagnosticImage']=str(png)
+            oracle.save(directory/'export-result.json',result);return result
         finally:self.lock.release()
 
     def export_video(self,request):

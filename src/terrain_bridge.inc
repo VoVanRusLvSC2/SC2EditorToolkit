@@ -19,6 +19,8 @@ static void TerrainOperation(Block* b,HWND target){
         }
     }
     if(!b->viewport){Fail(b,85,L"Original Terrain render viewport not found");return;}
+    SetActiveWindow(terrain);SetFocus(reinterpret_cast<HWND>(b->viewport));b->privateFocusUsed=1;
     wcsncpy_s(b->loadedTitle,Text(terrain).c_str(),_TRUNCATE);
+    if(b->operation==TerrainExport){ExportWholeMap(b,terrain);return;}
     RedrawWindow(terrain,nullptr,nullptr,RDW_INVALIDATE|RDW_ALLCHILDREN);
 }

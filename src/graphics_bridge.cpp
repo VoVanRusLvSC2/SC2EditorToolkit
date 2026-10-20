@@ -76,7 +76,7 @@ static ULONG STDMETHODCALLTYPE Release(void* self){ULONG n=0;Invoke([&]{
     InterlockedExchangePointer(reinterpret_cast<void* volatile*>(self),meta.original);
     n=fn(self);if(n)InterlockedExchangePointer(reinterpret_cast<void* volatile*>(self),meta.clone);else Forget(self);
 });return n;}
-static HRESULT STDMETHODCALLTYPE Cooperative(void* self){auto fn=Original<HRESULT(STDMETHODCALLTYPE*)(void*)>(self,3);HRESULT h;Invoke([&]{h=fn(self);});return h;}
+static HRESULT STDMETHODCALLTYPE Cooperative(void* self){auto fn=Original<HRESULT(STDMETHODCALLTYPE*)(void*)>(self,3);HRESULT h;Invoke([&]{h=fn(self);});if(FAILED(h))Log(L"TestCooperativeLevel failed",h);return h;}
 static D3DPRESENT_PARAMETERS Parameters(const D3DPRESENT_PARAMETERS* input){
     auto p=*input;RECT viewport{};
     // Preserve D3D's original zero-size semantics before replacing the HWND.
@@ -86,8 +86,8 @@ static D3DPRESENT_PARAMETERS Parameters(const D3DPRESENT_PARAMETERS* input){
     }
     p.Windowed=TRUE;p.FullScreen_RefreshRateInHz=0;p.hDeviceWindow=renderWindow;return p;
 }
-static HRESULT STDMETHODCALLTYPE Reset(void* self,D3DPRESENT_PARAMETERS* p){auto fn=Original<HRESULT(STDMETHODCALLTYPE*)(void*,D3DPRESENT_PARAMETERS*)>(self,16);auto copy=Parameters(p);HRESULT h;Invoke([&]{h=fn(self,&copy);});return h;}
-static HRESULT STDMETHODCALLTYPE Present(void* self,const RECT* source,const RECT* target,HWND window,const RGNDATA* dirty){auto fn=Original<HRESULT(STDMETHODCALLTYPE*)(void*,const RECT*,const RECT*,HWND,const RGNDATA*)>(self,17);HRESULT h;Invoke([&]{BeforePresent(static_cast<IDirect3DDevice9*>(self),nullptr,window?window:Metadata(self).originalFocus);h=fn(self,source,target,renderWindow,dirty);});return h;}
+static HRESULT STDMETHODCALLTYPE Reset(void* self,D3DPRESENT_PARAMETERS* p){auto fn=Original<HRESULT(STDMETHODCALLTYPE*)(void*,D3DPRESENT_PARAMETERS*)>(self,16);auto copy=Parameters(p);HRESULT h;Invoke([&]{h=fn(self,&copy);});Log(L"redirected Reset",h);return h;}
+static HRESULT STDMETHODCALLTYPE Present(void* self,const RECT* source,const RECT* target,HWND window,const RGNDATA* dirty){auto fn=Original<HRESULT(STDMETHODCALLTYPE*)(void*,const RECT*,const RECT*,HWND,const RGNDATA*)>(self,17);HRESULT h;Invoke([&]{BeforePresent(static_cast<IDirect3DDevice9*>(self),nullptr,window?window:Metadata(self).originalFocus);h=fn(self,source,target,renderWindow,dirty);});if(FAILED(h))Log(L"Present failed",h);return h;}
 static HRESULT STDMETHODCALLTYPE ResetEx(void* self,D3DPRESENT_PARAMETERS* p,D3DDISPLAYMODEEX*){auto fn=Original<HRESULT(STDMETHODCALLTYPE*)(void*,D3DPRESENT_PARAMETERS*,D3DDISPLAYMODEEX*)>(self,132);auto copy=Parameters(p);HRESULT h;Invoke([&]{h=fn(self,&copy,nullptr);});return h;}
 static HRESULT STDMETHODCALLTYPE PresentEx(void* self,const RECT* source,const RECT* target,HWND window,const RGNDATA* dirty,DWORD flags){auto fn=Original<HRESULT(STDMETHODCALLTYPE*)(void*,const RECT*,const RECT*,HWND,const RGNDATA*,DWORD)>(self,121);HRESULT h;Invoke([&]{BeforePresent(static_cast<IDirect3DDevice9*>(self),nullptr,window?window:Metadata(self).originalFocus);h=fn(self,source,target,renderWindow,dirty,flags);});return h;}
 static HRESULT STDMETHODCALLTYPE CreationParameters(void* self,D3DDEVICE_CREATION_PARAMETERS* p){auto fn=Original<HRESULT(STDMETHODCALLTYPE*)(void*,D3DDEVICE_CREATION_PARAMETERS*)>(self,9);HRESULT h;Invoke([&]{h=fn(self,p);});if(SUCCEEDED(h))p->hFocusWindow=Metadata(self).originalFocus;return h;}

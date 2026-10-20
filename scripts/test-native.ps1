@@ -9,4 +9,8 @@ try {
  if($LASTEXITCODE){throw 'Readiness regression test build failed'}
  & (Join-Path $destination 'DocumentWindowTests.exe')
  if($LASTEXITCODE){throw 'Readiness regression test failed'}
+ & $compiler /nologo /utf-8 /W4 /std:c++17 /EHsc /MT (Join-Path $root 'tests\map_export_paths_test.cpp') /Fe:MapExportPathTests.exe
+ if($LASTEXITCODE){throw 'Map export path test build failed'}
+ & (Join-Path $destination 'MapExportPathTests.exe')
+ if($LASTEXITCODE){throw 'Map export path regression test failed'}
 }finally{Pop-Location}

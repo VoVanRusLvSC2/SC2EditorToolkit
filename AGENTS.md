@@ -15,3 +15,7 @@ change user XML, mods, dependencies, previous releases or the installed EXE.
 Do not commit tokens, runtime state, user maps/mods, native binaries, test
 captures containing user content or local machine paths. Live tests are opt-in
 and must use owned private copies. Shut down owned workers after testing.
+
+Write public documentation, setup instructions, API/MCP tool descriptions,
+validation reports and GitHub release notes in English. Localized Editor menu
+matching strings may remain in their required languages.

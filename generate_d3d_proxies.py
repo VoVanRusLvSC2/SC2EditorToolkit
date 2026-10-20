@@ -51,6 +51,7 @@ for interface,methods in interfaces.items():
             lines.append(f'    QueueAudioState([=]{{bridgeFn(bridgeSelf, {forwarded});}});return D3D_OK;}}')
         if ret!='void':lines.append(f'  {ret} bridgeResult{{}};')
         lines.append('  Invoke([&]{'+('bridgeResult=' if ret!='void' else '')+f'bridgeFn(bridgeSelf{args});'+'});')
+        if ret=='HRESULT':lines.append(f'  if(FAILED(bridgeResult))Log(L"{interface}::{name}",bridgeResult);')
         # The one interface** input in this ABI is CheckResourceResidency.
         if name!='CheckResourceResidency':
             for typ,var in params:

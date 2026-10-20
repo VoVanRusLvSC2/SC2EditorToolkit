@@ -19,6 +19,11 @@ requirements. They are not included in this repository or program package.
 Generated D3D9 wrappers describe the ABI from the locally installed Windows SDK.
 The Windows SDK headers themselves are not redistributed.
 
+Pillow 13.0.0 is used to validate original map exports and create bounded image
+previews. MIT-CMU; the full Pillow and bundled-library notices are retained in
+vendor/Pillow-LICENSE.txt (LICENSE-Pillow.txt in release packages).
+https://github.com/python-pillow/Pillow
+
 MP4 export invokes separately installed FFmpeg and ffprobe executables.
 They are external requirements and are not redistributed in this package.
 https://ffmpeg.org/

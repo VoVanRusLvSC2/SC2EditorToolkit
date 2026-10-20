@@ -15,6 +15,7 @@ foreach($file in 'README.md','THIRD_PARTY.txt','LICENSE','NOTICE'){
  if(Test-Path -LiteralPath (Join-Path $PSScriptRoot $file)){Copy-Item -LiteralPath (Join-Path $PSScriptRoot $file) -Destination (Join-Path $PSScriptRoot $OutputDirectory)}
 }
 Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'vendor\minhook\LICENSE.txt') -Destination (Join-Path $PSScriptRoot "$OutputDirectory\LICENSE-MinHook.txt")
+Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'vendor\Pillow-LICENSE.txt') -Destination (Join-Path $PSScriptRoot "$OutputDirectory\LICENSE-Pillow.txt")
 Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'tools\mpqcli\LICENSE.txt') -Destination (Join-Path $PSScriptRoot "$OutputDirectory\LICENSE-mpqcli.txt")
 foreach($notice in 'LICENSE-CLI11.txt','LICENSE-StormLib.txt'){
  Copy-Item -LiteralPath (Join-Path $PSScriptRoot "tools\mpqcli\$notice") -Destination (Join-Path $PSScriptRoot "$OutputDirectory\$notice")
