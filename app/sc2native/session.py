@@ -1,6 +1,6 @@
 from .runtime import *
 from .artifacts import ArtifactStore
-from .diagnostics import parse_native_diagnostics
+from .diagnostics import parse_native_diagnostics,operation_diagnostics
 from .cutscenes import scene_file,seek_arguments,scene_duration
 class Worker:
     def _background_result(self,result):
@@ -51,7 +51,7 @@ class Worker:
         self.state['currentDocument']=seed.name;self.state['documentPath']=str(seed);self.state['startupReport']=str(state_path)
         if self.monitor is None:self.monitor=Observation(self.state['pid'])
         oracle.save(self.work/'worker.json',self.state)
-    def close(self):
+    def _reset_owned_editor(self):
         if self.alive():
             handle=kernel.OpenProcess(0x1000|1,False,self.state['pid'])
             if handle:
@@ -59,7 +59,9 @@ class Worker:
                 if process_time(self.state['pid'])==self.state['createTimeFiletime']:kernel.TerminateProcess(handle,0)
                 kernel.CloseHandle(handle)
         if self.monitor:self.monitor.stop();self.monitor=None
-        self.state=None
+        self.state=None;self.scene=None;self.last_result=None
+    def close(self):
+        self._reset_owned_editor()
         if self.job_handle:kernel.CloseHandle(self.job_handle);self.job_handle=None
     def execute(self,request,_locked=False):
         if not _locked and not self.lock.acquire(blocking=False):raise RuntimeError('Worker busy; serialize requests')
@@ -104,6 +106,14 @@ class Worker:
                 result['galaxy']=Path(result['output']).read_bytes().decode('utf-8')
                 self.last_result=result
             if (Path(args.job)/'03-compile').exists():result['diagnostics']=parse_native_diagnostics(Path(args.job)/'03-compile',result.get('steps',{}).get('compile'))
+            result['operationDiagnostics']={}
+            for stage in ('01-load','02-generate','03-compile'):
+                evidence=Path(args.job)/stage
+                if (evidence/'result.json').is_file():
+                    native=json.loads((evidence/'result.json').read_text(encoding='utf8'))
+                    result['operationDiagnostics'][stage]=operation_diagnostics(evidence,native)
+            result['newMapDataErrors']=[{'phase':name,**entry} for name,diagnostic in result['operationDiagnostics'].items() for entry in diagnostic['newErrors']]
+            if result['newMapDataErrors']:result.update(status='FAILED',error='New native map/Data errors were reported; compiler results remain separate')
             oracle.save(request_dir/'api-result.json',result)
             return result
         finally:
@@ -118,13 +128,19 @@ class Worker:
             original_hash=files.sha(source)
             if files.sha(archive)!=original_hash:raise RuntimeError('Document copy does not match original')
             self.ensure(archive);oracle.ACTIVE_DESKTOP=self.state['desktop']
-            native=oracle.native_step(directory,'01-load',self.state['pid'],self.state['currentDocument'],map_path=archive)
+            try:native=oracle.native_step(directory,'01-load',self.state['pid'],self.state['currentDocument'],map_path=archive)
+            except oracle.NativeStepError as error:
+                result={'status':'FAILED','error':str(error),'source':str(source),'openedCopy':str(archive),
+                    'sourceUnchanged':files.sha(source)==original_hash,'nativeLoad':error.native_result,
+                    'loadDiagnostics':operation_diagnostics(directory/'01-load',error.native_result)}
+                self._background_result(result);self._reset_owned_editor();oracle.save(directory/'open-result.json',result);return result
             if not native['mapLoaded']:raise RuntimeError('Native loading not confirmed')
             self.state['currentDocument']=archive.name;oracle.save(self.work/'worker.json',self.state)
             self.state['documentPath']=str(archive);self.last_result=None
             self.scene=None
             result={'status':'HIDDEN_NATIVE_DOCUMENT_OPENED','source':str(source),'openedCopy':str(archive),
-                'sourceUnchanged':files.sha(source)==original_hash,'nativeLoad':native,'desktopObservation':self.monitor.snapshot()}
+                'sourceUnchanged':files.sha(source)==original_hash,'nativeLoad':native,'desktopObservation':self.monitor.snapshot(),
+                'loadDiagnostics':operation_diagnostics(directory/'01-load',native)}
             observed=result['desktopObservation']
             if observed['visibleWindowsOnUserDesktopPeak'] or observed['editorForegroundSamples']:
                 result.update(status='FAILED',error='Hidden desktop invariant failed')
@@ -197,7 +213,20 @@ class Worker:
         try:
             directory=self.work/'diagnostics'/uuid.uuid4().hex;directory.mkdir(parents=True)
             native=self._native(directory,'diagnostics')
-            return {'status':'EDITOR_DIAGNOSTICS_READ','native':native,**parse_native_diagnostics(directory/'01-diagnostics',native)}
+            return {'status':'EDITOR_DIAGNOSTICS_READ','native':native,**parse_native_diagnostics(directory/'01-diagnostics',native),
+                'operationDiagnostics':operation_diagnostics(directory/'01-diagnostics',native)}
+        finally:self.lock.release()
+
+    def validate_document(self,request):
+        from .document_validation import validate_document
+        if not self.lock.acquire(blocking=False):raise RuntimeError('Worker busy')
+        try:return validate_document(self,request)
+        finally:self.lock.release()
+
+    def save_reopen_document(self,request):
+        from .document_validation import validate_document
+        if not self.lock.acquire(blocking=False):raise RuntimeError('Worker busy')
+        try:return validate_document(self,request,roundtrip=True)
         finally:self.lock.release()
 
     def cutscene_open(self,request,_locked=False):
@@ -289,7 +318,9 @@ class Worker:
         if path is None or not path.is_file() or path.suffix.lower()!='.sc2map':raise ValueError('Terrain operations require a .SC2Map; a mod has no terrain')
         original_hash=files.sha(path)
         if supplied:
-            if self.alive():self.open_document({'map':str(path)},_locked=True)
+            if self.alive():
+                opened=self.open_document({'map':str(path)},_locked=True)
+                if opened['status']=='FAILED':raise RuntimeError(opened.get('error','Native opening failed; see load diagnostics'))
             else:self.ensure(path)
         if files.sha(self.state['documentPath'])!=original_hash:raise RuntimeError('Opened private map does not match the source archive')
         return path,original_hash

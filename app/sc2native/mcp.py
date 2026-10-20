@@ -12,6 +12,8 @@ PROPERTIES={'template':{'type':'string'},'map':{'type':'string'},'startup_module
  'query':{'type':'string','maxLength':256},'kinds':{'type':'array','minItems':1,'items':{'type':'string','enum':['unit','doodad','point','camera','other']}},
  'owner':{'type':'integer','minimum':0,'maximum':255},'offset':{'type':'integer','minimum':0,'maximum':500000},'limit':{'type':'integer','minimum':1,'maximum':500,'default':100},
  'bounds':{'type':'object','properties':{k:{'type':'number'} for k in ('left','bottom','right','top')},'required':['left','bottom','right','top'],'additionalProperties':False},
+ 'baseline_template':{'type':'string','description':'Optional healthy startup archive for diagnosing a failing map in a fresh worker'},
+ 'include_diffs':{'type':'boolean','default':False,'description':'Include bounded textual component diffs in the downloadable comparison report'},
  'start_ms':{'type':'number','minimum':0,'maximum':600000},'end_ms':{'type':'number','minimum':0,'maximum':600000},
  'fps':{'type':'integer','minimum':1,'maximum':60},'keep_frames':{'type':'boolean'},'include_audio':{'type':'boolean','default':True}}
 TOOLS=[
@@ -30,6 +32,8 @@ TOOLS=[
  ('sc2_export_video','Export the entire cutscene or start_ms..end_ms (exclusive) to H.264 MP4 with the selected camera. Original native frames and original Editor audio (AAC by default; include_audio=false for silent video), requires FFmpeg/ffprobe.','export_video',[]),
  ('sc2_search_objects','Read saved map Objects XML without starting an Editor. Supply map or use this worker current saved .SC2Map. Search case-insensitive query over saved ID/type/name, kinds, owner and optional map XY bounds; paginate with offset/limit. Returns original XYZ (Z may be a placement offset), unique snapshot object keys and map SHA-256. Excludes unsaved/live/runtime-created objects and inherited dependency placements.','search_objects',[]),
  ('sc2_capture_map_region','EXPERIMENTAL: capture a map XY rectangle from the original hidden full-map overhead export. Required bounds={left,bottom,right,top}; optional map, size (resolution of the FULL map), include_units/include_doodads and output. Crops original pixels without upscaling or input injection. Native render and north/up coordinate calibration remain pending live test; coordinateMappingValidated is false. Returns PNG download and bounded preview.','capture_map_region',['bounds']),
+ ('sc2_validate_document','Load a private map/mod copy and its original Data module in an owned hidden Editor. Return per-operation native before/after log snapshots, new errors/warnings, explicitly observed IDs and unclassified messages. Old messages are preserved as baseline. Unreadable/ambiguous logs remain unknown; this is not exhaustive runtime validation. Optional baseline_template provides a healthy startup archive.','validate_document',[]),
+ ('sc2_save_reopen','Load a private saved map/mod, serialize it using original File/Save As, close it, reopen the saved archive from disk and compare every enumerated MPQ component by locale/name/bytes/SHA-256. Return per-phase new native diagnostics and a downloadable comparison report; include_diffs requests bounded text diffs. Optional output exports only the verified native saved archive, never the supplied source.','save_reopen_document',[]),
 ]
 
 def restore_pipes():
@@ -59,7 +63,7 @@ def main():
                 if method=='initialize':
                     version=params.get('protocolVersion','2025-06-18')
                     if version not in ('2024-11-05','2025-03-26','2025-06-18'):version='2025-06-18'
-                    result={'protocolVersion':version,'serverInfo':{'name':'sc2-native-toolkit','version':'0.7.0-rc.2'},'capabilities':{'tools':{'listChanged':False}},
+                    result={'protocolVersion':version,'serverInfo':{'name':'sc2-native-toolkit','version':'0.8.0-rc.1'},'capabilities':{'tools':{'listChanged':False}},
                         'instructions':'Use an installed SC2 Editor. Load a cutscene using scene and a map/mod template, select a unique camera and time_ms, then capture its renderer. Time is sampled on the native 33 ms frame grid. Every editor window remains on a private desktop.'};initialized=True
                 elif method=='ping':result={}
                 elif not initialized:raise ValueError('Initialize the MCP session first')

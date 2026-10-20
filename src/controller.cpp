@@ -66,8 +66,8 @@ int wmain(int argc,wchar_t** argv){
     }
     if(!wantedPid||expected.empty()||out.empty())return Error("Explicit PID, expected document, and fresh output directory required");
     if(fs::exists(out))return Error("Output directory must be new");
-    HANDLE process=OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION,FALSE,wantedPid);if(!process)return Error("Cannot query Editor PID");
-    wchar_t exe[32768]{};DWORD size=32768;bool queried=QueryFullProcessImageNameW(process,0,exe,&size)!=0;CloseHandle(process);
+    HANDLE process=OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION|SYNCHRONIZE,FALSE,wantedPid);if(!process)return Error("Cannot query Editor PID");
+    wchar_t exe[32768]{};DWORD size=32768;bool queried=QueryFullProcessImageNameW(process,0,exe,&size)!=0;
     if(!queried||_wcsicmp(exe,L"C:\\Program Files (x86)\\StarCraft II\\Support64\\SC2Editor_x64.exe"))return Error("PID is not the expected installed original Editor");
     EnumWindows(Root,0);HWND target=nullptr;
     if(op==L"inventory"){
@@ -91,7 +91,7 @@ int wmain(int argc,wchar_t** argv){
     }
     if(!target)return Error("Expected Triggers test-document workspace not found");
     DWORD tid=GetWindowThreadProcessId(target,nullptr);if(!tid)return Error("No owner thread");
-    if(op!=L"inspect"&&op!=L"generate"&&op!=L"compile"&&op!=L"read"&&op!=L"freshness-probe"&&op!=L"load"&&op!=L"cancel-load"&&op!=L"diagnostics"&&op!=L"cutscene"&&op!=L"scene-inspect"&&op!=L"scene-load"&&op!=L"scene-seek"&&op!=L"scene-advance"&&op!=L"scene-audio"&&op!=L"terrain"&&op!=L"terrain-export")return Error("Unsupported operation");
+    if(op!=L"inspect"&&op!=L"generate"&&op!=L"compile"&&op!=L"read"&&op!=L"freshness-probe"&&op!=L"load"&&op!=L"cancel-load"&&op!=L"diagnostics"&&op!=L"cutscene"&&op!=L"scene-inspect"&&op!=L"scene-load"&&op!=L"scene-seek"&&op!=L"scene-advance"&&op!=L"scene-audio"&&op!=L"terrain"&&op!=L"terrain-export"&&op!=L"save-document"&&op!=L"reopen-document"&&op!=L"load-data")return Error("Unsupported operation");
     if(op==L"load"&&(map.empty()||!map.is_absolute()||!fs::is_regular_file(map)))return Error("Existing absolute --map archive required");
     fs::create_directories(out);
     std::ofstream inventory(out/"windows-before.json",std::ios::binary);inventory<<"[";
@@ -100,8 +100,8 @@ int wmain(int argc,wchar_t** argv){
     std::wstring mappingName=L"Local\\SC2NativeBridge-"+std::to_wstring(wantedPid)+L"-"+guid;
     HANDLE mapping=CreateFileMappingW(INVALID_HANDLE_VALUE,nullptr,PAGE_READWRITE,0,sizeof(Block),mappingName.c_str());if(!mapping||GetLastError()==ERROR_ALREADY_EXISTS)return Error("Cannot create unique IPC mapping");
     auto b=static_cast<Block*>(MapViewOfFile(mapping,FILE_MAP_ALL_ACCESS,0,0,sizeof(Block)));if(!b)return Error("Cannot map IPC");
-    ZeroMemory(b,sizeof(Block));b->compilerErrors=-1;b->magic=kMagic;b->version=8;b->pid=wantedPid;b->tid=tid;b->target=reinterpret_cast<uint64_t>(target);
-    b->operation=op==L"generate"?Generate:op==L"compile"?Compile:op==L"read"?ReadSource:op==L"freshness-probe"?FreshnessProbe:op==L"load"?LoadDocument:op==L"cancel-load"?CancelLoad:op==L"diagnostics"?Diagnostics:op==L"cutscene"?OpenCutscene:op==L"scene-inspect"?SceneInspect:op==L"scene-load"?SceneLoad:op==L"scene-seek"?SceneSeek:op==L"scene-advance"?SceneAdvance:op==L"scene-audio"?SceneAudio:op==L"terrain"?TerrainView:op==L"terrain-export"?TerrainExport:Inspect;
+    ZeroMemory(b,sizeof(Block));b->compilerErrors=-1;b->magic=kMagic;b->version=9;b->pid=wantedPid;b->tid=tid;b->target=reinterpret_cast<uint64_t>(target);
+    b->operation=op==L"generate"?Generate:op==L"compile"?Compile:op==L"read"?ReadSource:op==L"freshness-probe"?FreshnessProbe:op==L"load"?LoadDocument:op==L"cancel-load"?CancelLoad:op==L"diagnostics"?Diagnostics:op==L"cutscene"?OpenCutscene:op==L"scene-inspect"?SceneInspect:op==L"scene-load"?SceneLoad:op==L"scene-seek"?SceneSeek:op==L"scene-advance"?SceneAdvance:op==L"scene-audio"?SceneAudio:op==L"terrain"?TerrainView:op==L"terrain-export"?TerrainExport:op==L"save-document"?SaveDocument:op==L"reopen-document"?ReopenDocument:op==L"load-data"?LoadDataModule:Inspect;
     wcsncpy_s(b->expectedDocument,expected.c_str(),_TRUNCATE);wcsncpy_s(b->expectedMarker,marker.c_str(),_TRUNCATE);
     wcsncpy_s(b->mapPath,map.c_str(),_TRUNCATE);
     wcsncpy_s(b->contextLabel,context.c_str(),_TRUNCATE);
@@ -130,7 +130,7 @@ int wmain(int argc,wchar_t** argv){
     // until it completes instead of permitting a delayed focus-stealing action.
     if(b->started&&!b->completed){
         std::cerr<<"Native handler pending; keeping worker hooks installed until completion.\n";
-        while(!b->completed&&IsWindow(target)){
+        while(!b->completed&&WaitForSingleObject(process,0)==WAIT_TIMEOUT){
             if(b->loadStage!=previousStage){previousStage=b->loadStage;std::cerr<<"loadStage="<<previousStage<<"\n";std::ofstream progress(out/"progress.json");progress<<"{\"loadStage\":"<<previousStage<<",\"error\":"<<b->error<<"}";}
             Pump();MsgWaitForMultipleObjects(0,nullptr,FALSE,25,QS_ALLINPUT);
         }
@@ -150,6 +150,12 @@ int wmain(int argc,wchar_t** argv){
     ending=json.rfind("\n}");json.insert(ending,",\n\"privateDesktopActivationEvents\":"+std::to_string(privateForegroundEvents.load())+",\n\"userDesktopActivationApiUsed\":false");
     ending=json.rfind("\n}");auto& a=b->audio;json.insert(ending,",\n\"audio\":{\"error\":"+std::to_string(a.error)+",\"ready\":"+std::to_string(a.ready)+",\"version\":"+std::to_string(a.version)+",\"rate\":"+std::to_string(a.rate)+",\"channels\":"+std::to_string(a.channels)+",\"frames\":"+std::to_string(a.frames)+",\"nonzero\":"+std::to_string(a.nonzero)+",\"peak\":"+std::to_string(a.peak)+",\"sumSquares\":"+std::to_string(a.sumSquares)+",\"firstQpc\":"+std::to_string(a.firstQpc)+",\"lastQpc\":"+std::to_string(a.lastQpc)+",\"playQpc\":"+std::to_string(a.playQpc)+",\"frequency\":"+std::to_string(a.frequency)+",\"sceneStartQpc\":"+std::to_string(a.sceneStartQpc)+",\"bufferCalls\":"+std::to_string(a.bufferCalls)+",\"submitCalls\":"+std::to_string(a.submitCalls)+",\"renderedFrames\":"+std::to_string(a.renderedFrames)+",\"idleFrames\":"+std::to_string(a.idleFrames)+"}");
     ending=json.rfind("\n}");auto& t=b->terrain;json.insert(ending,",\n\"terrainExport\":{\"size\":"+std::to_string(t.size)+",\"includeUnits\":"+std::to_string(t.includeUnits)+",\"includeDoodads\":"+std::to_string(t.includeDoodads)+",\"exported\":"+std::to_string(t.exported)+",\"fullMap\":"+std::to_string(t.fullMap)+",\"topDown\":"+std::to_string(t.topDown)+",\"optionsConfirmed\":"+std::to_string(t.optionsConfirmed)+"}");
+    auto& io=b->documentIo;ending=json.rfind("\n}");json.insert(ending,",\n\"documentIo\":{\"saveCommandId\":"+std::to_string(io.saveCommand)+",\"closeCommandId\":"+std::to_string(io.closeCommand)+",\"saved\":"+std::to_string(io.saved)+",\"closed\":"+std::to_string(io.closed)+",\"reopened\":"+std::to_string(io.reopened)+",\"dataLoaded\":"+std::to_string(io.dataLoaded)+",\"savedBytes\":"+std::to_string(io.savedBytes)+"}");
+    auto& d=b->diagnosticCapture;
+    for(auto part:{std::make_pair(L"diagnostics-before.json",std::make_pair(d.before,d.beforeBytes)),std::make_pair(L"diagnostics-after.json",std::make_pair(d.after,d.afterBytes)),std::make_pair(L"diagnostics-events.json",std::make_pair(d.events,d.eventBytes))}){
+        if(part.second.second&&part.second.second<kDiagnosticCapacity){std::ofstream stream(out/part.first,std::ios::binary);stream.write(part.second.first,part.second.second);}
+    }
+    ending=json.rfind("\n}");json.insert(ending,",\n\"diagnosticCapture\":{\"version\":1,\"eventCount\":"+std::to_string(d.eventCount)+",\"eventsComplete\":"+std::string(d.eventsComplete?"true":"false")+"}");
     std::ofstream result(out/"result.json",std::ios::binary);result<<json;result.close();std::cout<<json;
-    UnmapViewOfFile(b);CloseHandle(mapping);FreeLibrary(dll);return !success?2:op==L"compile"&&!compilePassed?1:0;
+    UnmapViewOfFile(b);CloseHandle(mapping);CloseHandle(process);FreeLibrary(dll);return !success?2:op==L"compile"&&!compilePassed?1:0;
 }

@@ -1,6 +1,6 @@
 """Explicit capabilities; future timeline methods stay unadvertised until implemented."""
 MODULES=[
- {'id':'editor','version':2,'methods':['start','open','status','diagnostics','stop'],'startupModules':['Terrain','Triggers','Data','Import','AI','UI','Text','Overview']},
+ {'id':'editor','version':3,'methods':['start','open','status','diagnostics','validate_document','save_reopen','stop'],'operationDiagnostics':{'source':'original Messages/Console output; operation snapshots and native append observations','unknownIsZero':False},'saveReopen':{'nativeSerialization':True,'nativeCloseBeforeReopen':True,'componentHashesByLocale':True,'textDiffsOptional':True,'sourcePreserved':True},'startupModules':['Terrain','Triggers','Data','Import','AI','UI','Text','Overview']},
  {'id':'triggers','version':1,'methods':['convert_xml','compile_all','view_script']},
  {'id':'galaxy','version':1,'methods':['export','download'],'format':'exact native UTF-8 bytes'},
  {'id':'objects','version':1,'methods':['search'],'editorRequired':False,'readOnly':True,'source':'saved map Objects XML','coordinates':'saved XYZ; Z may be terrain-relative placement offset','filters':['query','kinds','owner','bounds','offset','limit'],'maxPageSize':500},
@@ -10,4 +10,4 @@ MODULES=[
   'video':{'format':'mp4','codec':'h264','audioIncluded':True,'audioCodec':'aac','audioSource':'owned Editor output buffers','audioOptional':True,'defaultFps':30,'maxFps':60,'requires':['ffmpeg','ffprobe']}},
 ]
 
-def capabilities():return {'version':'0.7.0-rc.2','modules':MODULES,'background':True,'mouseKeyboardAutomation':False}
+def capabilities():return {'version':'0.8.0-rc.1','modules':MODULES,'background':True,'mouseKeyboardAutomation':False}

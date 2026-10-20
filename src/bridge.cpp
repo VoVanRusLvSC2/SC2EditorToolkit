@@ -10,6 +10,7 @@
 #include <shlobj.h>
 #include <sstream>
 #include <cmath>
+#include <cstring>
 #pragma comment(lib,"user32.lib")
 #pragma comment(lib,"comctl32.lib")
 static HMODULE module;
@@ -89,8 +90,11 @@ static void CancelLoadDialog(HWND w){
         SendMessageW(w,WM_COMMAND,MAKEWPARAM(GetDlgCtrlID(c),BN_CLICKED),reinterpret_cast<LPARAM>(c));return;
     }
 }
+#include "diagnostic_capture.inc"
+static bool RecordFailureDialog(Block* b);
 static void CALLBACK LoadTimer(HWND,UINT,UINT_PTR,DWORD){
     auto state=loading;if(!state)return;auto b=state->b;
+    if(RecordFailureDialog(b))return;
     if(GetTickCount64()>state->deadline){
         if(!b->error)Fail(b,35,L"Native document load timed out; cancelling only dialogs opened for this job");
         b->loadStage=90;
@@ -168,6 +172,7 @@ static void Load(Block* b,HWND target){
         if(GetTickCount64()>state.deadline)LoadTimer(nullptr,0,0,0);
     }
     KillTimer(nullptr,timer);loading=nullptr;
+    if(b->error&&state.chooser&&IsWindow(state.chooser)&&IsWindowEnabled(state.chooser))CancelLoadDialog(state.chooser);
     auto title=Text(target);wcsncpy_s(b->loadedTitle,title.c_str(),_TRUNCATE);
     if(!b->error&&b->loadStage==4&&IsWindowEnabled(target)&&title.find(path.filename().wstring())!=title.npos){
         b->mapLoaded=1;b->loadStage=5;Log(b,L"load: new document is active and enabled\n");
@@ -285,12 +290,13 @@ static void DiagnosticsSnapshot(Block* b){
 #include "cutscene_bridge.inc"
 #include "map_export_bridge.inc"
 #include "terrain_bridge.inc"
+#include "document_io.inc"
 static void Process(Block* b) {
     b->dllPid=GetCurrentProcessId();b->dllTid=GetCurrentThreadId();b->foregroundBefore=reinterpret_cast<uint64_t>(GetForegroundWindow());
     HWND target=reinterpret_cast<HWND>(b->target);DWORD pid=0;DWORD tid=GetWindowThreadProcessId(target,&pid);
     if(pid!=b->pid||tid!=b->tid||pid!=GetCurrentProcessId()||tid!=GetCurrentThreadId()){Fail(b,10,L"PID/thread/HWND identity mismatch");return;}
     auto title=Text(target);
-    bool sceneOperation=b->operation==TerrainExport||b->operation==TerrainView||b->operation==SceneInspect||b->operation==SceneLoad||(b->operation==SceneSeek||b->operation==SceneAdvance||b->operation==SceneAudio)||b->operation==OpenCutscene;
+    bool sceneOperation=b->operation==SaveDocument||b->operation==TerrainExport||b->operation==TerrainView||b->operation==SceneInspect||b->operation==SceneLoad||(b->operation==SceneSeek||b->operation==SceneAdvance||b->operation==SceneAudio)||b->operation==OpenCutscene;
     if(b->expectedDocument[0]==0||title.find(b->expectedDocument)==title.npos||(title.find(L'*')!=title.npos&&!(sceneOperation&&PrivateDesktop()))){Fail(b,11,L"Expected saved test document is not active");return;}
     for(HWND w:Roots()){
         Log(b,L"root hwnd=%p enabled=%d class=%s title=%s\n",w,IsWindowEnabled(w),Class(w).c_str(),Text(w).c_str());
@@ -309,6 +315,9 @@ static void Process(Block* b) {
         }
     }
     if(b->operation==Diagnostics){DiagnosticsSnapshot(b);return;}
+    if(b->operation==SaveDocument){if(!IsWindowEnabled(target)){Fail(b,12,L"A modal dialog blocks native save");return;}SaveNativeDocument(b,target);return;}
+    if(b->operation==ReopenDocument){if(!IsWindowEnabled(target)){Fail(b,12,L"A modal dialog blocks native reopen");return;}ReopenNativeDocument(b,target);return;}
+    if(b->operation==LoadDataModule){if(!IsWindowEnabled(target)){Fail(b,12,L"A modal dialog blocks native Data loading");return;}LoadNativeDataModule(b,target);return;}
     if(b->operation==TerrainView||b->operation==TerrainExport){if(!IsWindowEnabled(target)){Fail(b,12,L"A modal dialog blocks the document");return;}TerrainOperation(b,target);return;}
     if(b->operation==SceneInspect||b->operation==SceneLoad||(b->operation==SceneSeek||b->operation==SceneAdvance||b->operation==SceneAudio)){SceneOperation(b);return;}
     if(b->operation==OpenCutscene){
@@ -384,9 +393,13 @@ static void Process(Block* b) {
     b->foregroundAfter=reinterpret_cast<uint64_t>(GetForegroundWindow());
 }
 static void GuardedProcess(Block* b) {
+    bool capture=b->operation==LoadDocument||b->operation==SaveDocument||b->operation==ReopenDocument||b->operation==LoadDataModule||b->operation==Diagnostics||b->operation==Compile||b->operation==Generate;
+    if(capture)BeginDiagnosticCapture(b);
     __try{Process(b);}__except(EXCEPTION_EXECUTE_HANDLER){b->exceptionCode=GetExceptionCode();Fail(b,99,L"SEH exception during native bridge request; no automatic retry");}
+    if(capture)EndDiagnosticCapture(b);
 }
 extern "C" __declspec(dllexport) LRESULT CALLBACK BridgeHook(int n,WPARAM wp,LPARAM lp) {
+    if(n>=0)ObserveDiagnosticMutation(reinterpret_cast<CWPSTRUCT*>(lp));
     if(n>=0&&!processing){
         auto message=reinterpret_cast<CWPSTRUCT*>(lp);
         static UINT request=RegisterWindowMessageW(kMessageName);
@@ -396,7 +409,7 @@ extern "C" __declspec(dllexport) LRESULT CALLBACK BridgeHook(int n,WPARAM wp,LPA
                 HANDLE mapping=OpenFileMappingW(FILE_MAP_ALL_ACCESS,FALSE,name);
                 if(mapping){
                     auto b=static_cast<Block*>(MapViewOfFile(mapping,FILE_MAP_ALL_ACCESS,0,0,sizeof(Block)));
-                    if(b&&b->magic==kMagic&&b->version==8&&b->target==reinterpret_cast<uint64_t>(message->hwnd)&&!b->started){
+                    if(b&&b->magic==kMagic&&b->version==9&&b->target==reinterpret_cast<uint64_t>(message->hwnd)&&!b->started){
                         processing=true;current=b;InterlockedExchange(&b->started,1);
                         HHOOK guard=SetWindowsHookExW(WH_CBT,FocusGuard,module,GetCurrentThreadId());
                         if(!guard)Fail(b,16,L"Cannot install thread-local focus/activation guard");else GuardedProcess(b);

@@ -5,8 +5,12 @@ from pathlib import Path
 from types import SimpleNamespace
 import file_prepare as files
 
-RES=Path(getattr(sys,'_MEIPASS',Path(__file__).resolve().parent.parent/'bin-release'))
+RES=Path(getattr(sys,'_MEIPASS',os.environ.get('SC2_NATIVE_BIN',str(Path(__file__).resolve().parent.parent/'bin-release'))))
 ACTIVE_DESKTOP=None
+
+class NativeStepError(RuntimeError):
+    def __init__(self,message,result=None,directory=None):
+        super().__init__(message);self.native_result=result;self.evidence_directory=directory
 
 def save(path,value):
     Path(path).write_text(json.dumps(value,ensure_ascii=False,indent=2)+'\n',encoding='utf-8')
@@ -70,7 +74,7 @@ def native_step(job,stage,pid,current,marker='',context='',map_path=None,scope='
     compile_diagnostic=stage.endswith('-compile') and code==1 and result.get('compilerErrors',-1)>0
     if (code and not compile_diagnostic) or result['status']!='NATIVE_DLL_REQUEST_COMPLETED' or result['error']:
         reason=result.get('failure') or 'Native handler did not finish; no successful output is confirmed'
-        raise RuntimeError(f'Native {stage} not confirmed: {reason}; exit={code}')
+        raise NativeStepError(f'Native {stage} not confirmed: {reason}; exit={code}',result,out)
     if result['editorForegroundEvents'] or not result['hooksRemoved']:raise RuntimeError('Background invariant not satisfied')
     return result
 

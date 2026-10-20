@@ -9,6 +9,95 @@ User maps, scenes, PNG/MP4 captures, raw PCM, tokens and complete runtime logs a
 kept local and are excluded from Git and release assets. Documentation and future
 release notes are maintained in English.
 
+## v0.8.0-rc.1: operation diagnostics and native save/reopen
+
+This implementation adds two operations, exposed over HTTP and MCP:
+`/editor/validate` / `sc2_validate_document` and `/editor/save-reopen` /
+`sc2_save_reopen`. No Terrain camera or general queue features were added.
+Native IPC is version 9; workers must use the matching newly built adapter.
+
+The Nydus v54 mod was checked with its actual locally installed dependencies.
+Both the source API and packaged API completed original archive loading, original
+Data opening, native File/Save As, File/Close, disk reopening and Data opening
+again. Save command 163 and Close command 160 were observed. All six phases had
+complete readable operation snapshots and zero new recognized errors. Every
+enumerated component was read by locale/name before save, after save and after
+reopen: **72 → 72 → 72**. Native saving modified exactly three members:
+`(attributes)`, `ComponentList.SC2Components` and `DocumentHeader`. Saved-to-reopened
+component hashes and the complete archive hash matched. Triggers and GameData
+members were unchanged by this native serialization. The supplied mod stayed
+byte-identical. The verified saved archive and full optional text-diff report
+were downloaded with matching SHA-256.
+
+Original generation/Compile All after the Nydus reopen passed with zero compiler
+errors. Galaxy export and HTTP download matched, **342,851 bytes**, SHA-256
+`ad36611c87c754f9944b978f921e67ee7767f75a277f0a293d98830f2aaff078`.
+
+Negative XML testing injects an intentionally unclosed UnitData catalog into a
+new private mod. Original loading reports `XML: no element found` for
+`GameData/UnitData.xml`. The new error belongs to the load phase; the subsequent
+Data phase and diagnostic read preserve it as an old baseline and report zero
+new errors. The source mod is never modified. A separate exploratory probe with
+an unsupported XML encoding produced two real native parse errors (UnitData and
+ModelData); these also were not recounted by the following Data operation.
+
+Exploratory invalid parent, unknown field/type, invalid numeric field and missing
+model path cases did **not** emit native errors during opening/Data loading in
+this scenario. They are not claimed as detected failures. Classification of
+model/dependency/inheritance/actor-conflict text is covered by unit tests; this
+does not establish live coverage for every native failure format. Related IDs
+are returned only when explicitly present in Editor text; file-wide XML parse
+errors in these tests did not report an object ID.
+
+A separate `.SC2Map` terrain fixture passed native save/close/reopen and native
+compilation/export using the final source runtime. Its **37 → 36 → 36** members
+showed four modified metadata members and removal of the fixture's empty
+`Base.SC2Data/GameData.xml`. Saved-to-reopened contents and archive hashes were
+identical. Objects and terrain components were unchanged. This test also caught
+and corrected an archive-reader defect: MPQ names containing backslashes must
+be read using their exact stored spelling; only comparison keys are normalized.
+The regression test now includes a nested component with a backslash name.
+
+A private Nydus derivative with one deliberately nonexistent dependency was
+also tested. The original Editor's `Dependency data could not be loaded` /
+`Dependency file could not be found` dialog was captured as a new
+`missingDependency` error, including the exact reported filename. The adapter
+declined `Continue anyway?` with No through the owned dialog's posted command;
+it did not continue with incomplete dependency data. Native loading failed as
+expected, diagnostics completed and only that owned worker was reset. A bounded
+failure checkpoint is copied into IPC before acknowledging a failure dialog,
+so its text survives even if the native process exits before final collection.
+The final packaged API passed this failure case, then started a new owned worker
+and validated healthy Nydus again. Both final packaged negative cases returned
+complete native diagnostic inspection, including the actual new error; neither
+was treated as a successful load with zero errors.
+
+Across every reported observation in the final Nydus package run, visible worker
+windows, Editor foreground samples and input-desktop changes were zero. Input
+injection and desktop-switch API flags remained false. The test closed both of
+its owned workers; unrelated Editor/service processes were left untouched. The
+separate map run recorded 1,930 observations with the same zero counters. Original
+source archives and the installed executable remained unchanged. User evidence
+and all raw captures remain local rather than being included in source/releases.
+
+The new diagnostic contract is bounded to output observed during each native
+operation and its 300 ms posted-message pump. Log reset/truncation, unsupported
+mutations, missing controls and unclassified text remain unknown. These checks
+do not prove gameplay behavior, all engine-effective Data values, late asset
+loads or messages arriving outside the observation window.
+
+Offline validation: **40 Python tests**, both native C++ regression suites,
+packaged HTTP authorization/argument/source-output protection and packaged MCP
+stdio/dispatch checks passed. MCP exposes **17 tools**. Tests cover old/new
+separation, identical repeated appends, append-then-clear, unknown/truncated logs,
+explicit-ID classification, actual MPQ member/hash/text differences and retaining
+the native save diff after a failed reopen without publishing a saved archive.
+
+Live evidence remains local. Opt-in regression entry point:
+`tests/live_document_validation.py`; use `--missing-dependency` for a template
+with a supported DocumentInfo/DocumentHeader dependency and `--roundtrip-only`
+for save/reopen/compile/export checks without injecting catalog faults.
+
 ## Subsequent live verification of the packaged v0.7.0-rc.2 binaries
 
 The user later closed StarCraft II and authorized live verification. The scope

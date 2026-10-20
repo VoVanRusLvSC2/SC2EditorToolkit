@@ -3,16 +3,17 @@
 Assessment of the existing toolkit against the five-point integration plan,
 2026-10-20. ModKit remains responsible for fast previews, terrain operations,
 measurements and authoring. This toolkit supplies evidence from an owned hidden
-original Editor. No additional MCP methods were implemented in this validation
-session; the tool count remains 15.
+original Editor. The original assessment used 15 MCP tools. The subsequent
+implementation of items 2 and 5 adds exactly two tools (17 total):
+`sc2_validate_document` and `sc2_save_reopen`.
 
 | Plan item | Current status | Remaining acceptance work |
 |---|---|---|
 | 1. Original GUI triggers → Galaxy → Compile All → diagnostics/script | Implemented and live-tested on Nydus v54 with installed dependencies. Native generation and compilation passed with zero compiler errors. Galaxy file and HTTP download matched exactly: 342,851 bytes. | A broader map/dependency matrix, invalid-source cases and explicit Trigger Reviser integration tests. A successful native compile is not a gameplay test. |
-| 2. Map/Data load errors with message type, related ID and new/old separation | Partial. Messages/Console and compiler diagnostics are read separately; unreadable or truncated logs remain unknown. | Per-operation baselines/deltas, native load failure capture, classification of missing models/dependencies/inheritance/actor conflicts and related IDs when present. Do not mistake a current empty log for a tested failure-detection matrix. |
+| 2. Map/Data load errors with message type, related ID and new/old separation | Implemented as operation-scoped native observations. Private archive load and original Data opening retain before/after snapshots, output mutations, new errors/warnings and old baselines. Text classification and explicit IDs are returned when available. | Broader localized/native failure-format coverage. This collects what the Editor actually reports; opening Data is not an exhaustive engine validator. Silent invalid references are not certified. Unreadable, truncated or ambiguous output remains unknown. |
 | 3. Reliable original map image with terrain, water, units and doodads | Partial, with successful visual evidence. Original full-map export of the corrected fixture shows textured ground, both hills, four corner buildings, ten Marines and four doodads at 1024×768. | Water acceptance, category-exclusion correction and broader map/dependency coverage. The first generated test fixture omitted native Objects registration/preloads; correcting that private fixture made placements visible without changing renderer/API code. |
 | 4. Real local-area capture with native camera controls | Not implemented. Current region capture is an unscaled crop of the original full-map image; cutscene cameras are separate. | Native Terrain target coordinates, distance, angle and resolution; actual camera state readback and a matching render. Keep full-image cropping as a separate operation. |
-| 5. Native Editor save → reopen → diagnostics/component differences | Not implemented as an operation. Current loading and capture use private copies. | Save the private copy through the original Editor, reopen it, collect operation-specific diagnostics and optionally return component hashes/diffs. Copying/repacking an archive is not native Editor saving. |
+| 5. Native Editor save → reopen → diagnostics/component differences | Implemented. Original File/Save As serializes a private copy, File/Close removes that document, then original File/Open reads the saved archive. Per-phase diagnostics and exact enumerated MPQ member comparisons include locales, metadata and optional bounded text diffs. | Broader map/dependency and Editor-version coverage. Only confirmed commands, complete component reads, stable hashes and known-clear new diagnostics permit publishing a verified saved archive. Failure after saving still retains the save comparison report. |
 
 ## Existing supporting behavior
 
@@ -71,7 +72,7 @@ packaged responses still retain the experimental coordinate-validation flag.
 Across the full map/crop run, 10,429 observations recorded zero visible windows,
 foreground samples and desktop changes. The test closed its owned worker.
 
-Prioritize item 1's broader verification plus items 2 and 5 for generator
-reliability. Finish item 3's visual acceptance next; implement item 4 as an actual
+Prioritize item 1's broader verification and expand the failure matrix for items
+2 and 5. Finish item 3's visual acceptance next; implement item 4 as an actual
 camera operation rather than relabeling the current crop. A gameplay/ability
 test harness is a separate later task.

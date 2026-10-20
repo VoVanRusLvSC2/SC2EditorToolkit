@@ -3,11 +3,12 @@
 A modular backend for the original StarCraft II Editor. Original code author and
 project owner: **VoVanRusLvSC2**.
 
-**v0.7.0-rc.2 is a prerelease.** Whole-map and coordinate-region export are experimental:
+**v0.8.0-rc.1 is a prerelease.** Whole-map and coordinate-region export are experimental:
 the original full-map export has now been visually verified on a private fixture
 with hills, placed units and doodads. Water and broader map/dependency coverage
-remain untested. Camera-controlled Terrain close-ups and native save/reopen
-comparison are not implemented. See
+remain untested. Camera-controlled Terrain close-ups are not implemented.
+Operation-scoped load/Data diagnostics and native save/reopen component comparison
+are available. See
 [validation history](docs/VALIDATION.md). The previous stable release is v0.6.0.
 
 The installed Editor runs on an owned, private Windows desktop. Its technical
@@ -27,13 +28,13 @@ Public documentation, setup instructions and release notes are maintained in **E
 
 For integration with ModKit, see the [five-point native bridge assessment](docs/MODKIT_BRIDGE_STATUS.md).
 It distinguishes existing original-Editor checks from fast ModKit previews,
-unimplemented camera/save-reopen operations and remaining diagnostics work.
+unimplemented Terrain camera controls and remaining validation coverage.
 
 ## Modules
 
 | Module | Implemented capabilities |
 |---|---|
-| Editor | Hidden startup, private copies of `.SC2Map`/`.SC2Mod`, diagnostics |
+| Editor | Hidden startup, private map/mod copies, new load/Data diagnostics, native save → close → disk reopen and component comparison |
 | Triggers | Original `Triggers XML → Galaxy` generation and native compilation |
 | Galaxy | Exact `.galaxy` bytes, SHA-256, artifact download, overwrite protection |
 | Objects | Search saved placements by ID/type/name, kind, owner and XY rectangle; no Editor needed |
@@ -112,6 +113,8 @@ handler while it is still executing inside the Editor.
 | POST | `/galaxy/export` | Export the last verified generated script |
 | GET | `/artifacts/<id>` | Download an artifact's exact bytes |
 | POST | `/editor/diagnostics` | Read Messages/Console controls |
+| POST | `/editor/validate` | Load a private map/mod and original Data module; return new native messages by phase |
+| POST | `/editor/save-reopen` | Native Save As → Close → disk reopen, diagnostics and component hashes/diffs |
 | POST | `/terrain/capture` | Capture the current original Terrain viewport |
 | POST | `/terrain/export` | Export the complete map overhead with native units/doodads |
 | POST | `/objects/search` | Search saved placements and return original XYZ without starting Editor |
@@ -143,6 +146,54 @@ under `diagnostics.compilerErrors`; Editor messages are under `diagnostics.edito
 An unreadable log has `clear:null`, not a fabricated zero-error result. Existing
 messages are retained. `/galaxy/export` returns exact native bytes and a SHA-256.
 Existing files require `overwrite:true`.
+
+## Native map/Data checks and save/reopen
+
+```powershell
+$check=Call-SC2 '/editor/validate' @{map='D:\MyMod.SC2Mod'}
+$roundtrip=Call-SC2 '/editor/save-reopen' @{
+  map='D:\MyMod.SC2Mod'; include_diffs=$true; output='D:\NativeSaved.SC2Mod'
+}
+```
+
+MCP equivalents are `sc2_validate_document` and `sc2_save_reopen`. Both accept a
+saved `.SC2Map` or `.SC2Mod`, preserve its original bytes and operate on a unique
+private copy. If no map is supplied, the current worker's saved archive is used.
+An optional `baseline_template` supplies a healthy startup document when testing
+a failing archive. No user Editor is attached or controlled.
+
+Each native phase retains complete bounded before/after Messages/Console snapshots
+and observed output mutations. `phases[].diagnostics` separates `baselineMessages`
+from `newErrors`, `newWarnings` and `unclassifiedMessages`. A repeated identical
+append still counts as new. Types and related IDs are interpretations of explicit
+Editor text; absent IDs remain empty. Unreadable, truncated, reset or ambiguous
+logs yield `newErrorsClear:null` / `newErrorCount:null`, never a certified zero.
+The GUI is pumped for 300 ms after each synchronous command for posted log updates;
+messages arriving outside that window are not certified as part of that operation.
+Startup output is marked `freshOwnedSession` when a new owned worker was created.
+
+Opening Data exercises the original module and collects its output. This is not
+an exhaustive catalog, asset or gameplay validator: the Editor can silently accept
+some invalid parent/field/model references during opening. Compiler results remain
+separate from map/Data diagnostics.
+
+Save/reopen invokes the original **File → Save As**, confirms a clean saved
+document and nonempty archive, then **File → Close** and original **File → Open**.
+It verifies that the saved document's windows disappeared before reopening;
+switching to an already open document does not count as a disk reopen. The same
+owned Editor is reused. Every MPQ member enumerated by mpqcli is read by its locale
+and name and hashed before saving, after saving and after reopening. Archive
+metadata changes are reported too; saved-to-reopened equality is checked separately
+from expected native serialization changes. Unknown/unreadable members fail the check.
+
+`componentDiffArtifact` downloads the full comparison JSON, including optional UTF-8
+diffs (`include_diffs:true`, bounded to 200 lines/64 KiB per member and 1 MiB total).
+Binary/large components retain exact byte sizes and hashes. If reopening fails
+after saving, the before-to-saved comparison is still available. `savedArchive`
+and optional `output` are published only when the whole check is verified and
+native diagnostics are known clear. Existing output requires `overwrite:true`;
+source and baseline archives cannot be export targets. All phases include the
+archive revision hash being checked. Raw evidence remains local to the worker.
 
 ## Complete overhead map image
 
@@ -366,7 +417,9 @@ Tools: `sc2_modules`, `sc2_editor_start`, `sc2_open_document`, `sc2_convert_xml`
 `sc2_compile_all`, `sc2_export_galaxy`, `sc2_diagnostics`, `sc2_cutscene_open`,
 `sc2_cutscene_seek`, `sc2_capture_frame`, `sc2_capture_terrain`, `sc2_export_map_image`, `sc2_export_video`.
 `sc2_search_objects` and `sc2_capture_map_region` provide saved placement search
-and experimental coordinate-region PNGs (15 tools in total).
+and experimental coordinate-region PNGs. `sc2_validate_document` and
+`sc2_save_reopen` provide native load/Data checks and serialization comparison
+(17 tools in total).
 Images are returned as MCP image content and PNG artifacts; complete map exports
 embed the bounded preview and provide the full PNG as a downloadable artifact. Large Galaxy output
 uses the export tool rather than being embedded in MCP text. EOF shuts down the
@@ -397,6 +450,9 @@ Live tests are opt-in, use private copies and close owned workers. Examples:
 ```powershell
 .venv\Scripts\python.exe tests\live_smoke.py --package `
   --template 'D:\MyMod.SC2Mod' --scope library:810D62ED --work 'D:\FreshCoreTest'
+.venv\Scripts\python.exe tests\live_document_validation.py --package `
+  --template 'D:\MyMod.SC2Mod' --scope library:810D62ED --missing-dependency `
+  --work 'D:\FreshDocumentCheck'
 .venv\Scripts\python.exe tests\live_terrain.py --package --autostart `
   --map 'D:\MyMap.SC2Map' --work 'D:\FreshTerrainTest'
 .venv\Scripts\python.exe tests\make_terrain_fixture.py `
