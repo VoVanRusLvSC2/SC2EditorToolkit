@@ -23,3 +23,19 @@ def seek_arguments(request):
     # The original Next Frame command advances 33 ms. Report the actual time
     # read from the Editor; never pretend an arbitrary subframe was evaluated.
     return camera,round(value)
+
+def scene_duration(path):
+    """Authored native milliseconds; explicit end markers take precedence."""
+    root=ET.parse(path).getroot();ends=[];extent=0
+    def visit(node,offset=0,enabled=True):
+        nonlocal extent
+        enabled=enabled and node.get('enabled','1')!='0'
+        if not enabled:return
+        start=float(node.get('start','0'));duration=float(node.get('duration','0'))
+        if not math.isfinite(start) or not math.isfinite(duration):raise ValueError('Non-finite scene timing')
+        current=offset+start
+        if node.tag=='CCutsceneElementEndScene' and current>0:ends.append(current)
+        if node.tag.startswith('CCutsceneElement'):extent=max(extent,current+duration)
+        for child in node:visit(child,current,enabled)
+    visit(root)
+    return {'durationMs':round(min(ends) if ends else extent) or None,'durationSource':'directorEndScene' if ends else 'authoredElements'}

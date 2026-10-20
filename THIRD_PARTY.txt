@@ -18,3 +18,7 @@ requirements. They are not included in this repository or program package.
 
 Generated D3D9 wrappers describe the ABI from the locally installed Windows SDK.
 The Windows SDK headers themselves are not redistributed.
+
+MP4 export invokes separately installed FFmpeg and ffprobe executables.
+They are external requirements and are not redistributed in this package.
+https://ffmpeg.org/

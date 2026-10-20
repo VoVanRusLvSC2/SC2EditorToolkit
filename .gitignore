@@ -18,3 +18,7 @@ tools/mpqcli/*.exe
 *.SC2Replay
 restructure.py
 src/graphics_probe.cpp
+
+*.mp4
+*.avi
+*.mkv

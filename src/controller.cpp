@@ -13,7 +13,13 @@
 namespace fs=std::filesystem;
 static std::string Utf8(const std::wstring& w){if(w.empty())return {};int n=WideCharToMultiByte(CP_UTF8,0,w.data(),int(w.size()),nullptr,0,nullptr,nullptr);std::string r(n,0);WideCharToMultiByte(CP_UTF8,0,w.data(),int(w.size()),r.data(),n,nullptr,nullptr);return r;}
 static std::string Q(const std::wstring& s){std::string r="\"";for(unsigned char c:Utf8(s)){if(c=='"'||c=='\\'){r+='\\';r+=char(c);}else if(c=='\n')r+="\\n";else if(c=='\r')r+="\\r";else if(c=='\t')r+="\\t";else if(c<32){char a[8];sprintf_s(a,"\\u%04x",c);r+=a;}else r+=char(c);}return r+'"';}
-static std::wstring Text(HWND w){wchar_t s[2048]{};DWORD_PTR result=0;SendMessageTimeoutW(w,WM_GETTEXT,2048,reinterpret_cast<LPARAM>(s),SMTO_ABORTIFHUNG|SMTO_BLOCK,300,&result);return s;}
+static std::wstring Text(HWND w){
+    wchar_t s[2048]{};
+    // Cross-process top-level captions live in Windows' caption cache. Asking
+    // every helper/IME thread to process WM_GETTEXT can stall each video frame.
+    if(!(GetWindowLongPtrW(w,GWL_STYLE)&WS_CHILD)){GetWindowTextW(w,s,2048);return s;}
+    DWORD_PTR result=0;SendMessageTimeoutW(w,WM_GETTEXT,2048,reinterpret_cast<LPARAM>(s),SMTO_ABORTIFHUNG|SMTO_BLOCK,300,&result);return s;
+}
 static DWORD wantedPid;
 static std::vector<HWND> windows;
 static std::atomic<uint32_t> editorForegroundEvents{0};
@@ -84,7 +90,7 @@ int wmain(int argc,wchar_t** argv){
     }
     if(!target)return Error("Expected Triggers test-document workspace not found");
     DWORD tid=GetWindowThreadProcessId(target,nullptr);if(!tid)return Error("No owner thread");
-    if(op!=L"inspect"&&op!=L"generate"&&op!=L"compile"&&op!=L"read"&&op!=L"freshness-probe"&&op!=L"load"&&op!=L"cancel-load"&&op!=L"diagnostics"&&op!=L"cutscene"&&op!=L"scene-inspect"&&op!=L"scene-load"&&op!=L"scene-seek")return Error("Unsupported operation");
+    if(op!=L"inspect"&&op!=L"generate"&&op!=L"compile"&&op!=L"read"&&op!=L"freshness-probe"&&op!=L"load"&&op!=L"cancel-load"&&op!=L"diagnostics"&&op!=L"cutscene"&&op!=L"scene-inspect"&&op!=L"scene-load"&&op!=L"scene-seek"&&op!=L"scene-advance")return Error("Unsupported operation");
     if(op==L"load"&&(map.empty()||!map.is_absolute()||!fs::is_regular_file(map)))return Error("Existing absolute --map archive required");
     fs::create_directories(out);
     std::ofstream inventory(out/"windows-before.json",std::ios::binary);inventory<<"[";
@@ -93,8 +99,8 @@ int wmain(int argc,wchar_t** argv){
     std::wstring mappingName=L"Local\\SC2NativeBridge-"+std::to_wstring(wantedPid)+L"-"+guid;
     HANDLE mapping=CreateFileMappingW(INVALID_HANDLE_VALUE,nullptr,PAGE_READWRITE,0,sizeof(Block),mappingName.c_str());if(!mapping||GetLastError()==ERROR_ALREADY_EXISTS)return Error("Cannot create unique IPC mapping");
     auto b=static_cast<Block*>(MapViewOfFile(mapping,FILE_MAP_ALL_ACCESS,0,0,sizeof(Block)));if(!b)return Error("Cannot map IPC");
-    ZeroMemory(b,sizeof(Block));b->compilerErrors=-1;b->magic=kMagic;b->version=5;b->pid=wantedPid;b->tid=tid;b->target=reinterpret_cast<uint64_t>(target);
-    b->operation=op==L"generate"?Generate:op==L"compile"?Compile:op==L"read"?ReadSource:op==L"freshness-probe"?FreshnessProbe:op==L"load"?LoadDocument:op==L"cancel-load"?CancelLoad:op==L"diagnostics"?Diagnostics:op==L"cutscene"?OpenCutscene:op==L"scene-inspect"?SceneInspect:op==L"scene-load"?SceneLoad:op==L"scene-seek"?SceneSeek:Inspect;
+    ZeroMemory(b,sizeof(Block));b->compilerErrors=-1;b->magic=kMagic;b->version=6;b->pid=wantedPid;b->tid=tid;b->target=reinterpret_cast<uint64_t>(target);
+    b->operation=op==L"generate"?Generate:op==L"compile"?Compile:op==L"read"?ReadSource:op==L"freshness-probe"?FreshnessProbe:op==L"load"?LoadDocument:op==L"cancel-load"?CancelLoad:op==L"diagnostics"?Diagnostics:op==L"cutscene"?OpenCutscene:op==L"scene-inspect"?SceneInspect:op==L"scene-load"?SceneLoad:op==L"scene-seek"?SceneSeek:op==L"scene-advance"?SceneAdvance:Inspect;
     wcsncpy_s(b->expectedDocument,expected.c_str(),_TRUNCATE);wcsncpy_s(b->expectedMarker,marker.c_str(),_TRUNCATE);
     wcsncpy_s(b->mapPath,map.c_str(),_TRUNCATE);
     wcsncpy_s(b->contextLabel,context.c_str(),_TRUNCATE);

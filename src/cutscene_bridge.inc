@@ -13,11 +13,11 @@ static void SceneSnapshot(Block* b,HWND scene){
     std::wstring status;
     for(HWND c:Children(scene)){
         auto cls=Class(c),text=Text(c);int id=GetDlgCtrlID(c);
-        if(IsWindowVisible(c))Log(b,L"scene control hwnd=%p class=%s id=%d text=%s\n",c,cls.c_str(),id,text.c_str());
+        if(b->operation!=SceneAdvance&&IsWindowVisible(c))Log(b,L"scene control hwnd=%p class=%s id=%d text=%s\n",c,cls.c_str(),id,text.c_str());
         if(cls==L"Static"&&text.rfind(L"Scene Time:",0)==0)status+=text+L"; ";
         if(cls==L"Static"&&text.rfind(L"Camera:",0)==0)status+=text+L"; ";
         if(cls==L"GfxViewClass"&&id==22)b->viewport=reinterpret_cast<uint64_t>(c);
-        if(cls==L"SysTreeView32"&&(id==33||id==44)){int count=0;SceneTreeDump(b,c,reinterpret_cast<HTREEITEM>(SendMessageW(c,TVM_GETNEXTITEM,TVGN_ROOT,0)),0,count);}
+        if(b->operation!=SceneAdvance&&cls==L"SysTreeView32"&&(id==33||id==44)){int count=0;SceneTreeDump(b,c,reinterpret_cast<HTREEITEM>(SendMessageW(c,TVM_GETNEXTITEM,TVGN_ROOT,0)),0,count);}
     }
     wcsncpy_s(b->sceneStatus,status.c_str(),_TRUNCATE);
 }
@@ -39,7 +39,7 @@ static UINT SceneCameraCommand(HWND scene,const std::wstring& wanted){
         }
     }return found;
 }
-struct SceneSeekTask {Block* b;HWND scene;UINT_PTR timer;ULONGLONG deadline;int stage=0;double last=-1;bool waiting=false;};
+struct SceneSeekTask {Block* b;HWND scene;UINT_PTR timer;ULONGLONG deadline;int stage=0;double last=-1;bool waiting=false;ULONGLONG progress=GetTickCount64();};
 static thread_local SceneSeekTask* sceneSeekTask;
 static double SceneTime(HWND scene){for(HWND c:Children(scene))if(Class(c)==L"Static"){auto text=Text(c);if(text.rfind(L"Scene Time: ",0)==0)return wcstod(text.c_str()+12,nullptr);}return -1;}
 static bool CheckedCommand(HMENU menu,UINT command){for(int i=0;i<GetMenuItemCount(menu);i++){if(GetMenuItemID(menu,i)==command)return (GetMenuState(menu,i,MF_BYPOSITION)&MF_CHECKED)!=0;auto sub=GetSubMenu(menu,i);if(sub&&CheckedCommand(sub,command))return true;}return false;}
@@ -64,6 +64,12 @@ static void CALLBACK SceneSeekTimer(HWND,UINT,UINT_PTR,DWORD){
     auto task=sceneSeekTask;if(!task)return;auto b=task->b;auto scene=task->scene;
     if(!IsWindow(scene)||GetTickCount64()>task->deadline){Fail(b,59,L"Native scene seek timed out");FinishSceneSeek(task);return;}
     if(task->stage==0){
+        if(b->operation==SceneAdvance){
+            UINT camera=SceneCameraCommand(scene,b->camera);
+            if(!camera||!CheckedCommand(GetMenu(scene),camera)){Fail(b,62,L"Advance requires the same selected native camera");FinishSceneSeek(task);return;}
+            if(SceneTime(scene)>b->timeMs/1000.0+0.021){Fail(b,63,L"Advance cannot seek backwards");FinishSceneSeek(task);return;}
+            task->stage=2;return;
+        }
         UINT size=SceneNestedCommand(scene,L"View",L"Viewport Size",L"1280x720");if(size){SendMessageW(scene,WM_COMMAND,size,0);++b->commandsDispatched;}
         UINT helpers=SceneNestedCommand(scene,L"Render",L"Show Helpers",L"Show All Helpers");
         if(helpers&&CheckedCommand(GetMenu(scene),helpers)){SendMessageW(scene,WM_COMMAND,helpers,0);++b->commandsDispatched;}
@@ -85,10 +91,12 @@ static void CALLBACK SceneSeekTimer(HWND,UINT,UINT_PTR,DWORD){
         FinishSceneSeek(task);return;
     }
     if(now>target+0.021){Fail(b,59,L"Native timeline passed the requested frame");FinishSceneSeek(task);return;}
-    if(task->waiting&&now<=task->last+0.005)return;
+    if(task->waiting&&now<=task->last+0.005){
+        if(GetTickCount64()-task->progress>15000){Fail(b,64,L"Native timeline stopped advancing before the requested time");FinishSceneSeek(task);}return;
+    }
     UINT next=FindCommand(scene,{L"Animation"},{L"Next Frame"});
     if(!next){Fail(b,58,L"Native Next Frame unavailable");FinishSceneSeek(task);return;}
-    task->last=now;task->waiting=true;SendMessageW(scene,WM_COMMAND,next,0);++b->commandsDispatched;
+    task->last=now;task->waiting=true;task->progress=GetTickCount64();SendMessageW(scene,WM_COMMAND,next,0);++b->commandsDispatched;
 }
 static void BeginSceneSeek(Block* b,HWND scene){
     if(sceneSeekTask){Fail(b,60,L"Another native scene seek owns this GUI thread");return;}
@@ -136,7 +144,7 @@ static void SceneOperation(Block* b){
         b->sceneLoaded=task.submitted&&title.find(stem)!=std::wstring::npos;
         if(!b->error&&!b->sceneLoaded)Fail(b,56,L"Import returned but requested scene identity not confirmed");
     }
-    if(b->operation==SceneSeek){
+    if(b->operation==SceneSeek||b->operation==SceneAdvance){
         if(b->timeMs<0||b->timeMs>600000||!b->camera[0]){Fail(b,57,L"Camera and time 0..600000 ms required");return;}
         BeginSceneSeek(b,scene);return;
     }
