@@ -19,6 +19,7 @@
 | Editor | Автоматический скрытый запуск, открытие копий `.SC2Map`/`.SC2Mod`, чтение диагностик |
 | Triggers | Оригинальный `Triggers XML → Galaxy`, штатная компиляция текущих триггеров |
 | Galaxy | Побайтный экспорт `.galaxy`, SHA-256, скачивание через API, защита от перезаписи |
+| Terrain | PNG оригинального viewport поверхности `.SC2Map`, скрыто, через API/MCP |
 | Render | PNG следующего кадра из D3D9 backbuffer; пиксели рабочего стола не читаются |
 | Cutscene | Загрузка `.SC2Cutscene`, камера, таймкод, PNG и MP4 всей сцены или диапазона |
 | MCP | Отдельный stdio EXE, инструменты редактора/экспорта/диагностик/рендера |
@@ -26,6 +27,35 @@
 Генератор и компилятор — **оригинальные**, работающие внутри установленного Editor.
 Собственного Galaxy-генератора здесь нет. Внутренние GUI-окна существуют только
 на приватном desktop; техническое окно графического потока невидимо.
+
+Готовность worker определяется по загруженному документу и доступному модулю,
+включая **Triggers**, а не только Terrain. Activity, заблокированное окно,
+Script Test и окно другого документа готовностью не считаются.
+API по умолчанию передаёт оригинальный `-modtrigger`, без изменения настроек
+пользовательского Editor. `/editor/start` также принимает
+`startup_module:"terrain"` или `"default"` (сохранённый выбор редактора).
+
+## Снимок поверхности карты
+
+`POST /terrain/capture` или MCP `sc2_capture_terrain` открывает приватную копию
+карты, штатный модуль Terrain и сохраняет PNG из **его** D3D9 viewport.
+Редактор остаётся скрытым, физический ввод и захват рабочего стола не нужны.
+
+```json
+{"map":"D:\\MyMap.SC2Map","output":"D:\\Terrain.png"}
+```
+
+Без `map`/`template` снимается текущая открытая карта. `output` необязателен;
+возвращаются PNG-артефакт, SHA-256 и download URL. Существующий файл защищён
+от перезаписи, для замены нужен `overwrite:true`. MCP возвращает само изображение.
+`requestedTerrainFrameVerified=true` означает совпадение native viewport
+и захваченного backbuffer, изображение с деталями и соблюдение фонового режима.
+Чёрный/однотонный кадр по умолчанию даёт ошибку. `.SC2Mod` поверхности не имеет.
+
+Это **текущий вид оригинального Terrain**, с его ракурсом и editor overlays;
+панели редактора в PNG не попадают. Экспорт всей карты сверху, выбор координат
+и именованной map camera пока не реализованы. Параметры `camera`/`time_ms`
+относятся к катсценам и для Terrain отклоняются.
 
 ## Границы рендера
 
@@ -153,7 +183,8 @@ HTTP по умолчанию: `http://127.0.0.1:8765`.
 | GET | `/artifacts/<id>` | Скачать точные байты артефакта |
 | POST | `/editor/diagnostics` | Прочитать Messages/Console |
 | POST | `/cutscene/open` | Открыть нативный Cutscene module |
-| POST | `/render/capture` | Получить PNG следующего представленного viewport |
+| POST | `/render/capture` | PNG выбранной камеры и времени катсцены |
+| POST | `/terrain/capture` | PNG оригинального viewport поверхности карты |
 | POST | `/shutdown` | Закрыть API и принадлежащий ему Editor |
 
 Пример обычной проверки существующего мода:
@@ -227,7 +258,7 @@ $export=Call-SC2 '/galaxy/export' @{output='D:\Native.galaxy'}
 
 Инструменты: `sc2_editor_start`, `sc2_open_document`, `sc2_convert_xml`,
 `sc2_compile_all`, `sc2_export_galaxy`, `sc2_diagnostics`, `sc2_cutscene_open`,
-`sc2_cutscene_seek`, `sc2_capture_frame`, `sc2_export_video`, `sc2_modules`. Кадр возвращается как MCP image и PNG-артефакт.
+`sc2_cutscene_seek`, `sc2_capture_frame`, `sc2_capture_terrain`, `sc2_export_video`, `sc2_modules`. Кадр возвращается как MCP image и PNG-артефакт.
 Большой Galaxy не вкладывается в текст MCP: используйте отдельный экспорт.
 При закрытии stdio-соединения принадлежащий серверу Editor завершается.
 
@@ -243,6 +274,7 @@ python -m venv .venv
 .\build.ps1
 .\package.ps1 -Python .\.venv\Scripts\python.exe
 .venv\Scripts\python.exe -m unittest discover -s tests
+.\scripts\test-native.ps1
 ```
 
 `mpqcli` закреплён на v0.10.0 и проверяется по SHA-256. В исходники его EXE не
@@ -257,6 +289,14 @@ python -m venv .venv
 
 Тесты без Editor проверяют протокол, файлы и защиту экспорта. Только live-тест
 подтверждает штатную генерацию/компиляцию; это различие сохраняется в отчётах.
+
+Отдельная проверка старта в Triggers без Terrain, снимков поверхности,
+скачивания PNG и защиты от перезаписи (карта копируется, оригинал не меняется):
+
+```powershell
+.venv\Scripts\python.exe tests\live_terrain.py --package --autostart `
+  --map 'D:\MyMap.SC2Map' --work 'D:\FreshTerrainTest'
+```
 
 ## Устройство проекта
 

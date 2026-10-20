@@ -7,12 +7,13 @@
 #include <sstream>
 #include <tlhelp32.h>
 #include "bootstrap.h"
+#include "document_window.h"
 #pragma comment(lib,"user32.lib")
 #pragma comment(lib,"ole32.lib")
 namespace fs=std::filesystem;
 static std::string U(const std::wstring& w){int n=WideCharToMultiByte(CP_UTF8,0,w.data(),int(w.size()),nullptr,0,nullptr,nullptr);std::string s(n,0);WideCharToMultiByte(CP_UTF8,0,w.data(),int(w.size()),s.data(),n,nullptr,nullptr);return s;}
 static std::string Q(const std::wstring& w){std::string s="\"";for(unsigned char c:U(w)){if(c=='"'||c=='\\'){s+='\\';s+=char(c);}else if(c=='\n')s+="\\n";else if(c=='\r')s+="\\r";else if(c=='\t')s+="\\t";else if(c>=32)s+=char(c);}return s+'"';}
-static std::wstring Text(HWND w){wchar_t s[2048]{};DWORD_PTR r=0;SendMessageTimeoutW(w,WM_GETTEXT,2048,reinterpret_cast<LPARAM>(s),SMTO_ABORTIFHUNG|SMTO_BLOCK,200,&r);return s;}
+static std::wstring Text(HWND w){wchar_t s[2048]{};if(!(GetWindowLongPtrW(w,GWL_STYLE)&WS_CHILD)){GetWindowTextW(w,s,2048);return s;}DWORD_PTR r=0;SendMessageTimeoutW(w,WM_GETTEXT,2048,reinterpret_cast<LPARAM>(s),SMTO_ABORTIFHUNG|SMTO_BLOCK,200,&r);return s;}
 static std::wstring Class(HWND w){wchar_t s[256]{};GetClassNameW(w,s,256);return s;}
 static std::wstring DesktopName(HDESK d){wchar_t s[256]{};DWORD n=0;GetUserObjectInformationW(d,UOI_NAME,s,sizeof(s),&n);return s;}
 static DWORD childPid;
@@ -42,8 +43,9 @@ static bool InjectBootstrap(PROCESS_INFORMATION& process,const fs::path& dllPath
     if(!ReadProcessMemory(process.hProcess,remote,&config,sizeof(config),&written))return false;VirtualFreeEx(process.hProcess,remote,0,MEM_RELEASE);patches=config.patches;return patches>0;
 }
 int wmain(int argc,wchar_t** argv){
-    fs::path out,document;std::wstring editor=L"C:\\Program Files (x86)\\StarCraft II\\Support64\\SC2Editor_x64.exe",jobName;int timeout=90;
-    for(int i=1;i<argc;i++){if(i+1>=argc)return E("Missing argument");std::wstring k=argv[i],v=argv[++i];if(k==L"--out")out=v;else if(k==L"--editor")editor=v;else if(k==L"--document")document=v;else if(k==L"--timeout")timeout=std::stoi(v);else if(k==L"--job-name")jobName=v;else return E("Unknown argument");}
+    fs::path out,document;std::wstring editor=L"C:\\Program Files (x86)\\StarCraft II\\Support64\\SC2Editor_x64.exe",jobName,startupModule=L"default";int timeout=90;
+    for(int i=1;i<argc;i++){if(i+1>=argc)return E("Missing argument");std::wstring k=argv[i],v=argv[++i];if(k==L"--out")out=v;else if(k==L"--editor")editor=v;else if(k==L"--document")document=v;else if(k==L"--timeout")timeout=std::stoi(v);else if(k==L"--job-name")jobName=v;else if(k==L"--module")startupModule=v;else return E("Unknown argument");}
+    if(startupModule!=L"default"&&startupModule!=L"triggers"&&startupModule!=L"terrain")return E("Unsupported startup module");
     if(!jobName.empty()){
         if(jobName.rfind(L"Local\\SC2NativeApi-",0)!=0)return E("Invalid API job name");
         HANDLE job=OpenJobObjectW(JOB_OBJECT_ASSIGN_PROCESS,FALSE,jobName.c_str());
@@ -59,6 +61,8 @@ int wmain(int argc,wchar_t** argv){
     if(!SetThreadDesktop(isolated))return E("Cannot associate host with private desktop");
     fs::path temp=out/L"private-temp";fs::create_directories(temp);SetEnvironmentVariableW(L"TEMP",temp.c_str());SetEnvironmentVariableW(L"TMP",temp.c_str());
     std::wstring command=L"\""+editor+L"\" -product SC2";if(!document.empty())command+=L" -loadfile \""+document.wstring()+L"\"";
+    if(startupModule==L"triggers")command+=L" -modtrigger";
+    if(startupModule==L"terrain")command+=L" -modterrain";
     STARTUPINFOW si{};si.cb=sizeof(si);si.lpDesktop=fullDesktop.data();si.dwFlags=STARTF_USESHOWWINDOW;si.wShowWindow=SW_SHOWNOACTIVATE;
     PROCESS_INFORMATION process{};
     if(!CreateProcessW(editor.c_str(),command.data(),nullptr,nullptr,FALSE,CREATE_UNICODE_ENVIRONMENT|CREATE_NO_WINDOW|CREATE_SUSPENDED,nullptr,fs::path(editor).parent_path().c_str(),&si,&process))return E("Original Editor creation failed");
@@ -68,7 +72,7 @@ int wmain(int argc,wchar_t** argv){
     wchar_t self[32768]{};GetModuleFileNameW(nullptr,self,32768);auto bootstrap=fs::path(self).parent_path()/L"SC2StartupBootstrap.dll";DWORD patches=0;
     if(!InjectBootstrap(process,bootstrap,out/L"bootstrap.log",patches)){TerminateProcess(process.hProcess,42);CloseHandle(process.hThread);CloseHandle(process.hProcess);return E("Private worker singleton bootstrap failed");}
     ResumeThread(process.hThread);CloseHandle(process.hThread);
-    std::string state;std::wstring currentDocument;DWORD exitCode=STILL_ACTIVE;ULONGLONG deadline=GetTickCount64()+ULONGLONG(timeout)*1000;
+    std::string state;std::wstring currentDocument,readyModule;DWORD exitCode=STILL_ACTIVE;ULONGLONG deadline=GetTickCount64()+ULONGLONG(timeout)*1000;
     bool ready=false,singleton=false,graphics=false,busy=false;
     while(GetTickCount64()<deadline){
         windows.clear();EnumWindows(Enum,0);ready=false;singleton=false;graphics=false;busy=false;
@@ -83,13 +87,13 @@ int wmain(int argc,wchar_t** argv){
                 if(s.find(L"Another instance of the editor")!=s.npos)singleton=true;
                 if(s.find(L"Graphics device is not available")!=s.npos||s.find(L"0x88760868")!=s.npos)graphics=true;
             }snapshots<<"]}";
-            if(title.rfind(L"Terrain - [",0)==0&&IsWindowEnabled(w)){ready=true;auto close=title.find(L']');currentDocument=title.substr(11,close-11);}
+            if(IsWindowVisible(w)&&IsWindowEnabled(w)&&DocumentWindow(title,document.wstring(),&readyModule)){ready=true;currentDocument=document.filename().wstring();}
         }snapshots<<"]";
-        ready=ready&&!busy;
         GetExitCodeProcess(process.hProcess,&exitCode);
+        ready=ready&&!busy&&!singleton&&!graphics&&exitCode==STILL_ACTIVE;
         auto status=ready?L"HIDDEN_EDITOR_READY":singleton?L"BLOCKED_BY_EDITOR_SINGLETON":graphics?L"GRAPHICS_STARTUP_FAILED":exitCode!=STILL_ACTIVE?L"EDITOR_EXITED":L"STARTING";
         std::ostringstream r;r<<"{\"status\":"<<Q(status)<<",\"pid\":"<<childPid<<",\"createTimeFiletime\":"<<((uint64_t(creation.dwHighDateTime)<<32)|creation.dwLowDateTime)<<",\"desktop\":"<<Q(desktop)<<",\"inputDesktopBefore\":"<<Q(inputBefore)<<",\"currentDocument\":"<<Q(currentDocument)<<",\"exitCode\":"<<exitCode<<",\"desktopSwitched\":false,\"inputInjectionUsed\":false,\"windows\":"<<snapshots.str()<<"}";
-        state=r.str();std::ofstream file(out/"state.json",std::ios::binary);file<<state;file.close();
+        state=r.str();state.insert(state.size()-1,",\"readyModule\":"+Q(ready?readyModule:L""));std::ofstream file(out/"state.json",std::ios::binary);file<<state;file.close();
         if(ready||singleton||graphics||exitCode!=STILL_ACTIVE)break;
         WaitForSingleObject(process.hProcess,500);
     }

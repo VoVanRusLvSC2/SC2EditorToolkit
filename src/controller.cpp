@@ -1,4 +1,5 @@
 #include "protocol.h"
+#include "document_window.h"
 #include <string>
 #include <vector>
 #include <fstream>
@@ -79,18 +80,18 @@ int wmain(int argc,wchar_t** argv){
                 return TRUE;},reinterpret_cast<LPARAM>(&context));dump<<"]}";
         }dump<<"]";return 0;
     }
-    for(HWND w:windows){auto title=Text(w);if(title.rfind(L"Triggers - [",0)==0&&title.find(expected)!=title.npos){if(target)return Error("Ambiguous Triggers workspace");target=w;}}
+    for(HWND w:windows){auto title=Text(w);if(title.rfind(L"Triggers - [",0)==0&&DocumentWindow(title,expected,nullptr,true)){if(target)return Error("Ambiguous Triggers workspace");target=w;}}
     if(!target&&!desktop.empty()){
-        for(HWND w:windows){auto title=Text(w);if(title.rfind(L"Terrain - [",0)==0&&title.find(expected)!=title.npos){
+        for(HWND w:windows){auto title=Text(w);if(IsWindowEnabled(w)&&DocumentWindow(title,expected,nullptr,true)){
             UINT command=MenuCommand(GetMenu(w),L"Triggers");if(!command)return Error("Native Triggers module command absent");
             PostMessageW(w,WM_COMMAND,command,0);break;
         }}
         ULONGLONG until=GetTickCount64()+30000;
-        while(!target&&GetTickCount64()<until){windows.clear();EnumWindows(Root,0);for(HWND w:windows){auto title=Text(w);if(title.rfind(L"Triggers - [",0)==0&&title.find(expected)!=title.npos&&IsWindowEnabled(w))target=w;}if(!target)Sleep(200);}
+        while(!target&&GetTickCount64()<until){windows.clear();EnumWindows(Root,0);for(HWND w:windows){auto title=Text(w);if(title.rfind(L"Triggers - [",0)==0&&DocumentWindow(title,expected,nullptr,true)&&IsWindowEnabled(w)){if(target)return Error("Ambiguous Triggers workspace");target=w;}}if(!target)Sleep(200);}
     }
     if(!target)return Error("Expected Triggers test-document workspace not found");
     DWORD tid=GetWindowThreadProcessId(target,nullptr);if(!tid)return Error("No owner thread");
-    if(op!=L"inspect"&&op!=L"generate"&&op!=L"compile"&&op!=L"read"&&op!=L"freshness-probe"&&op!=L"load"&&op!=L"cancel-load"&&op!=L"diagnostics"&&op!=L"cutscene"&&op!=L"scene-inspect"&&op!=L"scene-load"&&op!=L"scene-seek"&&op!=L"scene-advance"&&op!=L"scene-audio")return Error("Unsupported operation");
+    if(op!=L"inspect"&&op!=L"generate"&&op!=L"compile"&&op!=L"read"&&op!=L"freshness-probe"&&op!=L"load"&&op!=L"cancel-load"&&op!=L"diagnostics"&&op!=L"cutscene"&&op!=L"scene-inspect"&&op!=L"scene-load"&&op!=L"scene-seek"&&op!=L"scene-advance"&&op!=L"scene-audio"&&op!=L"terrain")return Error("Unsupported operation");
     if(op==L"load"&&(map.empty()||!map.is_absolute()||!fs::is_regular_file(map)))return Error("Existing absolute --map archive required");
     fs::create_directories(out);
     std::ofstream inventory(out/"windows-before.json",std::ios::binary);inventory<<"[";
@@ -100,7 +101,7 @@ int wmain(int argc,wchar_t** argv){
     HANDLE mapping=CreateFileMappingW(INVALID_HANDLE_VALUE,nullptr,PAGE_READWRITE,0,sizeof(Block),mappingName.c_str());if(!mapping||GetLastError()==ERROR_ALREADY_EXISTS)return Error("Cannot create unique IPC mapping");
     auto b=static_cast<Block*>(MapViewOfFile(mapping,FILE_MAP_ALL_ACCESS,0,0,sizeof(Block)));if(!b)return Error("Cannot map IPC");
     ZeroMemory(b,sizeof(Block));b->compilerErrors=-1;b->magic=kMagic;b->version=7;b->pid=wantedPid;b->tid=tid;b->target=reinterpret_cast<uint64_t>(target);
-    b->operation=op==L"generate"?Generate:op==L"compile"?Compile:op==L"read"?ReadSource:op==L"freshness-probe"?FreshnessProbe:op==L"load"?LoadDocument:op==L"cancel-load"?CancelLoad:op==L"diagnostics"?Diagnostics:op==L"cutscene"?OpenCutscene:op==L"scene-inspect"?SceneInspect:op==L"scene-load"?SceneLoad:op==L"scene-seek"?SceneSeek:op==L"scene-advance"?SceneAdvance:op==L"scene-audio"?SceneAudio:Inspect;
+    b->operation=op==L"generate"?Generate:op==L"compile"?Compile:op==L"read"?ReadSource:op==L"freshness-probe"?FreshnessProbe:op==L"load"?LoadDocument:op==L"cancel-load"?CancelLoad:op==L"diagnostics"?Diagnostics:op==L"cutscene"?OpenCutscene:op==L"scene-inspect"?SceneInspect:op==L"scene-load"?SceneLoad:op==L"scene-seek"?SceneSeek:op==L"scene-advance"?SceneAdvance:op==L"scene-audio"?SceneAudio:op==L"terrain"?TerrainView:Inspect;
     wcsncpy_s(b->expectedDocument,expected.c_str(),_TRUNCATE);wcsncpy_s(b->expectedMarker,marker.c_str(),_TRUNCATE);
     wcsncpy_s(b->mapPath,map.c_str(),_TRUNCATE);
     wcsncpy_s(b->contextLabel,context.c_str(),_TRUNCATE);

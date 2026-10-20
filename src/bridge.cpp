@@ -1,4 +1,5 @@
 #include "protocol.h"
+#include "document_window.h"
 #include <commctrl.h>
 #include <string>
 #include <vector>
@@ -282,12 +283,13 @@ static void DiagnosticsSnapshot(Block* b){
     }
 }
 #include "cutscene_bridge.inc"
+#include "terrain_bridge.inc"
 static void Process(Block* b) {
     b->dllPid=GetCurrentProcessId();b->dllTid=GetCurrentThreadId();b->foregroundBefore=reinterpret_cast<uint64_t>(GetForegroundWindow());
     HWND target=reinterpret_cast<HWND>(b->target);DWORD pid=0;DWORD tid=GetWindowThreadProcessId(target,&pid);
     if(pid!=b->pid||tid!=b->tid||pid!=GetCurrentProcessId()||tid!=GetCurrentThreadId()){Fail(b,10,L"PID/thread/HWND identity mismatch");return;}
     auto title=Text(target);
-    bool sceneOperation=b->operation==SceneInspect||b->operation==SceneLoad||(b->operation==SceneSeek||b->operation==SceneAdvance||b->operation==SceneAudio)||b->operation==OpenCutscene;
+    bool sceneOperation=b->operation==TerrainView||b->operation==SceneInspect||b->operation==SceneLoad||(b->operation==SceneSeek||b->operation==SceneAdvance||b->operation==SceneAudio)||b->operation==OpenCutscene;
     if(b->expectedDocument[0]==0||title.find(b->expectedDocument)==title.npos||(title.find(L'*')!=title.npos&&!(sceneOperation&&PrivateDesktop()))){Fail(b,11,L"Expected saved test document is not active");return;}
     for(HWND w:Roots()){
         Log(b,L"root hwnd=%p enabled=%d class=%s title=%s\n",w,IsWindowEnabled(w),Class(w).c_str(),Text(w).c_str());
@@ -306,6 +308,7 @@ static void Process(Block* b) {
         }
     }
     if(b->operation==Diagnostics){DiagnosticsSnapshot(b);return;}
+    if(b->operation==TerrainView){if(!IsWindowEnabled(target)){Fail(b,12,L"A modal dialog blocks the document");return;}TerrainOperation(b,target);return;}
     if(b->operation==SceneInspect||b->operation==SceneLoad||(b->operation==SceneSeek||b->operation==SceneAdvance||b->operation==SceneAudio)){SceneOperation(b);return;}
     if(b->operation==OpenCutscene){
         UINT command=FindCommand(target,{L"Modules",L"Модули"},{L"Cutscene Editor",L"Cutscenes",L"Редактор сцен",L"Редактор кат-сцен"});

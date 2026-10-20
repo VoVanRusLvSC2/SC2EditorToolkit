@@ -12,6 +12,7 @@ assert run.returncode==0,run.stderr
 result=[json.loads(line) for line in run.stdout.splitlines()]
 assert [r['id'] for r in result]==[1,2,3],run.stdout
 assert 'sc2_capture_frame' in {t['name'] for t in result[1]['result']['tools']}
+assert 'sc2_capture_terrain' in {t['name'] for t in result[1]['result']['tools']}
 assert not (work/'worker.json').exists()
 (work/'VERIFICATION.json').write_text(json.dumps({'status':'PACKAGED_MCP_STDIO_PASSED','tools':len(result[1]['result']['tools']),'editorStarted':False},indent=2),encoding='utf8')
 print('Packaged windowed MCP stdio: passed; '+str(len(result[1]['result']['tools']))+' tools')

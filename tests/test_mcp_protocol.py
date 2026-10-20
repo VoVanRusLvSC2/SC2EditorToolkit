@@ -15,5 +15,6 @@ class Mcp(unittest.TestCase):
             self.assertEqual([r['id'] for r in output],[1,2,3])
             self.assertEqual(output[0]['result']['protocolVersion'],'2025-06-18')
             self.assertIn('sc2_export_galaxy',{t['name'] for t in output[1]['result']['tools']})
+            self.assertIn('sc2_capture_terrain',{t['name'] for t in output[1]['result']['tools']})
             self.assertFalse(Path(work,'worker.json').exists())
 if __name__=='__main__':unittest.main()

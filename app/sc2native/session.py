@@ -8,6 +8,7 @@ class Worker:
         observed=result['desktopObservation']
         if observed['visibleWindowsOnUserDesktopPeak'] or observed['editorForegroundSamples']:
             result.update(status='FAILED',error='Hidden desktop invariant failed',requestedCutsceneFrameVerified=False)
+            if 'requestedTerrainFrameVerified' in result:result['requestedTerrainFrameVerified']=False
         return result
     def __init__(self,work):
         self.work=Path(work).resolve();self.work.mkdir(parents=True,exist_ok=True)
@@ -21,7 +22,8 @@ class Worker:
             raise OSError(ctypes.get_last_error(),'Cannot create owned-worker lifetime job')
         atexit.register(self.close)
     def alive(self):return bool(self.state and process_time(self.state['pid'])==self.state['createTimeFiletime'])
-    def ensure(self,template):
+    def ensure(self,template,startup_module='triggers'):
+        if startup_module not in ('triggers','terrain','default'):raise ValueError('startup_module must be triggers, terrain or default')
         if self.alive():return
         self.scene=None
         if self.monitor:self.monitor.stop();self.monitor=None
@@ -29,7 +31,7 @@ class Worker:
         # Seed is a private archive copy. Never ask the worker to edit the user's source.
         seed=directory/('Seed'+Path(template).suffix);shutil.copyfile(template,seed)
         startup=directory/'startup'
-        command=[str(RES/'HiddenEditorHost.exe'),'--document',str(seed),'--out',str(startup),'--timeout','240','--job-name',self.job_name]
+        command=[str(RES/'HiddenEditorHost.exe'),'--document',str(seed),'--out',str(startup),'--timeout','240','--job-name',self.job_name,'--module',startup_module]
         with (directory/'host.stdout.log').open('wb') as out,(directory/'host.stderr.log').open('wb') as err:
             child=subprocess.Popen(command,stdout=out,stderr=err,creationflags=subprocess.CREATE_NO_WINDOW)
             # Start monitoring as soon as the host publishes its child PID.
@@ -74,7 +76,7 @@ class Worker:
                 if result.returncode:raise ValueError('Cannot read Triggers from the supplied map/mod')
                 xml_path.write_bytes(result.stdout)
             files.checked_xml(xml_path)
-            self.ensure(template)
+            self.ensure(template,request.get('startup_module','triggers'))
             oracle.ACTIVE_DESKTOP=self.state['desktop']
             args=SimpleNamespace(template=str(template),triggers=str(xml_path),job=str(request_dir/'job'),
                 trigger_strings=request.get('trigger_strings'),game_strings=request.get('game_strings'),locale=request.get('locale','enUS'),
@@ -104,8 +106,8 @@ class Worker:
             return result
         finally:
             if not _locked:self.lock.release()
-    def open_document(self,request):
-        if not self.lock.acquire(blocking=False):raise RuntimeError('Worker busy; serialize requests')
+    def open_document(self,request,_locked=False):
+        if not _locked and not self.lock.acquire(blocking=False):raise RuntimeError('Worker busy; serialize requests')
         try:
             source=Path(request.get('map') or request.get('template','')).resolve(strict=True)
             if not source.is_file() or source.suffix.lower() not in ('.sc2map','.sc2mod'):raise ValueError('map must be an existing .SC2Map or .SC2Mod archive')
@@ -126,7 +128,8 @@ class Worker:
                 result.update(status='FAILED',error='Hidden desktop invariant failed')
             oracle.save(directory/'open-result.json',result)
             return result
-        finally:self.lock.release()
+        finally:
+            if not _locked:self.lock.release()
 
     def _native(self,directory,operation,scope='mapRoot',context=''):
         if not self.alive():raise RuntimeError('Start or open a document first')
@@ -138,7 +141,7 @@ class Worker:
         try:
             template=Path(request.get('template') or request.get('map','')).resolve(strict=True)
             if not template.is_file() or template.suffix.lower() not in ('.sc2map','.sc2mod'):raise ValueError('Existing .SC2Map/.SC2Mod template required')
-            self.ensure(template)
+            self.ensure(template,request.get('startup_module','triggers'))
             directory=self.work/'editor-actions'/uuid.uuid4().hex;directory.mkdir(parents=True)
             native=self._native(directory,'inspect')
             return {'status':'HIDDEN_EDITOR_STARTED','pid':self.state['pid'],'document':self.state['currentDocument'],
@@ -238,16 +241,17 @@ class Worker:
         finally:
             if not _locked:self.lock.release()
 
-    def capture_frame(self,request,_locked=False,_directory=None,_register=True,_attempts=8):
+    def capture_frame(self,request,_locked=False,_directory=None,_register=True,_attempts=8,_terrain=None):
         if not _locked and not self.lock.acquire(blocking=False):raise RuntimeError('Worker busy')
         try:
             if not self.alive():raise RuntimeError('Start/open the editor first')
-            if 'camera' in request or 'time_ms' in request:self.cutscene_seek(request,_locked=True)
+            if _terrain is None and ('camera' in request or 'time_ms' in request):self.cutscene_seek(request,_locked=True)
             directory=Path(_directory) if _directory else self.work/'frames'/uuid.uuid4().hex;directory.mkdir(parents=True)
             command=[str(RES/'RenderCapture.exe'),'--pid',str(self.state['pid']),'--out',str(directory/'frame.png')]
-            frame=self.scene and self.scene.get('frame')
-            if self.scene and not frame:raise ValueError('Select a cutscene camera/time first')
-            if frame:command+=['--viewport',str(frame['viewport'])]
+            frame=None if _terrain is not None else self.scene and self.scene.get('frame')
+            if _terrain is None and not frame:raise ValueError('Select a cutscene camera/time first; use terrain/capture for a map view')
+            viewport=_terrain['viewport'] if _terrain is not None else frame['viewport']
+            command+=['--viewport',str(viewport)]
             attempts=[]
             for attempt in range(_attempts):
                 image=directory/('frame-'+str(attempt)+'.png');command[command.index('--out')+1]=str(image)
@@ -260,7 +264,7 @@ class Worker:
                 time.sleep(.2)
             artifact=self.artifacts.register_png(image) if _register else None
             result={'status':'RENDER_FRAME_CAPTURED','artifact':artifact,'native':evidence,
-                'source':'original D3D9 backbuffer','desktopScreenshot':False,'timelineControl':True,
+                'source':'original D3D9 backbuffer','desktopScreenshot':False,'timelineControl':_terrain is None,
                 'desktopObservation':self.monitor.snapshot()}
             result['emptyFrame']=evidence.get('emptyFrame',None);result['captureAttempts']=attempts
             if not _register:result['capturePath']=str(image)
@@ -268,11 +272,46 @@ class Worker:
             result['requestedCutsceneFrameVerified']=bool(frame and evidence.get('sourceWindow')==frame['viewport'] and result['imageHasDetail'])
             if frame:result['frame']=frame.copy()
             if frame and evidence.get('sourceWindow')!=frame['viewport']:result.update(status='FAILED',error='Capture did not match selected native viewport')
+            if _terrain is not None:
+                result.update(module='terrain',terrain=_terrain,requestedTerrainFrameVerified=bool(evidence.get('sourceWindow')==viewport and result['imageHasDetail']))
+                if evidence.get('sourceWindow')!=viewport:result.update(status='FAILED',error='Capture did not match the original Terrain viewport')
             if (result['emptyFrame'] or not result['imageHasDetail']) and not request.get('allow_empty',False):result.update(status='FAILED',error='Original renderer returned a black or uniform frame')
             self._background_result(result)
             oracle.save(directory/'capture.json',result);return result
         finally:
             if not _locked:self.lock.release()
+
+    def capture_terrain(self,request):
+        if not self.lock.acquire(blocking=False):raise RuntimeError('Worker busy')
+        try:
+            # Camera and time_ms refer to cutscenes; never silently reuse those
+            # arguments for a terrain screenshot of a different module.
+            if 'camera' in request or 'time_ms' in request:raise ValueError('Terrain capture uses the current native map view; cutscene camera/time_ms are not supported')
+            supplied=request.get('map') or request.get('template')
+            path=Path(supplied).resolve(strict=True) if supplied else Path(self.state['documentPath']) if self.alive() else None
+            if path is None or not path.is_file() or path.suffix.lower()!='.sc2map':raise ValueError('Terrain capture requires a .SC2Map; a mod has no terrain')
+            directory=self.work/'terrain'/uuid.uuid4().hex;directory.mkdir(parents=True)
+            original_hash=files.sha(path)
+            if supplied:
+                if self.alive():self.open_document({'map':str(path)},_locked=True)
+                else:self.ensure(path)
+            if files.sha(self.state['documentPath'])!=original_hash:raise RuntimeError('Opened private map does not match the source archive')
+            native=self._native(directory,'terrain')
+            if not native.get('viewport'):raise RuntimeError('Original Terrain viewport was not confirmed')
+            if self.scene:self.scene['frame']=None
+            # Let the outer GUI loop present newly selected Terrain resources.
+            time.sleep(.5)
+            result=self.capture_frame(request,_locked=True,_directory=directory/'capture',_register=False,_attempts=20,_terrain={
+                'viewport':native['viewport'],'document':self.state['currentDocument'],'nativeTitle':native['loadedTitle'],'view':'current native Terrain view'})
+            result.update(nativeSelection=native,sourceUnchanged=files.sha(path)==original_hash)
+            if not result['sourceUnchanged']:result.update(status='FAILED',error='Source map changed during capture')
+            # Publish only after viewport, pixels and background checks passed.
+            if result['status']!='FAILED':
+                result['artifact']=self.artifacts.publish_file(result.pop('capturePath'),suffix='.png',mime='image/png',output=request.get('output'),overwrite=bool(request.get('overwrite',False)))
+                result['status']='TERRAIN_FRAME_CAPTURED'
+            oracle.save(directory/'terrain-result.json',result)
+            return result
+        finally:self.lock.release()
 
     def export_video(self,request):
         from .video import export_video

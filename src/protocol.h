@@ -5,7 +5,7 @@
 constexpr uint32_t kMagic = 0x53433247;
 constexpr size_t kSourceCapacity = 16 * 1024 * 1024;
 constexpr wchar_t kMessageName[] = L"SC2.NativeGalaxyBridge.20261020.modules.v7";
-enum Operation : uint32_t { Inspect = 0, Generate = 1, Compile = 2, ReadSource = 3, FreshnessProbe = 4, LoadDocument = 5, CancelLoad = 6, Diagnostics=7, OpenCutscene=8, SceneInspect=9, SceneLoad=10, SceneSeek=11, SceneAdvance=12, SceneAudio=13 };
+enum Operation : uint32_t { Inspect = 0, Generate = 1, Compile = 2, ReadSource = 3, FreshnessProbe = 4, LoadDocument = 5, CancelLoad = 6, Diagnostics=7, OpenCutscene=8, SceneInspect=9, SceneLoad=10, SceneSeek=11, SceneAdvance=12, SceneAudio=13, TerrainView=14 };
 struct Block {
     uint32_t magic, version, operation, pid, tid;
     uint64_t target;
