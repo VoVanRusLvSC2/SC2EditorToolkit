@@ -4,9 +4,10 @@ A modular backend for the original StarCraft II Editor. Original code author and
 project owner: **VoVanRusLvSC2**.
 
 **v0.7.0-rc.2 is a prerelease.** Whole-map and coordinate-region export are experimental:
-the original export dialog and settings have been exercised, but a completed
-image showing terrain, placed units and doodads has **not yet been validated**.
-The live rendering test was deferred while the user is playing. See
+the original full-map export has now been visually verified on a private fixture
+with hills, placed units and doodads. Water and broader map/dependency coverage
+remain untested. Camera-controlled Terrain close-ups and native save/reopen
+comparison are not implemented. See
 [validation history](docs/VALIDATION.md). The previous stable release is v0.6.0.
 
 The installed Editor runs on an owned, private Windows desktop. Its technical
@@ -23,6 +24,10 @@ This requirement applies to the code, not to exported user maps, scripts or vide
 Third-party components retain their own licenses: see [THIRD_PARTY.txt](THIRD_PARTY.txt).
 
 Public documentation, setup instructions and release notes are maintained in **English**.
+
+For integration with ModKit, see the [five-point native bridge assessment](docs/MODKIT_BRIDGE_STATUS.md).
+It distinguishes existing original-Editor checks from fast ModKit previews,
+unimplemented camera/save-reopen operations and remaining diagnostics work.
 
 ## Modules
 
@@ -147,11 +152,11 @@ quadrants, a **90°** camera, game lighting, standard shading, water and shadows
 Placed **units and doodads are included by default**. Fog effects and editor
 helper/overlay models are disabled so the map's surface remains visible.
 
-**Acceptance pending:** these settings were read back from the original dialog.
-The final render and the effect of unit/doodad visibility switches still need the
-opt-in live test below. A successful settings readback alone is not a successful
-image export, and a detailed image alone cannot prove that every placed model
-is present.
+**Limited live acceptance:** a corrected private fixture produced a detailed
+1024×768 native image showing both hills, four corner buildings, ten Marines and
+four doodads. Native component registration, Objects.version and preloads must be
+valid; writing placement XML alone is insufficient. Water and a broader map
+matrix remain untested. Detailed-pixel checks alone cannot prove model presence.
 
 ```json
 {"map":"D:\\MyMap.SC2Map","size":2048,"output":"D:\\WholeMap.png"}
@@ -163,7 +168,11 @@ the currently open `.SC2Map`. `size` is the horizontal pixel resolution: 512,
 preserve the map aspect ratio; the native dialog selected 2048×1536 for a 64×48 map.
 Images above 8192 pixels in height or 32 million total pixels are rejected.
 
-Use `include_units:false` or `include_doodads:false` to omit those categories.
+The request exposes `include_units` and `include_doodads` options.
+**Known live-test limitation:** the current adapter's checkbox readback did not
+reliably exclude categories: a request with `include_units:false` still showed
+units. Do not rely on these exclusion options until corrected and visually
+re-tested. The default image with units/doodads enabled was visually confirmed.
 `output` is optional; an existing PNG requires `overwrite:true`.
 The response contains the full PNG artifact/download/SHA-256 and a preview bounded
 to 1280 pixels for MCP. `wholeMapVerified:true` requires native export completion,
@@ -222,9 +231,10 @@ move a visible camera, inject input, take a desktop screenshot or upscale pixels
 
 Bounds are finite map coordinates with `left < right`, `bottom < top`, wholly
 inside the full terrain. Coordinates use bottom-left XY; the crop assumes north
-is up in the native 90° export. **That orientation and landmark alignment have
-not been calibrated in a live Editor test.** Responses retain
-`coordinateMappingValidated:false`; the operation is experimental.
+is up in the native 90° export. A live standard 64×48 fixture correctly located
+its southwest CommandCenter and returned a matching 161×161 crop. **Broader
+terrain/camera calibration is not certified.** Packaged responses retain
+`coordinateMappingValidated:false`; the operation remains experimental.
 
 The initial adapter supports terrain XY offset `0,0` and scale `1,1`, as recorded
 in `t3Terrain.xml`. Other transforms and mismatched image aspect ratios fail.
@@ -239,7 +249,8 @@ full-map export. A failed native export, black/uniform crop, changed source or
 hidden-window violation cannot publish a successful region artifact.
 
 Use object search first and pass a rectangle around its returned XY to capture
-that location. Live visual verification of the actual landmark remains pending.
+that location. The fixture's landmark was visually verified; other maps still
+require their own acceptance checks.
 
 ## Current Terrain viewport
 
@@ -398,8 +409,10 @@ The whole-map fixture contains hills, four different corner buildings, Marines
 and doodads. Its opt-in test checks full output dimensions, native TGA/PNG pixel
 identity, category-switch pixel differences, downloads and overwrite protection.
 Visually review the three PNGs for relief, all corner landmarks and doodads;
-automated detailed-pixel checks alone cannot certify those contents. This live
-acceptance and coordinate-calibration test has not passed for v0.7.0-rc.2 yet.
+automated detailed-pixel checks alone cannot certify those contents. The live
+automated export/download/crop checks passed on the corrected fixture, but visual
+review found category exclusion ineffective and water remains untested. This is
+partial acceptance, not a complete rendering certificate for v0.7.0-rc.2.
 
 Tests without Editor validate transport, files, arguments and invariants; only
 live tests confirm native generation, compilation and rendering. See

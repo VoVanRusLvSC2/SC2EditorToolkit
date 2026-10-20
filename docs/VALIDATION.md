@@ -9,6 +9,68 @@ User maps, scenes, PNG/MP4 captures, raw PCM, tokens and complete runtime logs a
 kept local and are excluded from Git and release assets. Documentation and future
 release notes are maintained in English.
 
+## Subsequent live verification of the packaged v0.7.0-rc.2 binaries
+
+The user later closed StarCraft II and authorized live verification. The scope
+was then narrowed to checking existing functionality and assessing the ModKit
+integration plan; no new MCP methods were added. See the
+[five-point bridge assessment](MODKIT_BRIDGE_STATUS.md).
+
+The installed Nydus v54 mod with its actual installed dependencies and the
+original NydusIntroBlue scene passed the existing hidden scene test: three Front
+Formation frames (990/1980/2970 ms) and Top at 1980 ms were distinct detailed
+images. Visual inspection showed Marines and the platform. Original GUI trigger
+generation and Compile All after the scene passed with **zero compiler errors**.
+Messages/Console was inspected, complete and empty in that session. Exported
+Galaxy was **342,851 bytes**, SHA-256
+`ad36611c87c754f9944b978f921e67ee7767f75a277f0a293d98830f2aaff078`;
+file bytes and HTTP artifact download matched. Source scene/mod hashes stayed
+unchanged. Across 1,584 desktop observations, visible windows, foreground samples
+and input-desktop changes were all zero. The test closed its owned worker.
+
+The initial full-map fixture rendered ground/hills but no placed models. Its
+test generator had written Objects XML without registering the native `plob`
+component, Objects.version or placement preloads. The fixture generator now
+prepares these in a new private derivative, preserves existing preload entries
+and places doodads at terrain height. User maps and the renderer/API were not
+changed to correct this fixture problem.
+
+The corrected fixture's original full-map export produced a 1024×768 image,
+786,432 nonblack pixels and 219 luminance bins. Visual inspection confirmed both
+hills, four corner buildings, ten Marines and four doodads. Its first full export
+recorded 2,730 samples with no visible windows, foreground samples, desktop
+changes, injected input or SwitchDesktop calls. The original source map hash was
+unchanged. Water is absent from this fixture and remains untested.
+
+The subsequent `include_units:false` image still showed the units. Checkbox
+readback and 20,005 pixels changing by more than eight RGB levels were therefore
+not a valid category-exclusion certificate; animation/markers can also change
+pixels. The image requested without both categories still contained units and
+doodads (8,194 differing pixels versus the previous image). Category exclusion
+is a known limitation of the current adapter. The test's review prompt
+now explicitly requires checking category absence in the corresponding images.
+No renderer/API feature was added during this assessment.
+
+The automated export/decode/pixel-identity/download/overwrite/search/crop checks
+completed, followed by visual review. Saved-object search found CommandCenter at
+XY (7.68, 6.72); its requested coordinate region returned a 161×161 PNG visibly
+containing that building. The source full-map pixel rectangle was
+`[42,580,203,741]`, without resampling. Final desktop observation: **10,429
+samples**, all visible-window/foreground/desktop-change counters zero. Source
+hashes were unchanged and the owned Editor closed. The installed executable's
+SHA-256 remained unchanged as well.
+
+Overall result is **partial native acceptance**, not an unconditional pass:
+default relief/unit/doodad capture and this fixture's crop alignment are visually
+confirmed; category exclusion failed and water was not tested. Automated pixel
+differences must not override that visual result. The packaged API's experimental
+flags remain unchanged; no new runtime implementation was shipped in this check.
+
+The existing ModKit Data reader was checked separately on its current loaded
+project, including bounded catalog lookup and declared-field/provenance reads.
+Unknown runtime overrides remained unknown. This is XML catalog-reader evidence,
+not a test of native load-error classification or engine-effective Data values.
+
 ## v0.7.0-rc.2: saved object search and experimental map regions
 
 Live Editor testing was explicitly deferred while the user is playing. No new

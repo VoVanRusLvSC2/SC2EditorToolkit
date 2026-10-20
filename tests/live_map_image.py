@@ -97,6 +97,9 @@ def main():
                 with urllib.request.urlopen(request, timeout=30) as response:
                     assert hashlib.sha256(response.read()).hexdigest() == result['artifact']['sha256'] == sha(target)
             differences = {}
+            # Animation and selection markers can change pixels even when a
+            # category remains visible. This is a transport/difference check,
+            # never a semantic certificate for visibility switches.
             for left, right in [('All', 'NoUnits'), ('NoUnits', 'Ground')]:
                 diff = ImageChops.difference(images[left], images[right])
                 changed = sum(max(pixel) > 8 for pixel in diff.getdata())
@@ -128,7 +131,7 @@ def main():
             save('VERIFICATION', {
                 'status': 'AUTOMATED_MAP_EXPORT_CHECKS_PASSED_VISUAL_REVIEW_REQUIRED',
                 'sourceUnchanged': True, 'pixelDifferences': differences,
-                'visualReviewRequired': 'Check hills, four corner unit landmarks, doodads and boundaries in All.png; confirm CommandCenter is in CornerRegion.png',
+                'visualReviewRequired': 'Check All.png includes hills, four corner landmarks and doodads; NoUnits.png must exclude units and Ground.png must exclude units/doodads; confirm CommandCenter is in CornerRegion.png',
                 'scope': 'This fixture and installed Editor/device only'})
             print('Automated checks passed. Visually review All.png, NoUnits.png and Ground.png.', flush=True)
         finally:

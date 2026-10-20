@@ -41,6 +41,13 @@ def main():
             compiled=call('/triggers/compile',{});save('compile-after', {k:v for k,v in compiled.items() if k!='galaxy'})
             assert compiled['nativeCompilePassed'] and compiled['nativeGenerationVerified'],compiled
             print('Original trigger compile after cutscene passed',flush=True)
+            exported=call('/galaxy/export',{'output':str(work/'Exported.galaxy')});save('galaxy-export',exported)
+            assert exported['status']=='GALAXY_EXPORTED',exported
+            assert hashlib.sha256((work/'Exported.galaxy').read_bytes()).hexdigest()==compiled['sourceSha256']
+            request=urllib.request.Request(info['url']+exported['artifact']['download'],headers={'X-SC2-Token':info['token']})
+            with urllib.request.urlopen(request,timeout=30) as response:assert response.read()==(work/'Exported.galaxy').read_bytes()
+            diagnostic=call('/editor/diagnostics',{});save('diagnostics-after',diagnostic)
+            print('Galaxy file/download byte identity and native diagnostics readback passed',flush=True)
         assert all(hashlib.sha256(Path(f).read_bytes()).hexdigest()==h for f,h in hashes.items()),'User source changed'
         save('VERIFICATION',{'status':'NATIVE_CUTSCENE_BACKGROUND_PASSED','frames':[{'camera':r['frame']['camera'],'actualTimeMs':r['frame']['actualTimeMs'],'sha256':r['artifact']['sha256'],'png':r['artifact']['path']} for r in results],
             'sourceUnchanged':True,'mapUnchanged':True,'desktopObservation':results[-1]['desktopObservation'],'editorPid':pid})
