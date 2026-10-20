@@ -1,0 +1,20 @@
+MinHook v1.3.4 — Tsuda Kageyu, MIT-compatible license including its bundled
+disassembler notices. Source and full license: vendor/minhook/LICENSE.txt.
+https://github.com/TsudaKageyu/minhook/tree/v1.3.4
+
+mpqcli v0.10.0 — thegraydot, MIT. Bundled locally/release only; binary is not
+tracked in source control. Full license: tools/mpqcli/LICENSE.txt.
+https://github.com/thegraydot/mpqcli/tree/v0.10.0
+Uses StormLib (MIT); upstream attribution is retained by mpqcli.
+Full dependency notices are in tools/mpqcli/LICENSE-StormLib.txt and LICENSE-CLI11.txt.
+
+Packaged executables use CPython (Python Software Foundation License) and
+PyInstaller (GPL with the bootloader exception allowing application distribution).
+https://docs.python.org/3/license.html
+https://pyinstaller.org/en/stable/license.html
+
+The installed StarCraft II Editor, game assets and user maps/mods are external
+requirements. They are not included in this repository or program package.
+
+Generated D3D9 wrappers describe the ABI from the locally installed Windows SDK.
+The Windows SDK headers themselves are not redistributed.

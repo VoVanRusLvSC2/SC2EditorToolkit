@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<TriggerData Version="2">
+ <Root><Item Type="Variable" Id="A0200001"/></Root>
+ <Element Type="Variable" Id="A0200001">
+  <Identifier>NativeOracleMarker20261020</Identifier>
+  <VariableType><Type Value="int"/></VariableType>
+  <Value Type="Param" Id="A0200002"/>
+ </Element>
+ <Element Type="Param" Id="A0200002"><Value>170122</Value><ValueType Type="int"/></Element>
+</TriggerData>
