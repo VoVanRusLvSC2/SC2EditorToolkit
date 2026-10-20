@@ -1,8 +1,16 @@
 # SC2 Native Toolkit
 
-Приватный модульный backend оригинального StarCraft II Editor для VoVanRusLvSC2.
+Модульный backend оригинального StarCraft II Editor. Автор и владелец
+оригинального кода — **VoVanRusLvSC2**.
 Редактор работает на отдельном невидимом рабочем столе Windows. Физический ввод
 мыши/клавиатуры и переключение рабочего стола не используются.
+
+Код опубликован по [SC2 Native Toolkit Attribution License](LICENSE).
+Использовать и изменять его можно, сохраняя авторство; продукты и публичные
+сервисы, использующие существенную часть кода, должны указывать
+«Uses SC2 Native Toolkit by VoVanRusLvSC2» и ссылку на проект в документации,
+разделе About или credits. См. [NOTICE](NOTICE). Это условие относится к коду,
+а не к экспортированным роликам и другому пользовательскому контенту.
 
 ## Возможности
 
@@ -107,7 +115,7 @@ POST /cutscene/export/cancel  {"job_id":"ID из progress"}
 `frameManifest` содержит таймкоды, HWND источника, статистику и хэши исходных кадров.
 MP4 возвращается как `video/mp4` артефакт и скачивается по `/artifacts/<id>`.
 
-Исходники находятся в ветке `main` приватного
+Исходники находятся в ветке `main` публичного
 [репозитория SC2NativeToolkit](https://github.com/VoVanRusLvSC2/SC2NativeToolkit/tree/main):
 `app/sc2native/video.py`, `src/cutscene_bridge.inc`, HTTP/MCP-модули и тесты.
 

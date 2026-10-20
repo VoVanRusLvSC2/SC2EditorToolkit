@@ -11,7 +11,7 @@ foreach($program in @(@{Name='SC2NativeAPI';Entry='hidden_api.py'},@{Name='SC2Na
  & $Python @pyArgs
  if($LASTEXITCODE){throw ('Package failed: '+$program.Name)}
 }
-foreach($file in 'README.md','THIRD_PARTY.txt','LICENSE'){
+foreach($file in 'README.md','THIRD_PARTY.txt','LICENSE','NOTICE'){
  if(Test-Path -LiteralPath (Join-Path $PSScriptRoot $file)){Copy-Item -LiteralPath (Join-Path $PSScriptRoot $file) -Destination (Join-Path $PSScriptRoot $OutputDirectory)}
 }
 Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'vendor\minhook\LICENSE.txt') -Destination (Join-Path $PSScriptRoot "$OutputDirectory\LICENSE-MinHook.txt")

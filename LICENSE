@@ -1,6 +1,43 @@
-Copyright (c) 2026 VoVanRusLvSC2. All rights reserved.
+SC2 Native Toolkit Attribution License, version 1.0
 
-Private project. No redistribution or sublicensing is granted for original
-project source code without the owner's permission.
+Copyright (c) 2026 VoVanRusLvSC2.
+Original project: https://github.com/VoVanRusLvSC2/SC2NativeToolkit
 
-Third-party components retain their own licenses; see THIRD_PARTY.txt.
+1. Permission. You may use, study, copy, modify, build, distribute and sell the
+   original project code, including as part of other software or services,
+   provided that you comply with the attribution requirements below.
+
+2. Attribution. Keep this LICENSE and the original copyright and NOTICE with
+   redistributed source code. For a distributed application, binary, library,
+   extension, or a publicly provided service that uses a substantial part of
+   this code, include this credit in its documentation, credits, About page,
+   or other reasonably accessible notice supplied with that product:
+
+   "Uses SC2 Native Toolkit by VoVanRusLvSC2"
+   https://github.com/VoVanRusLvSC2/SC2NativeToolkit
+
+   A translated credit is permitted if the author's name, project name and
+   project link remain identifiable. Private internal use requires retaining
+   the notices with the code, not making a public announcement.
+
+3. Authorship. This permission does not transfer ownership of the original
+   code. Do not claim that you authored the original project. Identify your
+   modifications when distributing a modified version. Attribution does not
+   imply endorsement by VoVanRusLvSC2.
+
+4. Generated content. This attribution requirement applies to use of the code,
+   not to videos, images, maps, scripts or other user content merely produced
+   with the software. Rights in game assets and user content are not granted
+   by this license.
+
+5. Third-party code. This license covers only the original project code.
+   Third-party components keep their respective licenses and notices; see
+   THIRD_PARTY.txt and the component license files. Do not replace their
+   authorship notices with the project author's name.
+
+6. No warranty. The software is supplied as available, without any warranty
+   of fitness, reliability, non-infringement or suitability for a purpose.
+   To the extent permitted by applicable law, its author is not liable for
+   damages or losses arising from using or being unable to use the software.
+
+This is a custom attribution license, not the unmodified MIT license.
