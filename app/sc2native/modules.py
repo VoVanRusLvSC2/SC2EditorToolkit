@@ -10,4 +10,4 @@ MODULES=[
   'video':{'format':'mp4','codec':'h264','audioIncluded':True,'audioCodec':'aac','audioSource':'owned Editor output buffers','audioOptional':True,'defaultFps':30,'maxFps':60,'requires':['ffmpeg','ffprobe']}},
 ]
 
-def capabilities():return {'version':'0.9.0-rc.1','modules':MODULES,'background':True,'mouseKeyboardAutomation':False}
+def capabilities():return {'version':'0.9.1-rc.1','modules':MODULES,'background':True,'mouseKeyboardAutomation':False}

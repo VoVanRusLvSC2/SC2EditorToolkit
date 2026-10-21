@@ -47,7 +47,10 @@ class Worker:
         state_path=startup/'state.json'
         if not state_path.is_file():raise RuntimeError('Hidden startup failed; see '+str(directory))
         self.state=json.loads(state_path.read_text())
-        if child.returncode or self.state['status']!='HIDDEN_EDITOR_READY':raise RuntimeError('Hidden Editor not ready: '+str(self.state['status'])+'; '+str(directory))
+        if child.returncode or self.state['status']!='HIDDEN_EDITOR_READY':
+            reason='Hidden Editor not ready: '+str(self.state['status'])+'; '+str(directory)
+            self._reset_owned_editor()
+            raise RuntimeError(reason)
         self.state['currentDocument']=seed.name;self.state['documentPath']=str(seed);self.state['startupReport']=str(state_path)
         if self.monitor is None:self.monitor=Observation(self.state['pid'])
         oracle.save(self.work/'worker.json',self.state)
@@ -66,6 +69,8 @@ class Worker:
     def execute(self,request,_locked=False):
         if not _locked and not self.lock.acquire(blocking=False):raise RuntimeError('Worker busy; serialize requests')
         try:
+            self.last_result=None
+            if 'compile' in request and type(request['compile']) is not bool:raise ValueError('compile must be a JSON boolean')
             template=Path(request.get('template') or request.get('map','')).resolve(strict=True)
             if not template.is_file() or template.suffix.lower() not in ('.sc2map','.sc2mod'):raise ValueError('template must be an existing .SC2Map or .SC2Mod archive')
             request_dir=self.work/'requests'/uuid.uuid4().hex;request_dir.mkdir(parents=True)
@@ -90,10 +95,10 @@ class Worker:
             result=oracle.convert(args)
             # Load may succeed even if generation/compilation subsequently fails.
             manifest=Path(args.job)/'manifest.json'
-            if result.get('steps',{}).get('load',{}).get('mapLoaded'):
+            if result.get('currentDocumentPath'):
                 self.scene=None
-                self.state['currentDocument']=Path(json.loads(manifest.read_text(encoding='utf-8'))['workingDocument']).name
-                self.state['documentPath']=json.loads(manifest.read_text(encoding='utf-8'))['workingDocument']
+                self.state['currentDocument']=Path(result['currentDocumentPath']).name
+                self.state['documentPath']=result['currentDocumentPath']
                 oracle.save(self.work/'worker.json',self.state)
             result['hiddenWorker']={k:self.state[k] for k in ('pid','desktop','startupReport')}
             result['desktopObservation']=self.monitor.snapshot()
@@ -107,13 +112,17 @@ class Worker:
                 self.last_result=result
             if (Path(args.job)/'03-compile').exists():result['diagnostics']=parse_native_diagnostics(Path(args.job)/'03-compile',result.get('steps',{}).get('compile'))
             result['operationDiagnostics']={}
-            for stage in ('01-load','02-generate','03-compile'):
+            for stage in result.get('stepEvidence',{}).values():
                 evidence=Path(args.job)/stage
                 if (evidence/'result.json').is_file():
                     native=json.loads((evidence/'result.json').read_text(encoding='utf8'))
+                    if native.get('operation') not in ('load','save-document','generate','compile'):continue
                     result['operationDiagnostics'][stage]=operation_diagnostics(evidence,native)
             result['newMapDataErrors']=[{'phase':name,**entry} for name,diagnostic in result['operationDiagnostics'].items() for entry in diagnostic['newErrors']]
             if result['newMapDataErrors']:result.update(status='FAILED',error='New native map/Data errors were reported; compiler results remain separate')
+            fatal=not result.get('currentDocumentPath') or any(n.get('exceptionCode') for n in result.get('steps',{}).values())
+            if result['status']=='FAILED' and fatal:
+                self._reset_owned_editor();result['ownedWorkerReset']=True
             oracle.save(request_dir/'api-result.json',result)
             return result
         finally:
@@ -121,6 +130,7 @@ class Worker:
     def open_document(self,request,_locked=False):
         if not _locked and not self.lock.acquire(blocking=False):raise RuntimeError('Worker busy; serialize requests')
         try:
+            self.last_result=None
             source=Path(request.get('map') or request.get('template','')).resolve(strict=True)
             if not source.is_file() or source.suffix.lower() not in ('.sc2map','.sc2mod'):raise ValueError('map must be an existing .SC2Map or .SC2Mod archive')
             directory=self.work/'opens'/uuid.uuid4().hex;directory.mkdir(parents=True)
@@ -161,7 +171,13 @@ class Worker:
             if not template.is_file() or template.suffix.lower() not in ('.sc2map','.sc2mod'):raise ValueError('Existing .SC2Map/.SC2Mod template required')
             self.ensure(template,request.get('startup_module','triggers'))
             directory=self.work/'editor-actions'/uuid.uuid4().hex;directory.mkdir(parents=True)
-            native=self._native(directory,'inspect')
+            try:native=self._native(directory,'inspect')
+            except oracle.NativeStepError as error:
+                result={'status':'FAILED','error':str(error),'failureStage':'inspectCurrent','failureKind':
+                    'NATIVE_CONTROLLER_FAILED' if (error.native_result or {}).get('status')=='NATIVE_CONTROLLER_FAILED' else 'NATIVE_STEP_FAILED',
+                    'failureNative':error.native_result,'failureEvidence':str(error.evidence_directory),
+                    'desktopObservation':self.monitor.snapshot(),'ownedWorkerReset':True,'automaticRetry':False}
+                self._reset_owned_editor();oracle.save(directory/'start-result.json',result);return result
             return {'status':'HIDDEN_EDITOR_STARTED','pid':self.state['pid'],'document':self.state['currentDocument'],
                 'native':native,'desktopObservation':self.monitor.snapshot()}
         finally:self.lock.release()
@@ -187,6 +203,7 @@ class Worker:
     def compile_current(self,request):
         if not self.lock.acquire(blocking=False):raise RuntimeError('Worker busy')
         try:
+            self.last_result=None
             if not self.alive():raise RuntimeError('Start/open a document first')
             scope,context=self._context(request)
             # Reuse the proven native pipeline with the document's own XML.

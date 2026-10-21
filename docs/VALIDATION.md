@@ -10,6 +10,63 @@ User maps, scenes, PNG/MP4 captures, raw PCM, tokens and complete runtime logs a
 kept local and are excluded from Git and release assets. Documentation and future
 release notes are maintained in English.
 
+## v0.9.1-rc.1: recovery changes; native acceptance blocked (2026-10-21)
+
+This is a diagnostic prerelease. It is **not** a new native stability PASS.
+The source and packaged candidates both stopped before generation when the
+existing SetWindowsHookEx thread-guard setup returned Win32 126. A separate
+unaltered v0.9.0-rc.1 executable was extracted from its SHA-verified published
+ZIP and failed at the same setup stage. This reproduces a current environmental
+failure in an earlier known-good baseline; it does not identify the root cause.
+The historical automatic-approval rejection is a separate event, not this
+native Windows return value. No alternate injection path or security-setting
+change was attempted.
+
+Read-only diagnostics confirmed x64 binaries, available DLL files, matching
+export/module ownership and zero flags in the examined caller/Editor dynamic
+code, Win32k, extension-point, binary-signature and image-load policies. No
+matching recent Code Integrity/AppLocker events were found. These observations
+do not establish that all possible restrictions are absent. The underlying
+Win32 126 condition remains unresolved. Every owned diagnostic Editor was shut
+down; original user archives, installed Editor and other project files were
+preserved. Small live fixtures were reused without loading Terrain or gameplay.
+
+Changes with automated coverage:
+
+- Failed new conversion/compilation/open requests invalidate the earlier Galaxy
+  export, rather than returning stale code as the latest result.
+- Failed startup is cleaned up. Native controller failures retain exit code,
+  stderr, exact stage and evidence location instead of a generic missing-result
+  message. The startup endpoint no longer leaves its failed owned worker running.
+- Native requests use exact document-caption identity. Read-only inspection of
+  an owned dirty document is allowed; the clean-document guard for generation
+  remains in force.
+- Conversion orchestration detects dirty state, invokes original Save As on a
+  fresh private archive, then generates from the saved document. It rejects
+  typed GUI identities removed by native serialization. This check does not
+  prove full GUI semantic equivalence; numeric/template changes remain outside
+  its coverage. Native-saved archive identity/hash and subsequent worker state
+  are kept consistent.
+
+Fifty Python tests and two C++ suites passed. The dirty Save As sequence and
+GUI-loss rejection have mocked orchestration tests, not new native acceptance.
+The opt-in `tests/live_stability.py` covers repeated A/B submissions, downloads,
+wrong-context failures, stale-export rejection, orphaned GUI loss, recovery and
+an optional real GUI candidate/negative array-declaration case. In this run it
+stopped at the initial hook setup; none of those later native assertions was
+counted as passed. Previous dated native evidence below remains historical.
+
+The final packaged startup-failure test did pass its negative assertions:
+HTTP 422 included `NATIVE_CONTROLLER_FAILED`, controller exit 2 and Win32 126;
+the owned Editor was reset, `/health` reported no running worker, stale Galaxy
+export was refused, and the API shut down normally. Its 298 observations had
+zero visible windows, foreground samples or desktop changes. This accepts
+failure handling only; native generation and compilation were not tested by
+that negative case. Packaged HTTP and MCP (18 tools) checks also passed.
+
+The neighboring converter's 11 strict GUI refusals occur in a different pipeline
+and were not waived, reclassified or repaired by this toolkit release.
+
 ## v0.9.0-rc.1: saved map-camera framing (2026-10-20–21)
 
 Saved `ObjectCamera` listing is read-only and does not require an Editor. The

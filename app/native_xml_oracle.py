@@ -69,7 +69,11 @@ def native_step(job,stage,pid,current,marker='',context='',map_path=None,scope='
         # Do not terminate a handler that may still be running inside the Editor.
         code=process.wait()
     result_path=out/'result.json'
-    if not result_path.is_file():raise RuntimeError(f'Native {stage} failed before an evidence result; see stderr')
+    if not result_path.is_file():
+        detail=(job/(stage+'.stderr.txt')).read_text(encoding='utf8',errors='replace')[-2000:].strip()
+        failure=f'Native {stage} produced no evidence result (controller exit {code}): '+detail
+        raise NativeStepError(failure,{'status':'NATIVE_CONTROLLER_FAILED','operation':stage.split('-',1)[1],
+            'error':None,'controllerExitCode':code,'failure':failure,'handlerCompletionKnown':False},out)
     result=json.loads(result_path.read_text(encoding='utf-8'))
     compile_diagnostic=stage.endswith('-compile') and code==1 and result.get('compilerErrors',-1)>0
     if (code and not compile_diagnostic) or result['status']!='NATIVE_DLL_REQUEST_COMPLETED' or result['error']:
@@ -82,34 +86,69 @@ def convert(args):
     with Session(args.pid):
         prepared=prepare(args)
         job=Path(args.job).resolve();manifest=json.loads((job/'manifest.json').read_text(encoding='utf-8'))
-        result={'status':'STARTED_NOT_CONFIRMED','originalGenerator':True,'replacementEmitterUsed':False,'job':str(job),'nativeGenerationVerified':False,'nativeCompilePassed':False,'inputInjectionUsed':False,'steps':{}}
+        result={'status':'STARTED_NOT_CONFIRMED','originalGenerator':True,'replacementEmitterUsed':False,'job':str(job),'nativeGenerationVerified':False,'nativeCompilePassed':False,'inputInjectionUsed':False,'steps':{},'stepEvidence':{},'semanticEquivalenceVerified':False}
+        current_step=None;stage=None
+        def step(name,directory,document,**options):
+            nonlocal current_step,stage
+            current_step=name;stage=directory;result['stepEvidence'][name]=directory
+            try:value=native_step(job,directory,args.pid,document,**options)
+            except NativeStepError as error:
+                if error.native_result:result['steps'][name]=error.native_result
+                raise
+            result['steps'][name]=value;save(job/'conversion.json',result);return value
         save(job/'conversion.json',result)
         try:
             path=Path(prepared['workingDocument'])
             if files.sha(path)!=manifest['workingDocumentSha256']:raise RuntimeError('Prepared document changed before native loading')
             if files.sha(manifest['editor'])!=manifest['editorSha256']:raise RuntimeError('Original Editor build changed')
             if not manifest['contextLabel']:raise ValueError('Supply an exact authored map root --context-label or matching TriggerStrings')
-            loaded=native_step(job,'01-load',args.pid,args.current_document,map_path=path)
+            inspected=step('inspectCurrent','00-inspect',args.current_document)
+            if inspected.get('documentDirty'):
+                previous=job/'previous-current';previous.mkdir()
+                previous_path=previous/('NativePrevious-'+manifest['jobId'].replace('-','')[:12]+Path(args.current_document).suffix)
+                step('savePrevious','00-save-document',args.current_document,map_path=previous_path)
+                args.current_document=previous_path.name
+            loaded=step('load','01-load',args.current_document,map_path=path)
             if not loaded['mapLoaded']:raise RuntimeError('Original document loader did not confirm the new archive')
-            result['steps']['load']=loaded;save(job/'conversion.json',result)
-            generated=native_step(job,'02-generate',args.pid,path.name,args.marker,manifest['contextLabel'],scope=manifest['scope'])
-            result['steps']['generate']=generated
+            result['currentDocumentPath']=str(path)
+            inspected=step('inspectLoaded','01-inspect',path.name)
+            if inspected.get('documentDirty'):
+                original_path=path;normalized=job/'native-saved';normalized.mkdir()
+                path=normalized/('NativeSaved-'+manifest['jobId'].replace('-','')[:12]+path.suffix)
+                serialized=step('save','01-save-document',original_path.name,map_path=path)
+                if not serialized.get('documentIo',{}).get('saved'):raise RuntimeError('Original native save was not confirmed')
+                result['currentDocumentPath']=str(path)
+                read=subprocess.run([str(files.mpq_tool(args.mpqcli)),'read','Triggers',str(path)],capture_output=True,timeout=120,creationflags=getattr(subprocess,'CREATE_NO_WINDOW',0))
+                if read.returncode:raise RuntimeError('Cannot verify native-saved GUI')
+                from sc2native.gui_normalization import compare_native_gui
+                result['nativeNormalization']=compare_native_gui(expected_xml(job),read.stdout)
+                if result['nativeNormalization']['removedElementCount']:
+                    result['failureKind']='NATIVE_GUI_NORMALIZATION_LOSS'
+                    raise RuntimeError('Original Editor discarded submitted GUI elements; compilation cannot establish XML equivalence')
+                manifest.update(submittedWorkingDocument=str(original_path),submittedWorkingDocumentSha256=manifest['workingDocumentSha256'],
+                    workingDocument=str(path),workingDocumentSha256=files.sha(path),nativeNormalization=result['nativeNormalization'])
+                save(job/'manifest.json',manifest)
+            generated=step('generate','02-generate',path.name,marker=args.marker,context=manifest['contextLabel'],scope=manifest['scope'])
             source=(job/'02-generate'/'Native.galaxy').read_bytes()
             for text in args.expect_text:
                 if text.encode('utf-8') not in source:raise RuntimeError('Expected source text absent: '+text)
             result.update(nativeGenerationVerified=True,currentDocument=path.name,output=str(job/'Native.galaxy'),sourceSha256=hashlib.sha256(source).hexdigest(),sourceBytes=len(source))
             shutil.copyfile(job/'02-generate'/'Native.galaxy',job/'Native.galaxy');save(job/'conversion.json',result)
             if args.compile:
-                compiled=native_step(job,'03-compile',args.pid,path.name,args.marker,scope=manifest['scope'])
-                result['steps']['compile']=compiled
-                if not compiled['nativeCompilePassed']:raise RuntimeError('Fresh native compilation not proven')
+                compiled=step('compile','03-compile',path.name,marker=args.marker,scope=manifest['scope'])
+                result['compilerErrors']=compiled.get('compilerErrors')
+                if not compiled['nativeCompilePassed']:
+                    result['failureKind']='NATIVE_COMPILE_ERRORS' if compiled.get('compilerErrors',-1)>0 else 'NATIVE_COMPILE_UNCONFIRMED'
+                    raise RuntimeError('Fresh native compilation not proven')
                 result['nativeCompilePassed']=True
             if Path(args.triggers).read_bytes()!=expected_xml(job):raise RuntimeError('Original XML source changed during conversion')
             result['status']='NATIVE_XML_TO_GALAXY_BACKGROUND_PASSED'
             result['allNativeStepsHadZeroEditorForegroundEvents']=all(v['editorForegroundEvents']==0 for v in result['steps'].values())
             result['manualExportByteIdentityVerified']=False
         except Exception as error:
-            result.update(status='FAILED',error=str(error))
+            result.update(status='FAILED',error=str(error),failureStage=current_step or 'prepare',failureEvidence=str(job/stage) if stage else str(job))
+            result.setdefault('failureKind','NATIVE_CONTROLLER_FAILED' if isinstance(error,NativeStepError) and error.native_result and error.native_result.get('status')=='NATIVE_CONTROLLER_FAILED' else 'NATIVE_STEP_FAILED' if isinstance(error,NativeStepError) else 'VERIFICATION_FAILED')
+            if isinstance(error,NativeStepError):result['failureNative']=error.native_result
         save(job/'conversion.json',result)
         return result
 

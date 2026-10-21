@@ -112,6 +112,12 @@ int wmain(int argc,wchar_t** argv){
     HMODULE dll=LoadLibraryW(dllPath.c_str());if(!dll)return Error("Cannot load bridge DLL locally");
     auto hookProc=reinterpret_cast<HOOKPROC>(GetProcAddress(dll,"BridgeHook"));auto guardProc=reinterpret_cast<HOOKPROC>(GetProcAddress(dll,"BridgeFocusGuard"));
     if(!hookProc||!guardProc)return Error("Missing bridge exports");
+    HMODULE hookOwner=nullptr,guardOwner=nullptr;
+    GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS|GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,reinterpret_cast<LPCWSTR>(hookProc),&hookOwner);
+    GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS|GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,reinterpret_cast<LPCWSTR>(guardProc),&guardOwner);
+    wchar_t loadedDll[32768]{};GetModuleFileNameW(dll,loadedDll,32768);
+    {std::ofstream preflight(out/"hook-preflight.json");preflight<<"{\"dll\":"<<Q(loadedDll)<<",\"hookOwnerMatches\":"<<(hookOwner==dll?"true":"false")<<",\"guardOwnerMatches\":"<<(guardOwner==dll?"true":"false")<<",\"targetPid\":"<<wantedPid<<",\"targetThread\":"<<tid<<"}";}
+    if(hookOwner!=dll||guardOwner!=dll)return Error("Hook exports do not belong to the loaded bridge module");
     HHOOK guard=SetWindowsHookExW(WH_CBT,guardProc,dll,tid);if(!guard)return Error("Cannot install Editor-thread focus veto");
     HHOOK hook=SetWindowsHookExW(WH_CALLWNDPROC,hookProc,dll,tid);if(!hook){UnhookWindowsHookEx(guard);return Error("Cannot install Editor-thread DLL hook");}
     HWINEVENTHOOK events=SetWinEventHook(EVENT_SYSTEM_FOREGROUND,EVENT_SYSTEM_FOREGROUND,nullptr,ForegroundEvent,0,0,WINEVENT_OUTOFCONTEXT);
@@ -152,6 +158,7 @@ int wmain(int argc,wchar_t** argv){
     ending=json.rfind("\n}");auto& t=b->terrain;json.insert(ending,",\n\"terrainExport\":{\"size\":"+std::to_string(t.size)+",\"includeUnits\":"+std::to_string(t.includeUnits)+",\"includeDoodads\":"+std::to_string(t.includeDoodads)+",\"exported\":"+std::to_string(t.exported)+",\"fullMap\":"+std::to_string(t.fullMap)+",\"topDown\":"+std::to_string(t.topDown)+",\"optionsConfirmed\":"+std::to_string(t.optionsConfirmed)+"}");
     auto& io=b->documentIo;ending=json.rfind("\n}");json.insert(ending,",\n\"documentIo\":{\"saveCommandId\":"+std::to_string(io.saveCommand)+",\"closeCommandId\":"+std::to_string(io.closeCommand)+",\"saved\":"+std::to_string(io.saved)+",\"closed\":"+std::to_string(io.closed)+",\"reopened\":"+std::to_string(io.reopened)+",\"dataLoaded\":"+std::to_string(io.dataLoaded)+",\"savedBytes\":"+std::to_string(io.savedBytes)+"}");
     auto& d=b->diagnosticCapture;
+    ending=json.rfind("\n}");json.insert(ending,",\n\"documentDirty\":"+std::string(b->loadedTitle[0]&&DocumentWindow(b->loadedTitle,expected,nullptr,true)&&!DocumentWindow(b->loadedTitle,expected,nullptr,false)?"true":"false"));
     auto& mc=b->mapCamera;ending=json.rfind("\n}");
     std::ostringstream cameraJson;cameraJson<<",\n\"mapCamera\":{\"selected\":"<<mc.selected<<",\"valuesRead\":"<<mc.valuesRead<<",\"name\":"<<Q(mc.name)<<",\"target\":{\"x\":"<<mc.x<<",\"y\":"<<mc.y<<",\"z\":"<<mc.z<<"},\"pitch\":"<<mc.pitch<<",\"yaw\":"<<mc.yaw<<",\"roll\":"<<mc.roll<<",\"distance\":"<<mc.distance<<",\"fov\":"<<mc.fov<<"}";
     json.insert(ending,cameraJson.str());

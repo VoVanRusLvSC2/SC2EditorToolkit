@@ -3,7 +3,13 @@
 A modular backend for the original StarCraft II Editor. Original code author and
 project owner: **VoVanRusLvSC2**.
 
-**v0.9.0-rc.1 is a prerelease.** Whole-map and coordinate-region export are experimental:
+**v0.9.1-rc.1 is a diagnostic prerelease, not a stability certification.**
+Recovery and failure reporting have unit/transport coverage. The current live
+environment rejects the existing thread-hook setup with Win32 126, including
+the unchanged published v0.9.0-rc.1 baseline. New dirty-document save/recovery
+logic has not passed a live Editor acceptance run. See [validation history](docs/VALIDATION.md).
+
+Whole-map and coordinate-region export are experimental:
 the original full-map export has now been visually verified on a private fixture
 with hills, placed units and doodads. Water and broader map/dependency coverage
 remain untested. Saved map cameras can drive original Terrain PNG captures.
@@ -196,6 +202,24 @@ and optional `output` are published only when the whole check is verified and
 native diagnostics are known clear. Existing output requires `overwrite:true`;
 source and baseline archives cannot be export targets. All phases include the
 archive revision hash being checked. Raw evidence remains local to the worker.
+
+## Conversion failure reporting
+
+Failed conversions return `failureKind`, `failureStage` and `failureEvidence`.
+Available native/controller diagnostics remain in `failureNative`; missing
+native evidence is unknown, not zero errors. Controller setup failures preserve
+their exit code and stderr. A failed startup resets only its owned Editor.
+
+A new conversion/open/compile attempt invalidates the previous Galaxy export.
+If fresh generation succeeds but compilation reports errors, its new script
+can still be inspected/exported with `nativeCompilePassed:false`.
+
+The diagnostic recovery implementation uses original Save As on a fresh private
+archive before generating a dirty document. It refuses native serialization
+that discards submitted typed GUI identities and retains the comparison report.
+Generation's saved-document guard remains enabled. This does not certify full
+GUI semantic equivalence or repair the submitted XML. **Live acceptance of this
+new recovery sequence is pending** because of the current Win32 126 failure.
 
 ## Saved map cameras
 

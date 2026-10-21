@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Deliberately wrong Trigger/FunctionCall parent: native loader discards it. -->
+<TriggerData Version="2">
+ <Root><Item Type="Trigger" Id="AA000001"/><Item Type="Variable" Id="AA000005"/></Root>
+ <Element Type="Trigger" Id="AA000001"><Identifier>NativeOrphanProbe</Identifier><Event Type="FunctionCall" Id="AA000002"/><FunctionCall Type="FunctionCall" Id="AA000003"/></Element>
+ <Element Type="FunctionCall" Id="AA000002"><FunctionDef Type="FunctionDef" Library="Ntve" Id="00000120"/></Element>
+ <Element Type="Variable" Id="AA000005"><Identifier>clock</Identifier><VariableType><Type Value="timer"/></VariableType></Element>
+ <Element Type="FunctionCall" Id="AA000003"><FunctionDef Type="FunctionDef" Library="Ntve" Id="5870F9D1"/><FunctionCall Type="FunctionCall" Id="AA000004"/></Element>
+ <Element Type="FunctionCall" Id="AA000004"><FunctionDef Type="FunctionDef" Library="Ntve" Id="00000049"/><SubFunctionType Type="SubFuncType" Library="Ntve" Id="789273B3"/><Parameter Type="Param" Id="AA000006"/></Element>
+ <Element Type="Param" Id="AA000006"><ParameterDef Type="ParamDef" Library="Ntve" Id="00000086"/><Variable Type="Variable" Id="AA000005"/></Element>
+</TriggerData>

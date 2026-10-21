@@ -36,7 +36,7 @@ with (work / 'stdout.log').open('wb') as stdout, (work / 'stderr.log').open('wb'
             time.sleep(.1)
         info = json.loads((work / 'runtime' / 'api-info.json').read_text())
         code, health = call('/health', authorized=False)
-        assert code == 200 and health['version'] == '0.9.0-rc.1' and not health['workerRunning'], health
+        assert code == 200 and health['version'] == '0.9.1-rc.1' and not health['workerRunning'], health
         assert call('/modules', authorized=False)[0] == 403
         assert call('/terrain/export', {'size': 512}, authorized=False)[0] == 403
         code, modules = call('/modules')
@@ -57,6 +57,8 @@ with (work / 'stdout.log').open('wb') as stdout, (work / 'stderr.log').open('wb'
         assert hashlib.sha256(archive.read_bytes()).hexdigest() == before_hash
         code, cameras = call('/terrain/cameras', {'map': str(archive)})
         assert code == 200 and cameras['count'] == 1 and not cameras['editorRequired'], cameras
+        code, invalid_compile = call('/convert', {'template': str(archive), 'compile': 'false'})
+        assert code == 400 and 'JSON boolean' in invalid_compile['error'] and not call('/health')[1]['workerRunning']
         assert cameras['cameras'][0]['cameraId'] == '4' and cameras['sourceUnchanged'], cameras
         code, error = call('/terrain/capture', {'map': str(archive), 'map_camera_id': 'missing'})
         assert code == 400 and not call('/health')[1]['workerRunning'], error

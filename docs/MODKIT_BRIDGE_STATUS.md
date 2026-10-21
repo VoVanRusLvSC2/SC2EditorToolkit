@@ -1,5 +1,11 @@
 # ModKit / original Editor bridge status
 
+Current v0.9.1-rc.1 is a diagnostic preview: local native hook setup currently
+fails with Win32 126, including the unchanged v0.9.0-rc.1 baseline. New recovery
+logic has automated coverage and real startup-failure handling coverage, but no
+new successful native compile acceptance. The table below records historical
+capabilities, not current machine readiness. See [validation history](VALIDATION.md).
+
 Assessment of the existing toolkit against the five-point integration plan,
 updated 2026-10-21. ModKit remains responsible for fast previews, terrain operations,
 measurements and authoring. This toolkit supplies evidence from an owned hidden

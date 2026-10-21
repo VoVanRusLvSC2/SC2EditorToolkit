@@ -298,7 +298,9 @@ static void Process(Block* b) {
     if(pid!=b->pid||tid!=b->tid||pid!=GetCurrentProcessId()||tid!=GetCurrentThreadId()){Fail(b,10,L"PID/thread/HWND identity mismatch");return;}
     auto title=Text(target);
     bool sceneOperation=b->operation==SaveDocument||b->operation==TerrainExport||b->operation==TerrainView||b->operation==SceneInspect||b->operation==SceneLoad||(b->operation==SceneSeek||b->operation==SceneAdvance||b->operation==SceneAudio)||b->operation==OpenCutscene;
-    if(b->expectedDocument[0]==0||title.find(b->expectedDocument)==title.npos||(title.find(L'*')!=title.npos&&!(sceneOperation&&PrivateDesktop()))){Fail(b,11,L"Expected saved test document is not active");return;}
+    bool readableDirty=PrivateDesktop()&&(sceneOperation||b->operation==Inspect||b->operation==Diagnostics);
+    if(!DocumentWindow(title,b->expectedDocument,nullptr,readableDirty)){Fail(b,11,L"Expected saved test document is not active");return;}
+    wcsncpy_s(b->loadedTitle,title.c_str(),_TRUNCATE);
     for(HWND w:Roots()){
         Log(b,L"root hwnd=%p enabled=%d class=%s title=%s\n",w,IsWindowEnabled(w),Class(w).c_str(),Text(w).c_str());
         if(w==target)for(HWND c:Children(w))if(Class(c)==L"SysTreeView32"){
