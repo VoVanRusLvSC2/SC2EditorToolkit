@@ -10,4 +10,6 @@ MODULES=[
   'video':{'format':'mp4','codec':'h264','audioIncluded':True,'audioCodec':'aac','audioSource':'owned Editor output buffers','audioOptional':True,'defaultFps':30,'maxFps':60,'requires':['ffmpeg','ffprobe']}},
 ]
 
-def capabilities():return {'version':'0.9.2-rc.1','modules':MODULES,'background':True,'mouseKeyboardAutomation':False}
+def capabilities():return {'version':'0.10.0-rc.1','modules':MODULES,'background':True,'mouseKeyboardAutomation':False,
+ 'ownedWorkerRendering':{'selection':['auto','legacy','vulkan'],'startupArgument':'render_backend','dependency':'DXVK 3.1.1 x64, SHA-256 pinned',
+ 'scope':'owned hidden Editor only','offscreenVulkan':True,'backendChangeRequiresRestart':True,'normalEditorAttachment':False}}

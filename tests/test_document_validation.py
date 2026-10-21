@@ -10,7 +10,7 @@ class WorkerStub:
         self.work=work;self.state=None;self.monitor=None;self.scene=None;self.last_result=None
         self.artifacts=ArtifactStore(work/'artifacts');self.reset=False
     def alive(self):return self.state is not None
-    def ensure(self,baseline):self.state={'pid':1,'createTimeFiletime':2,'desktop':'SC2Native-test','documentPath':str(baseline)}
+    def ensure(self,baseline,**options):self.state={'pid':1,'createTimeFiletime':2,'desktop':'SC2Native-test','documentPath':str(baseline)}
     def _reset_owned_editor(self):self.state=None;self.reset=True
 
 class DocumentValidation(unittest.TestCase):

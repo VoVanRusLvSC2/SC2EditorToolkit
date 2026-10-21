@@ -5,13 +5,14 @@ native generator, compiler and renderer through a DLL, HTTP API and MCP.
 Previously published as SC2 Native Toolkit. Original code author and project
 owner: **VoVanRusLvSC2**.
 
-**v0.9.2-rc.1 fixes the native connection failure that blocked v0.9.1-rc.1.**
-The bridge initializes once inside its owned Editor GUI thread, removing the
-failing per-request cross-process DLL-hook registration. Original XML generation,
-compilation and Nydus cutscene capture have passed live checks again. Upgrade
-the complete release and restart your owned API/MCP worker; native protocol 11
-rejects mixed components. See [native startup dispatch](docs/NATIVE_DISPATCH.md)
-and the dated [validation history](docs/VALIDATION.md) for evidence and limits.
+**v0.10.0-rc.1 adds Vulkan offscreen rendering for an owned second Editor.**
+The renderer-enabled package uses pinned DXVK 3.1.1 for the hidden process,
+without acquiring a visible display swapchain. Existing singleton isolation,
+owned-thread native dispatch, original XML generation/compiler and private
+document copies remain in use. The normal Editor/game is not attached to or
+controlled. See [parallel instances](docs/PARALLEL_INSTANCES.md),
+[native startup dispatch](docs/NATIVE_DISPATCH.md) and the dated
+[validation history](docs/VALIDATION.md) for actual acceptance and limits.
 
 Whole-map and coordinate-region export are experimental:
 the original full-map export has now been visually verified on a private fixture
@@ -74,9 +75,15 @@ Required:
 - For MP4: separately installed **FFmpeg and ffprobe** on PATH, or the
   `SC2_FFMPEG` and `SC2_FFPROBE` environment variables. They are not bundled.
 - For native audio: an available Windows output audio endpoint.
-- For rendering: an available original D3D9 device. Device loss or another
+- For legacy rendering: an available system D3D9 device. Device loss or another
   application's display mode may prevent hidden startup/export. The toolkit
   reports failure; it does not change your game's mode or take over your input.
+
+The renderer-enabled package additionally requires a compatible Vulkan driver.
+`render_backend: "auto"` uses its pinned bundled renderer when present;
+`"legacy"` selects system D3D9 and `"vulkan"` explicitly requires DXVK. The
+backend is fixed for the owned worker's lifetime. Detailed coexistence and build
+instructions are in [parallel instances](docs/PARALLEL_INSTANCES.md).
 
 `SC2NativeAPI.exe` is a local HTTP server without a console window.
 `SC2NativeMCP.exe` serves MCP stdio when launched by a client with inherited pipes.
@@ -501,8 +508,8 @@ MSVC/SDK paths are discovered with `vswhere`.
 python -m venv .venv
 .venv\Scripts\python.exe -m pip install -r requirements-build.txt
 .\scripts\install-mpqcli.ps1
-.\build.ps1
-.\package.ps1 -Python .\.venv\Scripts\python.exe
+.\build.ps1 -WithVulkan
+.\package.ps1 -WithVulkan -Python .\.venv\Scripts\python.exe
 .venv\Scripts\python.exe -m unittest discover -s tests
 .\scripts\test-native.ps1
 .venv\Scripts\python.exe tests\check_packaged_mcp.py
@@ -511,6 +518,9 @@ python -m venv .venv
 
 `mpqcli` is pinned to v0.10.0 and verified by SHA-256. Its executable is bundled
 locally/in releases, not tracked as source. The Editor/game assets are not bundled.
+`-WithVulkan` fetches the pinned DXVK dependency for parallel hidden rendering.
+Omit it from both commands to build a source-only system-D3D9 variant without
+downloading DXVK; use a fresh binary directory if one already contains a renderer.
 
 Live tests are opt-in, use private copies and close owned workers. Examples:
 

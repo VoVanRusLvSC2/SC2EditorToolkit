@@ -27,3 +27,10 @@ https://github.com/python-pillow/Pillow
 MP4 export invokes separately installed FFmpeg and ffprobe executables.
 They are external requirements and are not redistributed in this package.
 https://ffmpeg.org/
+
+Optional DXVK 3.1.1 x64 D3D9 renderer — DXVK contributors, Zlib license.
+Pinned upstream release, archive/DLL SHA-256 and full notice:
+vendor/dxvk/manifest.json and vendor/dxvk/LICENSE.
+https://github.com/doitsujin/dxvk/tree/v3.1.1
+The Vulkan offscreen submission approach is adapted from SC2GameToolkit by
+VoVanRusLvSC2. Existing project LICENSE/NOTICE attribution remains in force.

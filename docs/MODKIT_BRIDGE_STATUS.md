@@ -1,6 +1,9 @@
 # ModKit / original Editor bridge status
 
-Current v0.9.2-rc.1 replaces the Win32 126 setup dependency with initialization
+Current v0.10.0-rc.1 adds pinned Vulkan offscreen rendering for a separate owned
+Editor, following the SC2GameToolkit approach. See
+[parallel instances](PARALLEL_INSTANCES.md) for startup selection and isolation.
+The v0.9.2-rc.1 change replaces the Win32 126 setup dependency with initialization
 inside the owned Editor GUI thread. Native XML generation/compilation, recovery,
 Nydus compilation and selected cutscene frames have passed live checks again.
 No new MCP tool is added. Upgrade all native components and restart the owned

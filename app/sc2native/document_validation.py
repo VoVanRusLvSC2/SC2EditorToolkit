@@ -81,7 +81,7 @@ def validate_document(worker,request,*,roundtrip=False):
     phases=result['phases'];saved=None
     try:
         fresh=not worker.alive()
-        worker.ensure(baseline)
+        worker.ensure(baseline,render_backend=request.get('render_backend'))
         result['ownedEditor']={key:worker.state[key] for key in ('pid','createTimeFiletime','desktop')}
         if fresh:phases.append(_phase(worker,directory,'00-startup','diagnostics',fresh_session=True,revision=baseline_hash))
         worker.last_result=None;worker.scene=None

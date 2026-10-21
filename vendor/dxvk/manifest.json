@@ -1,0 +1,11 @@
+{
+  "name": "DXVK",
+  "version": "3.1.1",
+  "license": "Zlib",
+  "upstream": "https://github.com/doitsujin/dxvk",
+  "archive": "https://github.com/doitsujin/dxvk/releases/download/v3.1.1/dxvk-3.1.1.tar.gz",
+  "archiveSHA256": "40565b4a724aadc4433fa4e010b4b23916d9b1f1baeee64e17186db94f54e608",
+  "member": "dxvk-3.1.1/x64/d3d9.dll",
+  "dllSHA256": "c126316f7478eaff1ad8087702eda5930f2400187b9c8b3592219c34f6632780",
+  "licenseSHA256": "a5cb1a6ded7d2d7e92d550ba28edd21be2d1d4044662b399887351023e30ce64"
+}

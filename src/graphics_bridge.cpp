@@ -1,5 +1,6 @@
 #include "graphics_bridge.h"
 #include <d3d9.h>
+#include <filesystem>
 #include <deque>
 #include <mutex>
 #include <unordered_map>
@@ -18,6 +19,7 @@ static HANDLE workEvent,readyEvent;
 static DWORD renderTid;
 static HWND renderWindow;
 static std::wstring graphicsLog;
+static bool offscreenPresent=false;
 static std::mutex queueLock,objectLock;
 struct Task {std::function<void()> fn;HANDLE done;};
 static std::deque<Task*> queue;
@@ -66,6 +68,16 @@ static DWORD WINAPI RenderThread(void*){
 }
 template<class T> static T Original(void* self,int slot){std::lock_guard<std::mutex> lock(objectLock);return reinterpret_cast<T>(objects.at(self).original[slot]);}
 static Object Metadata(void* self){std::lock_guard<std::mutex> lock(objectLock);return objects.at(self);}
+// Adapted from SC2GameToolkit's Vulkan offscreen path. This submits the owned
+// Editor's real rendering work without acquiring a visible display swapchain.
+// Capture still reads the actual D3D9 backbuffer, with normal readback sync.
+static HRESULT SubmitOffscreenFrame(IDirect3DDevice9* device){
+    auto create=Original<HRESULT(STDMETHODCALLTYPE*)(void*,D3DQUERYTYPE,IDirect3DQuery9**)>(device,118);
+    IDirect3DQuery9* query=nullptr;HRESULT h=create(device,D3DQUERYTYPE_EVENT,&query);
+    if(SUCCEEDED(h)&&query){h=query->Issue(D3DISSUE_END);if(SUCCEEDED(h))h=query->GetData(nullptr,0,D3DGETDATA_FLUSH);query->Release();}
+    else if(SUCCEEDED(h))h=E_FAIL;
+    Sleep(16);return SUCCEEDED(h)?S_OK:h;
+}
 static void Forget(void* self){std::lock_guard<std::mutex> lock(objectLock);auto it=objects.find(self);if(it!=objects.end()){HeapFree(GetProcessHeap(),0,it->second.clone);objects.erase(it);}}
 static HRESULT STDMETHODCALLTYPE QI(void* self,REFIID id,void** result){auto fn=Original<HRESULT(STDMETHODCALLTYPE*)(void*,REFIID,void**)>(self,0);HRESULT h=E_FAIL;Invoke([&]{h=fn(self,id,result);});return h;}
 static ULONG STDMETHODCALLTYPE AddRef(void* self){auto fn=Original<ULONG(STDMETHODCALLTYPE*)(void*)>(self,1);ULONG n=0;Invoke([&]{n=fn(self);});return n;}
@@ -87,9 +99,9 @@ static D3DPRESENT_PARAMETERS Parameters(const D3DPRESENT_PARAMETERS* input){
     p.Windowed=TRUE;p.FullScreen_RefreshRateInHz=0;p.hDeviceWindow=renderWindow;return p;
 }
 static HRESULT STDMETHODCALLTYPE Reset(void* self,D3DPRESENT_PARAMETERS* p){auto fn=Original<HRESULT(STDMETHODCALLTYPE*)(void*,D3DPRESENT_PARAMETERS*)>(self,16);auto copy=Parameters(p);HRESULT h;Invoke([&]{h=fn(self,&copy);});Log(L"redirected Reset",h);return h;}
-static HRESULT STDMETHODCALLTYPE Present(void* self,const RECT* source,const RECT* target,HWND window,const RGNDATA* dirty){auto fn=Original<HRESULT(STDMETHODCALLTYPE*)(void*,const RECT*,const RECT*,HWND,const RGNDATA*)>(self,17);HRESULT h;Invoke([&]{BeforePresent(static_cast<IDirect3DDevice9*>(self),nullptr,window?window:Metadata(self).originalFocus);h=fn(self,source,target,renderWindow,dirty);});if(FAILED(h))Log(L"Present failed",h);return h;}
+static HRESULT STDMETHODCALLTYPE Present(void* self,const RECT* source,const RECT* target,HWND window,const RGNDATA* dirty){auto fn=Original<HRESULT(STDMETHODCALLTYPE*)(void*,const RECT*,const RECT*,HWND,const RGNDATA*)>(self,17);HRESULT h;Invoke([&]{BeforePresent(static_cast<IDirect3DDevice9*>(self),nullptr,window?window:Metadata(self).originalFocus);h=offscreenPresent?SubmitOffscreenFrame(static_cast<IDirect3DDevice9*>(self)):fn(self,source,target,renderWindow,dirty);});if(FAILED(h))Log(L"Present failed",h);return h;}
 static HRESULT STDMETHODCALLTYPE ResetEx(void* self,D3DPRESENT_PARAMETERS* p,D3DDISPLAYMODEEX*){auto fn=Original<HRESULT(STDMETHODCALLTYPE*)(void*,D3DPRESENT_PARAMETERS*,D3DDISPLAYMODEEX*)>(self,132);auto copy=Parameters(p);HRESULT h;Invoke([&]{h=fn(self,&copy,nullptr);});return h;}
-static HRESULT STDMETHODCALLTYPE PresentEx(void* self,const RECT* source,const RECT* target,HWND window,const RGNDATA* dirty,DWORD flags){auto fn=Original<HRESULT(STDMETHODCALLTYPE*)(void*,const RECT*,const RECT*,HWND,const RGNDATA*,DWORD)>(self,121);HRESULT h;Invoke([&]{BeforePresent(static_cast<IDirect3DDevice9*>(self),nullptr,window?window:Metadata(self).originalFocus);h=fn(self,source,target,renderWindow,dirty,flags);});return h;}
+static HRESULT STDMETHODCALLTYPE PresentEx(void* self,const RECT* source,const RECT* target,HWND window,const RGNDATA* dirty,DWORD flags){auto fn=Original<HRESULT(STDMETHODCALLTYPE*)(void*,const RECT*,const RECT*,HWND,const RGNDATA*,DWORD)>(self,121);HRESULT h;Invoke([&]{BeforePresent(static_cast<IDirect3DDevice9*>(self),nullptr,window?window:Metadata(self).originalFocus);h=offscreenPresent?SubmitOffscreenFrame(static_cast<IDirect3DDevice9*>(self)):fn(self,source,target,renderWindow,dirty,flags);});return h;}
 static HRESULT STDMETHODCALLTYPE CreationParameters(void* self,D3DDEVICE_CREATION_PARAMETERS* p){auto fn=Original<HRESULT(STDMETHODCALLTYPE*)(void*,D3DDEVICE_CREATION_PARAMETERS*)>(self,9);HRESULT h;Invoke([&]{h=fn(self,p);});if(SUCCEEDED(h))p->hFocusWindow=Metadata(self).originalFocus;return h;}
 static void** Clone(void* self,size_t slots,HWND focus,bool ex){
     std::lock_guard<std::mutex> lock(objectLock);if(objects.count(self))return nullptr;auto original=*reinterpret_cast<void***>(self);
@@ -101,7 +113,15 @@ static void** Clone(void* self,size_t slots,HWND focus,bool ex){
     auto clone=static_cast<void**>(HeapAlloc(GetProcessHeap(),0,copied*sizeof(void*)));memcpy(clone,original,copied*sizeof(void*));
     clone[0]=reinterpret_cast<void*>(QI);clone[1]=reinterpret_cast<void*>(AddRef);clone[2]=reinterpret_cast<void*>(Release);objects.emplace(self,Object{original,clone,focus,ex});return clone;
 }
-static HRESULT STDMETHODCALLTYPE SwapPresent(void* self,const RECT* source,const RECT* target,HWND window,const RGNDATA* dirty,DWORD flags){auto fn=Original<HRESULT(STDMETHODCALLTYPE*)(void*,const RECT*,const RECT*,HWND,const RGNDATA*,DWORD)>(self,3);HRESULT h;Invoke([&]{auto chain=static_cast<IDirect3DSwapChain9*>(self);IDirect3DDevice9* device=nullptr;if(SUCCEEDED(chain->GetDevice(&device))&&device){BeforePresent(device,chain,window?window:Metadata(self).originalFocus);device->Release();}h=fn(self,source,target,renderWindow,dirty,flags);});return h;}
+static HRESULT STDMETHODCALLTYPE SwapPresent(void* self,const RECT* source,const RECT* target,HWND window,const RGNDATA* dirty,DWORD flags){
+    auto fn=Original<HRESULT(STDMETHODCALLTYPE*)(void*,const RECT*,const RECT*,HWND,const RGNDATA*,DWORD)>(self,3);HRESULT h=E_FAIL;
+    Invoke([&]{auto chain=static_cast<IDirect3DSwapChain9*>(self);IDirect3DDevice9* device=nullptr;
+        auto result=chain->GetDevice(&device);if(SUCCEEDED(result)&&device){
+            BeforePresent(device,chain,window?window:Metadata(self).originalFocus);
+            h=offscreenPresent?SubmitOffscreenFrame(device):fn(self,source,target,renderWindow,dirty,flags);device->Release();
+        }else h=result;
+    });return h;
+}
 #include "d3d_proxies.inc"
 static void Wrap_IDirect3DBaseTexture9(IDirect3DBaseTexture9* value){
     if(!value)return;D3DRESOURCETYPE type;Invoke([&]{type=value->GetType();});
@@ -208,12 +228,23 @@ extern "C" __declspec(dllexport) DWORD WINAPI BootstrapCapture(CaptureRequest* r
 }
 using Create9Fn=IDirect3D9*(WINAPI*)(UINT);using Create9ExFn=HRESULT(WINAPI*)(UINT,IDirect3D9Ex**);
 static Create9Fn realCreate9;static Create9ExFn realCreate9Ex;
-static IDirect3D9* WINAPI Create9(UINT version){IDirect3D9* api=nullptr;Invoke([&]{api=realCreate9(version);});Log(L"redirected Direct3DCreate9",api?S_OK:E_FAIL);if(api)WrapFactory(api,false);return api;}
-static HRESULT WINAPI Create9Ex(UINT version,IDirect3D9Ex** api){HRESULT h;Invoke([&]{h=realCreate9Ex(version,api);});Log(L"redirected Direct3DCreate9Ex",h);if(SUCCEEDED(h)&&*api)WrapFactory(*api,true);return h;}
+static Create9Fn alternateCreate9=nullptr;static Create9ExFn alternateCreate9Ex=nullptr;
+static IDirect3D9* WINAPI Create9(UINT version){IDirect3D9* api=nullptr;Invoke([&]{api=(alternateCreate9?alternateCreate9:realCreate9)(version);});Log(L"redirected Direct3DCreate9",api?S_OK:E_FAIL);if(api)WrapFactory(api,false);return api;}
+static HRESULT WINAPI Create9Ex(UINT version,IDirect3D9Ex** api){HRESULT h;Invoke([&]{h=(alternateCreate9Ex?alternateCreate9Ex:realCreate9Ex)(version,api);});Log(L"redirected Direct3DCreate9Ex",h);if(SUCCEEDED(h)&&*api)WrapFactory(*api,true);return h;}
 DWORD StartHiddenGraphics(const wchar_t* log){
     graphicsLog=log;workEvent=CreateEventW(nullptr,FALSE,FALSE,nullptr);readyEvent=CreateEventW(nullptr,TRUE,FALSE,nullptr);
     HANDLE thread=CreateThread(nullptr,0,RenderThread,nullptr,0,nullptr);if(!thread||WaitForSingleObject(readyEvent,15000)!=WAIT_OBJECT_0||!renderWindow)return 1;CloseHandle(thread);
     HMODULE d3d=LoadLibraryW(L"d3d9.dll");if(!d3d)return 2;auto create=GetProcAddress(d3d,"Direct3DCreate9");auto createEx=GetProcAddress(d3d,"Direct3DCreate9Ex");
+    wchar_t backend[32]{};GetEnvironmentVariableW(L"SC2EDITOR_RENDER_BACKEND",backend,_countof(backend));
+    if(!_wcsicmp(backend,L"vulkan")){
+        HMODULE owner=nullptr;wchar_t modulePath[32768]{};
+        if(!GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS|GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,reinterpret_cast<LPCWSTR>(&StartHiddenGraphics),&owner)||!GetModuleFileNameW(owner,modulePath,_countof(modulePath)))return 7;
+        auto path=std::filesystem::path(modulePath).parent_path()/L"renderers"/L"dxvk"/L"d3d9.dll";
+        auto alternate=LoadLibraryExW(path.c_str(),nullptr,LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR|LOAD_LIBRARY_SEARCH_SYSTEM32);
+        if(alternate){alternateCreate9=reinterpret_cast<Create9Fn>(GetProcAddress(alternate,"Direct3DCreate9"));alternateCreate9Ex=reinterpret_cast<Create9ExFn>(GetProcAddress(alternate,"Direct3DCreate9Ex"));}
+        if(!alternateCreate9||!alternateCreate9Ex){Log(L"requested Vulkan D3D9 backend unavailable",HRESULT_FROM_WIN32(GetLastError()));return 7;}
+        offscreenPresent=true;Log(L"selected Vulkan offscreen D3D9 backend");
+    }else if(backend[0]&&_wcsicmp(backend,L"legacy")){Log(L"unknown requested render backend",E_INVALIDARG);return 8;}
     if(MH_Initialize()!=MH_OK)return 3;
     if(MH_CreateHook(reinterpret_cast<void*>(create),reinterpret_cast<void*>(Create9),reinterpret_cast<void**>(&realCreate9))!=MH_OK)return 4;
     if(createEx&&MH_CreateHook(reinterpret_cast<void*>(createEx),reinterpret_cast<void*>(Create9Ex),reinterpret_cast<void**>(&realCreate9Ex))!=MH_OK)return 5;

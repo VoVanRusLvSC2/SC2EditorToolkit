@@ -22,7 +22,7 @@ static std::vector<HWND> windows;
 static BOOL CALLBACK Enum(HWND w,LPARAM){DWORD pid=0;GetWindowThreadProcessId(w,&pid);if(pid==childPid)windows.push_back(w);return TRUE;}
 static BOOL CALLBACK Children(HWND w,LPARAM p){auto v=reinterpret_cast<std::vector<HWND>*>(p);v->push_back(w);return TRUE;}
 static int E(const char* message){std::cerr<<message<<" Win32="<<GetLastError()<<"\n";return 2;}
-static bool InjectBootstrap(PROCESS_INFORMATION& process,const fs::path& dllPath,const fs::path& logPath,DWORD& patches){
+static bool InjectBootstrap(PROCESS_INFORMATION& process,const fs::path& dllPath,const fs::path& logPath,DWORD& patches,const std::wstring& instanceId){
     auto text=dllPath.wstring();SIZE_T bytes=(text.size()+1)*sizeof(wchar_t),written=0;
     void* remote=VirtualAllocEx(process.hProcess,nullptr,bytes,MEM_COMMIT|MEM_RESERVE,PAGE_READWRITE);if(!remote)return false;
     if(!WriteProcessMemory(process.hProcess,remote,text.c_str(),bytes,&written))return false;
@@ -36,7 +36,7 @@ static bool InjectBootstrap(PROCESS_INFORMATION& process,const fs::path& dllPath
     if(Module32FirstW(snapshot,&module))do{if(!_wcsicmp(module.szExePath,dllPath.c_str())){base=reinterpret_cast<uintptr_t>(module.modBaseAddr);break;}}while(Module32NextW(snapshot,&module));CloseHandle(snapshot);
     if(!base)return false;HMODULE local=LoadLibraryW(dllPath.c_str());if(!local)return false;
     auto exported=GetProcAddress(local,"BootstrapInit");if(!exported){FreeLibrary(local);return false;}uintptr_t rva=reinterpret_cast<uintptr_t>(exported)-reinterpret_cast<uintptr_t>(local);FreeLibrary(local);
-    BootstrapConfig config{};config.primaryThreadId=process.dwThreadId;swprintf_s(config.suffix,L".SC2Native-%lu",process.dwProcessId);wcsncpy_s(config.logPath,logPath.c_str(),_TRUNCATE);
+    BootstrapConfig config{};config.primaryThreadId=process.dwThreadId;wcsncpy_s(config.suffix,(L".SC2Native-"+instanceId).c_str(),_TRUNCATE);wcsncpy_s(config.logPath,logPath.c_str(),_TRUNCATE);
     remote=VirtualAllocEx(process.hProcess,nullptr,sizeof(config),MEM_COMMIT|MEM_RESERVE,PAGE_READWRITE);if(!remote)return false;
     if(!WriteProcessMemory(process.hProcess,remote,&config,sizeof(config),&written))return false;
     thread=CreateRemoteThread(process.hProcess,nullptr,0,reinterpret_cast<LPTHREAD_START_ROUTINE>(base+rva),remote,0,nullptr);if(!thread)return false;
@@ -44,9 +44,11 @@ static bool InjectBootstrap(PROCESS_INFORMATION& process,const fs::path& dllPath
     if(!ReadProcessMemory(process.hProcess,remote,&config,sizeof(config),&written))return false;VirtualFreeEx(process.hProcess,remote,0,MEM_RELEASE);patches=config.patches;return patches>0;
 }
 int wmain(int argc,wchar_t** argv){
-    fs::path out,document;std::wstring editor=L"C:\\Program Files (x86)\\StarCraft II\\Support64\\SC2Editor_x64.exe",jobName,startupModule=L"default";int timeout=90;
-    for(int i=1;i<argc;i++){if(i+1>=argc)return E("Missing argument");std::wstring k=argv[i],v=argv[++i];if(k==L"--out")out=v;else if(k==L"--editor")editor=v;else if(k==L"--document")document=v;else if(k==L"--timeout")timeout=std::stoi(v);else if(k==L"--job-name")jobName=v;else if(k==L"--module")startupModule=v;else return E("Unknown argument");}
+    fs::path out,document;std::wstring editor=L"C:\\Program Files (x86)\\StarCraft II\\Support64\\SC2Editor_x64.exe",jobName,startupModule=L"default",renderBackend=L"legacy";int timeout=90;
+    for(int i=1;i<argc;i++){if(i+1>=argc)return E("Missing argument");std::wstring k=argv[i],v=argv[++i];if(k==L"--out")out=v;else if(k==L"--editor")editor=v;else if(k==L"--document")document=v;else if(k==L"--timeout")timeout=std::stoi(v);else if(k==L"--job-name")jobName=v;else if(k==L"--module")startupModule=v;else if(k==L"--render-backend")renderBackend=v;else return E("Unknown argument");}
     if(startupModule!=L"default"&&startupModule!=L"triggers"&&startupModule!=L"terrain")return E("Unsupported startup module");
+    if(renderBackend!=L"legacy"&&renderBackend!=L"vulkan")return E("Render backend must be legacy or vulkan");
+    if(!SetEnvironmentVariableW(L"SC2EDITOR_RENDER_BACKEND",renderBackend.c_str()))return E("Cannot configure owned render backend");
     if(!jobName.empty()){
         if(jobName.rfind(L"Local\\SC2NativeApi-",0)!=0)return E("Invalid API job name");
         HANDLE job=OpenJobObjectW(JOB_OBJECT_ASSIGN_PROCESS,FALSE,jobName.c_str());
@@ -71,7 +73,7 @@ int wmain(int argc,wchar_t** argv){
     FILETIME creation{},exit{},kernel{},user{};GetProcessTimes(process.hProcess,&creation,&exit,&kernel,&user);
     {std::ofstream initial(out/"state.json");initial<<"{\"status\":\"BOOTSTRAPPING\",\"pid\":"<<childPid<<",\"createTimeFiletime\":"<<((uint64_t(creation.dwHighDateTime)<<32)|creation.dwLowDateTime)<<"}";}
     wchar_t self[32768]{};GetModuleFileNameW(nullptr,self,32768);auto bootstrap=fs::path(self).parent_path()/L"SC2StartupBootstrap.dll";DWORD patches=0;
-    if(!InjectBootstrap(process,bootstrap,out/L"bootstrap.log",patches)){TerminateProcess(process.hProcess,42);CloseHandle(process.hThread);CloseHandle(process.hProcess);return E("Private worker singleton bootstrap failed");}
+    if(!InjectBootstrap(process,bootstrap,out/L"bootstrap.log",patches,guid)){TerminateProcess(process.hProcess,42);CloseHandle(process.hThread);CloseHandle(process.hProcess);return E("Private worker singleton bootstrap failed");}
     ResumeThread(process.hThread);CloseHandle(process.hThread);
     std::string state;std::wstring currentDocument,readyModule;DWORD exitCode=STILL_ACTIVE;ULONGLONG deadline=GetTickCount64()+ULONGLONG(timeout)*1000;
     bool ready=false,singleton=false,graphics=false,busy=false,dispatchReady=false;
@@ -98,7 +100,7 @@ int wmain(int argc,wchar_t** argv){
         ready=ready&&dispatchReady&&!busy&&!singleton&&!graphics&&exitCode==STILL_ACTIVE;
         auto status=ready?L"HIDDEN_EDITOR_READY":dispatcherFailed?L"NATIVE_DISPATCH_STARTUP_FAILED":singleton?L"BLOCKED_BY_EDITOR_SINGLETON":graphics?L"GRAPHICS_STARTUP_FAILED":exitCode!=STILL_ACTIVE?L"EDITOR_EXITED":L"STARTING";
         std::ostringstream r;r<<"{\"status\":"<<Q(status)<<",\"pid\":"<<childPid<<",\"createTimeFiletime\":"<<((uint64_t(creation.dwHighDateTime)<<32)|creation.dwLowDateTime)<<",\"desktop\":"<<Q(desktop)<<",\"inputDesktopBefore\":"<<Q(inputBefore)<<",\"currentDocument\":"<<Q(currentDocument)<<",\"exitCode\":"<<exitCode<<",\"desktopSwitched\":false,\"inputInjectionUsed\":false,\"windows\":"<<snapshots.str()<<"}";
-        state=r.str();state.insert(state.size()-1,",\"readyModule\":"+Q(ready?readyModule:L"")+",\"dispatchReady\":"+std::string(dispatchReady?"true":"false")+",\"nativeProtocolVersion\":"+std::to_string(kProtocolVersion));std::ofstream file(out/"state.json",std::ios::binary);file<<state;file.close();
+        state=r.str();state.insert(state.size()-1,",\"instanceId\":"+Q(guid)+",\"renderBackend\":"+Q(renderBackend)+",\"readyModule\":"+Q(ready?readyModule:L"")+",\"dispatchReady\":"+std::string(dispatchReady?"true":"false")+",\"nativeProtocolVersion\":"+std::to_string(kProtocolVersion));std::ofstream file(out/"state.json",std::ios::binary);file<<state;file.close();
         if(ready||dispatcherFailed||singleton||graphics||exitCode!=STILL_ACTIVE)break;
         WaitForSingleObject(process.hProcess,500);
     }

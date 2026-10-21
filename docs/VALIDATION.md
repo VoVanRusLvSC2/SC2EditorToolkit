@@ -10,6 +10,55 @@ User maps, scenes, PNG/MP4 captures, raw PCM, tokens and complete runtime logs a
 kept local and are excluded from Git and release assets. Documentation and future
 release notes are maintained in English.
 
+## v0.10.0-rc.1: normal Editor plus hidden Vulkan Editor (2026-10-21)
+
+The existing normal Editor was opened first and kept running throughout two
+consecutive packaged hidden-worker lifetimes. The normal process was observed
+read-only: no toolkit DLL injection, activation, GUI command, save, close or
+mouse/keyboard input was sent to it. Its process creation identity, document
+caption and window identity stayed unchanged; the document stayed enabled and
+responsive. Its final module inventory contained neither toolkit bridge DLL.
+This does not claim an automated interactive-editing test of the normal Editor.
+
+The owned workers used pinned DXVK 3.1.1 x64 on NVIDIA GeForce RTX 2070,
+driver 595.79.0, with the original installed Editor 5.0.17.98310. Native graphics
+logs confirmed Vulkan selection and successful device creation. System D3D9
+had previously failed hidden startup with `0x88760868` while SC2 was running;
+the Vulkan source candidate subsequently completed startup and native stability
+checks. This is machine-specific acceptance, not a guarantee for every driver
+or simultaneous game/display configuration. See [parallel setup](PARALLEL_INSTANCES.md).
+
+| Check | Result |
+|---|---|
+| Python tests / native C++ suites | 57 / 3 PASS |
+| Packaged HTTP / MCP stdio | PASS; 18 existing tools; these transport checks start no Editor |
+| Embedded dependency and native files | Both EXEs contain exact matching host/bootstrap/bridge/controller/capture binaries plus the pinned DXVK DLL, license and manifest |
+| Source native stability | Two alternating valid conversions plus wrong-root, malformed XML, native-discarded GUI and recovery checks PASS; failed generation invalidates the earlier export |
+| Packaged original XML → Galaxy → Compile All | Four conversions, two per hidden lifetime; zero original compiler errors and exact Galaxy HTTP download hashes |
+| Original Messages/Console reads | PASS in both hidden lifetimes; kept separate from compiler diagnostics |
+| Private native save → close → disk reopen | Verified with component comparison; source archive unchanged |
+| Saved map camera / Terrain backbuffer | Native camera ID selection/readback verified; detailed 1297×868 PNG visually shows relief, a Command Center, Marines and a doodad |
+| NydusIntroBlue with Nydus v54 dependencies | Front Formation Camera at 1980 ms confirmed natively; detailed 1276×716 PNG visually shows blue Marines, platform and overhead structures |
+| Hidden restart | Different owned PIDs and instance GUIDs; old API token rejected with 403, old artifact rejected with 404; subsequent compilation PASS |
+| Normal Editor preservation | Same process/document/window, responsive throughout observation; no toolkit bridge DLL loaded; left open |
+| Background observations | 1,659 external coexistence samples: zero hidden foreground samples, visible hidden windows or input-desktop changes; no input injection or desktop-switch API used |
+| Shutdown and inputs | Both packaged hidden Editors closed; input maps/mod/scene and installed Editor hashes unchanged |
+
+The Vulkan path submits actual Editor GPU rendering without a visible swapchain
+Present; captures read its real backbuffer, not desktop pixels. User source
+assets, PNGs, tokens and runtime logs remain local. The first Terrain capture
+took about 169 seconds, including native resource/layer loading.
+
+Each API/MCP server still owns one worker. Private instance GUIDs, singleton
+allowlist suffixes, documents, TEMP, renderer config/cache/logs and API artifacts
+are separate. General Editor preferences may still share the Windows profile;
+do not let independent editors overwrite the same source archive. This adds no
+shared instance broker or new MCP tools. Backend changes require restarting the
+owned worker. Saved cameras remain static framing, not trigger playback.
+Whole-map category exclusion and water acceptance remain open; MP4/audio was
+not rerun for this renderer change. The earlier dated native Nydus compilation
+and video/audio evidence below remains scoped to its original version.
+
 ## v0.9.2-rc.1: owned-thread startup fixes the native connection (2026-10-21)
 
 The native block in v0.9.1-rc.1 is resolved by removing its dependency on

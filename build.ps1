@@ -1,4 +1,4 @@
-param([string]$OutputDirectory='bin-release')
+param([string]$OutputDirectory='bin-release',[switch]$WithVulkan)
 . (Join-Path $PSScriptRoot 'scripts\toolchain.ps1')
 $destination=Join-Path $PSScriptRoot $OutputDirectory
 New-Item -ItemType Directory -Path $destination -Force | Out-Null
@@ -13,3 +13,4 @@ try {
  if($LASTEXITCODE){throw 'Frame capture controller build failed'}
 }finally{Pop-Location}
 & (Join-Path $PSScriptRoot 'build_host.ps1') -OutputDirectory $OutputDirectory
+if($WithVulkan){& (Join-Path $PSScriptRoot 'scripts\fetch-vulkan.ps1') -Destination (Join-Path $destination 'renderers\dxvk')}

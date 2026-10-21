@@ -2,8 +2,11 @@ from .runtime import *
 from .artifacts import ArtifactStore
 from .diagnostics import parse_native_diagnostics,operation_diagnostics
 from .cutscenes import scene_file,seek_arguments,scene_duration
+from .render_backend import requested_backend,select_backend,render_environment
 class Worker:
     def _background_result(self,result):
+        state=getattr(self,'state',None) or {}
+        if state.get('renderBackend'):result.update(renderBackend=state['renderBackend'],instanceId=state.get('instanceId'))
         result['desktopObservation']=self.monitor.snapshot()
         observed=result['desktopObservation']
         if observed['visibleWindowsOnUserDesktopPeak'] or observed['editorForegroundSamples']:
@@ -24,18 +27,23 @@ class Worker:
             raise OSError(ctypes.get_last_error(),'Cannot create owned-worker lifetime job')
         atexit.register(self.close)
     def alive(self):return bool(self.state and process_time(self.state['pid'])==self.state['createTimeFiletime'])
-    def ensure(self,template,startup_module='triggers'):
+    def ensure(self,template,startup_module='triggers',render_backend=None):
         if startup_module not in ('triggers','terrain','default'):raise ValueError('startup_module must be triggers, terrain or default')
-        if self.alive():return
+        requested=requested_backend(render_backend)
+        if self.alive():
+            if render_backend is not None and requested!='auto' and requested!=self.state.get('renderBackend','legacy'):
+                raise ValueError('The owned worker already uses another render backend; restart that API/MCP worker to change it')
+            return
+        selected=select_backend(RES,requested)
         self.scene=None
         if self.monitor:self.monitor.stop();self.monitor=None
         directory=self.work/'workers'/uuid.uuid4().hex;directory.mkdir(parents=True)
         # Seed is a private archive copy. Never ask the worker to edit the user's source.
         seed=directory/('Seed'+Path(template).suffix);shutil.copyfile(template,seed)
         startup=directory/'startup'
-        command=[str(RES/'HiddenEditorHost.exe'),'--document',str(seed),'--out',str(startup),'--timeout','240','--job-name',self.job_name,'--module',startup_module]
+        command=[str(RES/'HiddenEditorHost.exe'),'--document',str(seed),'--out',str(startup),'--timeout','240','--job-name',self.job_name,'--module',startup_module,'--render-backend',selected]
         with (directory/'host.stdout.log').open('wb') as out,(directory/'host.stderr.log').open('wb') as err:
-            child=subprocess.Popen(command,stdout=out,stderr=err,creationflags=subprocess.CREATE_NO_WINDOW)
+            child=subprocess.Popen(command,stdout=out,stderr=err,creationflags=subprocess.CREATE_NO_WINDOW,env=render_environment(selected,directory))
             # Start monitoring as soon as the host publishes its child PID.
             while child.poll() is None:
                 state_path=startup/'state.json'
@@ -51,7 +59,7 @@ class Worker:
             reason='Hidden Editor not ready: '+str(self.state['status'])+'; '+str(directory)
             self._reset_owned_editor()
             raise RuntimeError(reason)
-        self.state['currentDocument']=seed.name;self.state['documentPath']=str(seed);self.state['startupReport']=str(state_path)
+        self.state['currentDocument']=seed.name;self.state['documentPath']=str(seed);self.state['startupReport']=str(state_path);self.state['renderBackend']=selected
         if self.monitor is None:self.monitor=Observation(self.state['pid'])
         oracle.save(self.work/'worker.json',self.state)
     def _reset_owned_editor(self):
@@ -85,7 +93,7 @@ class Worker:
                 if result.returncode:raise ValueError('Cannot read Triggers from the supplied map/mod')
                 xml_path.write_bytes(result.stdout)
             files.checked_xml(xml_path)
-            self.ensure(template,request.get('startup_module','triggers'))
+            self.ensure(template,request.get('startup_module','triggers'),request.get('render_backend'))
             oracle.ACTIVE_DESKTOP=self.state['desktop']
             args=SimpleNamespace(template=str(template),triggers=str(xml_path),job=str(request_dir/'job'),
                 trigger_strings=request.get('trigger_strings'),game_strings=request.get('game_strings'),locale=request.get('locale','enUS'),
@@ -100,7 +108,7 @@ class Worker:
                 self.state['currentDocument']=Path(result['currentDocumentPath']).name
                 self.state['documentPath']=result['currentDocumentPath']
                 oracle.save(self.work/'worker.json',self.state)
-            result['hiddenWorker']={k:self.state[k] for k in ('pid','desktop','startupReport')}
+            result['hiddenWorker']={k:self.state.get(k) for k in ('pid','desktop','startupReport','instanceId','renderBackend')}
             result['desktopObservation']=self.monitor.snapshot()
             observed=result['desktopObservation']
             # A person may lock/unlock Windows while this job runs. Desktop
@@ -137,7 +145,7 @@ class Worker:
             archive=directory/('NativeOpen-'+directory.name[:12]+source.suffix);shutil.copyfile(source,archive)
             original_hash=files.sha(source)
             if files.sha(archive)!=original_hash:raise RuntimeError('Document copy does not match original')
-            self.ensure(archive);oracle.ACTIVE_DESKTOP=self.state['desktop']
+            self.ensure(archive,render_backend=request.get('render_backend'));oracle.ACTIVE_DESKTOP=self.state['desktop']
             try:native=oracle.native_step(directory,'01-load',self.state['pid'],self.state['currentDocument'],map_path=archive)
             except oracle.NativeStepError as error:
                 result={'status':'FAILED','error':str(error),'source':str(source),'openedCopy':str(archive),
@@ -169,7 +177,7 @@ class Worker:
         try:
             template=Path(request.get('template') or request.get('map','')).resolve(strict=True)
             if not template.is_file() or template.suffix.lower() not in ('.sc2map','.sc2mod'):raise ValueError('Existing .SC2Map/.SC2Mod template required')
-            self.ensure(template,request.get('startup_module','triggers'))
+            self.ensure(template,request.get('startup_module','triggers'),request.get('render_backend'))
             directory=self.work/'editor-actions'/uuid.uuid4().hex;directory.mkdir(parents=True)
             try:native=self._native(directory,'inspect')
             except oracle.NativeStepError as error:
@@ -179,6 +187,7 @@ class Worker:
                     'desktopObservation':self.monitor.snapshot(),'ownedWorkerReset':True,'automaticRetry':False}
                 self._reset_owned_editor();oracle.save(directory/'start-result.json',result);return result
             return {'status':'HIDDEN_EDITOR_STARTED','pid':self.state['pid'],'document':self.state['currentDocument'],
+                'instanceId':self.state.get('instanceId'),'renderBackend':self.state['renderBackend'],
                 'native':native,'desktopObservation':self.monitor.snapshot()}
         finally:self.lock.release()
 
@@ -253,7 +262,7 @@ class Worker:
                 if not template:raise ValueError('Start a worker or supply a map/mod template')
                 template=Path(template).resolve(strict=True)
                 if not template.is_file() or template.suffix.lower() not in ('.sc2map','.sc2mod'):raise ValueError('Existing .SC2Map/.SC2Mod template required')
-                self.ensure(template)
+                self.ensure(template,render_backend=request.get('render_backend'))
             directory=self.work/'cutscenes'/uuid.uuid4().hex;directory.mkdir(parents=True)
             native=self._native(directory,'cutscene')
             result={'status':'CUTSCENE_MODULE_OPENED','native':native,'timelineControl':True}
@@ -333,9 +342,9 @@ class Worker:
         original_hash=files.sha(path)
         if supplied:
             if self.alive():
-                opened=self.open_document({'map':str(path)},_locked=True)
+                opened=self.open_document({'map':str(path),'render_backend':request.get('render_backend')},_locked=True)
                 if opened['status']=='FAILED':raise RuntimeError(opened.get('error','Native opening failed; see load diagnostics'))
-            else:self.ensure(path)
+            else:self.ensure(path,render_backend=request.get('render_backend'))
         if files.sha(self.state['documentPath'])!=original_hash:raise RuntimeError('Opened private map does not match the source archive')
         return path,original_hash
 
