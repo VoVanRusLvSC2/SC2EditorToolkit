@@ -1,7 +1,9 @@
-# SC2 Native Toolkit
+# SC2 Editor Toolkit
 
-A modular backend for the original StarCraft II Editor. Original code author and
-project owner: **VoVanRusLvSC2**.
+A modular automation toolkit for the **original StarCraft II Editor**, using its
+native generator, compiler and renderer through a DLL, HTTP API and MCP.
+Previously published as SC2 Native Toolkit. Original code author and project
+owner: **VoVanRusLvSC2**.
 
 **v0.9.2-rc.1 fixes the native connection failure that blocked v0.9.1-rc.1.**
 The bridge initializes once inside its owned Editor GUI thread, removing the
@@ -60,7 +62,7 @@ to the original `-modtrigger`; `/editor/start` also accepts
 
 ## Requirements and downloads
 
-Download the Windows x64 ZIP from [Releases](https://github.com/VoVanRusLvSC2/SC2NativeToolkit/releases).
+Download the Windows x64 ZIP from [Releases](https://github.com/VoVanRusLvSC2/SC2EditorToolkit/releases).
 Extract it into a writable directory. Keep LICENSE, NOTICE and third-party notices.
 
 Required:
