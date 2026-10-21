@@ -8,6 +8,7 @@
 #include <tlhelp32.h>
 #include "bootstrap.h"
 #include "document_window.h"
+#include "protocol.h"
 #pragma comment(lib,"user32.lib")
 #pragma comment(lib,"ole32.lib")
 namespace fs=std::filesystem;
@@ -35,7 +36,7 @@ static bool InjectBootstrap(PROCESS_INFORMATION& process,const fs::path& dllPath
     if(Module32FirstW(snapshot,&module))do{if(!_wcsicmp(module.szExePath,dllPath.c_str())){base=reinterpret_cast<uintptr_t>(module.modBaseAddr);break;}}while(Module32NextW(snapshot,&module));CloseHandle(snapshot);
     if(!base)return false;HMODULE local=LoadLibraryW(dllPath.c_str());if(!local)return false;
     auto exported=GetProcAddress(local,"BootstrapInit");if(!exported){FreeLibrary(local);return false;}uintptr_t rva=reinterpret_cast<uintptr_t>(exported)-reinterpret_cast<uintptr_t>(local);FreeLibrary(local);
-    BootstrapConfig config{};swprintf_s(config.suffix,L".SC2Native-%lu",process.dwProcessId);wcsncpy_s(config.logPath,logPath.c_str(),_TRUNCATE);
+    BootstrapConfig config{};config.primaryThreadId=process.dwThreadId;swprintf_s(config.suffix,L".SC2Native-%lu",process.dwProcessId);wcsncpy_s(config.logPath,logPath.c_str(),_TRUNCATE);
     remote=VirtualAllocEx(process.hProcess,nullptr,sizeof(config),MEM_COMMIT|MEM_RESERVE,PAGE_READWRITE);if(!remote)return false;
     if(!WriteProcessMemory(process.hProcess,remote,&config,sizeof(config),&written))return false;
     thread=CreateRemoteThread(process.hProcess,nullptr,0,reinterpret_cast<LPTHREAD_START_ROUTINE>(base+rva),remote,0,nullptr);if(!thread)return false;
@@ -73,9 +74,9 @@ int wmain(int argc,wchar_t** argv){
     if(!InjectBootstrap(process,bootstrap,out/L"bootstrap.log",patches)){TerminateProcess(process.hProcess,42);CloseHandle(process.hThread);CloseHandle(process.hProcess);return E("Private worker singleton bootstrap failed");}
     ResumeThread(process.hThread);CloseHandle(process.hThread);
     std::string state;std::wstring currentDocument,readyModule;DWORD exitCode=STILL_ACTIVE;ULONGLONG deadline=GetTickCount64()+ULONGLONG(timeout)*1000;
-    bool ready=false,singleton=false,graphics=false,busy=false;
+    bool ready=false,singleton=false,graphics=false,busy=false,dispatchReady=false;
     while(GetTickCount64()<deadline){
-        windows.clear();EnumWindows(Enum,0);ready=false;singleton=false;graphics=false;busy=false;
+        windows.clear();EnumWindows(Enum,0);ready=false;singleton=false;graphics=false;busy=false;dispatchReady=false;
         std::ostringstream snapshots;snapshots<<"[";bool comma=false;
         for(HWND w:windows){
             auto title=Text(w);if(title.empty())continue;
@@ -87,14 +88,18 @@ int wmain(int argc,wchar_t** argv){
                 if(s.find(L"Another instance of the editor")!=s.npos)singleton=true;
                 if(s.find(L"Graphics device is not available")!=s.npos||s.find(L"0x88760868")!=s.npos)graphics=true;
             }snapshots<<"]}";
-            if(IsWindowVisible(w)&&IsWindowEnabled(w)&&DocumentWindow(title,document.wstring(),&readyModule)){ready=true;currentDocument=document.filename().wstring();}
+            if(IsWindowVisible(w)&&IsWindowEnabled(w)&&DocumentWindow(title,document.wstring(),&readyModule)){
+                ready=true;currentDocument=document.filename().wstring();
+                dispatchReady=reinterpret_cast<uintptr_t>(GetPropW(w,kDispatchProperty))==kProtocolVersion;
+            }
         }snapshots<<"]";
         GetExitCodeProcess(process.hProcess,&exitCode);
-        ready=ready&&!busy&&!singleton&&!graphics&&exitCode==STILL_ACTIVE;
-        auto status=ready?L"HIDDEN_EDITOR_READY":singleton?L"BLOCKED_BY_EDITOR_SINGLETON":graphics?L"GRAPHICS_STARTUP_FAILED":exitCode!=STILL_ACTIVE?L"EDITOR_EXITED":L"STARTING";
+        bool dispatcherFailed=ready&&!busy&&!dispatchReady;
+        ready=ready&&dispatchReady&&!busy&&!singleton&&!graphics&&exitCode==STILL_ACTIVE;
+        auto status=ready?L"HIDDEN_EDITOR_READY":dispatcherFailed?L"NATIVE_DISPATCH_STARTUP_FAILED":singleton?L"BLOCKED_BY_EDITOR_SINGLETON":graphics?L"GRAPHICS_STARTUP_FAILED":exitCode!=STILL_ACTIVE?L"EDITOR_EXITED":L"STARTING";
         std::ostringstream r;r<<"{\"status\":"<<Q(status)<<",\"pid\":"<<childPid<<",\"createTimeFiletime\":"<<((uint64_t(creation.dwHighDateTime)<<32)|creation.dwLowDateTime)<<",\"desktop\":"<<Q(desktop)<<",\"inputDesktopBefore\":"<<Q(inputBefore)<<",\"currentDocument\":"<<Q(currentDocument)<<",\"exitCode\":"<<exitCode<<",\"desktopSwitched\":false,\"inputInjectionUsed\":false,\"windows\":"<<snapshots.str()<<"}";
-        state=r.str();state.insert(state.size()-1,",\"readyModule\":"+Q(ready?readyModule:L""));std::ofstream file(out/"state.json",std::ios::binary);file<<state;file.close();
-        if(ready||singleton||graphics||exitCode!=STILL_ACTIVE)break;
+        state=r.str();state.insert(state.size()-1,",\"readyModule\":"+Q(ready?readyModule:L"")+",\"dispatchReady\":"+std::string(dispatchReady?"true":"false")+",\"nativeProtocolVersion\":"+std::to_string(kProtocolVersion));std::ofstream file(out/"state.json",std::ios::binary);file<<state;file.close();
+        if(ready||dispatcherFailed||singleton||graphics||exitCode!=STILL_ACTIVE)break;
         WaitForSingleObject(process.hProcess,500);
     }
     input=OpenInputDesktop(0,FALSE,DESKTOP_READOBJECTS);auto inputAfter=DesktopName(input);if(input)CloseDesktop(input);

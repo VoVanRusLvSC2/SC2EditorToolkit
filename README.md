@@ -3,11 +3,13 @@
 A modular backend for the original StarCraft II Editor. Original code author and
 project owner: **VoVanRusLvSC2**.
 
-**v0.9.1-rc.1 is a diagnostic prerelease, not a stability certification.**
-Recovery and failure reporting have unit/transport coverage. The current live
-environment rejects the existing thread-hook setup with Win32 126, including
-the unchanged published v0.9.0-rc.1 baseline. New dirty-document save/recovery
-logic has not passed a live Editor acceptance run. See [validation history](docs/VALIDATION.md).
+**v0.9.2-rc.1 fixes the native connection failure that blocked v0.9.1-rc.1.**
+The bridge initializes once inside its owned Editor GUI thread, removing the
+failing per-request cross-process DLL-hook registration. Original XML generation,
+compilation and Nydus cutscene capture have passed live checks again. Upgrade
+the complete release and restart your owned API/MCP worker; native protocol 11
+rejects mixed components. See [native startup dispatch](docs/NATIVE_DISPATCH.md)
+and the dated [validation history](docs/VALIDATION.md) for evidence and limits.
 
 Whole-map and coordinate-region export are experimental:
 the original full-map export has now been visually verified on a private fixture
@@ -562,6 +564,9 @@ The installed Editor EXE, source maps/mods and installed dependencies are not
 patched. A Windows Job Object binds owned Editor/encoder lifetime to API/MCP.
 Logical focus on the private desktop is allowed for original native commands;
 user-desktop activation is monitored separately and must stay absent.
+The [startup dispatcher](docs/NATIVE_DISPATCH.md) remains inside that owned
+worker until it exits. Per-request guards are removed after each handler;
+there is no per-request cross-process DLL-hook installation.
 
 Technical references: [D3D9 GetRenderTargetData](https://learn.microsoft.com/en-us/windows/win32/api/d3d9/nf-d3d9-idirect3ddevice9-getrendertargetdata),
 [MCP stdio](https://modelcontextprotocol.io/specification/2025-06-18/basic/transports).

@@ -65,7 +65,7 @@ def main():
                 if method=='initialize':
                     version=params.get('protocolVersion','2025-06-18')
                     if version not in ('2024-11-05','2025-03-26','2025-06-18'):version='2025-06-18'
-                    result={'protocolVersion':version,'serverInfo':{'name':'sc2-native-toolkit','version':'0.9.1-rc.1'},'capabilities':{'tools':{'listChanged':False}},
+                    result={'protocolVersion':version,'serverInfo':{'name':'sc2-native-toolkit','version':'0.9.2-rc.1'},'capabilities':{'tools':{'listChanged':False}},
                         'instructions':'Use an installed SC2 Editor. Load a cutscene using scene and a map/mod template, select a unique camera and time_ms, then capture its renderer. Time is sampled on the native 33 ms frame grid. Every editor window remains on a private desktop.'};initialized=True
                 elif method=='ping':result={}
                 elif not initialized:raise ValueError('Initialize the MCP session first')

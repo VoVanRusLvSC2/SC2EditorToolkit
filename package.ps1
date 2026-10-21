@@ -14,6 +14,11 @@ foreach($program in @(@{Name='SC2NativeAPI';Entry='hidden_api.py'},@{Name='SC2Na
 foreach($file in 'README.md','THIRD_PARTY.txt','LICENSE','NOTICE'){
  if(Test-Path -LiteralPath (Join-Path $PSScriptRoot $file)){Copy-Item -LiteralPath (Join-Path $PSScriptRoot $file) -Destination (Join-Path $PSScriptRoot $OutputDirectory)}
 }
+$docsDestination=Join-Path $PSScriptRoot "$OutputDirectory\docs"
+New-Item -ItemType Directory -Force -Path $docsDestination | Out-Null
+foreach($file in 'VALIDATION.md','MODKIT_BRIDGE_STATUS.md','NATIVE_DISPATCH.md'){
+ Copy-Item -LiteralPath (Join-Path $PSScriptRoot "docs\$file") -Destination $docsDestination
+}
 Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'vendor\minhook\LICENSE.txt') -Destination (Join-Path $PSScriptRoot "$OutputDirectory\LICENSE-MinHook.txt")
 Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'vendor\Pillow-LICENSE.txt') -Destination (Join-Path $PSScriptRoot "$OutputDirectory\LICENSE-Pillow.txt")
 Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'tools\mpqcli\LICENSE.txt') -Destination (Join-Path $PSScriptRoot "$OutputDirectory\LICENSE-mpqcli.txt")

@@ -4,6 +4,7 @@
 #include <cstring>
 #include "graphics_bridge.h"
 #include "audio_protocol.h"
+#include "protocol.h"
 #pragma comment(lib,"user32.lib")
 static std::wstring suffix,logPath;
 static SRWLOCK logLock=SRWLOCK_INIT;
@@ -65,6 +66,23 @@ extern "C" __declspec(dllexport) DWORD WINAPI BootstrapInit(void* raw){
     config->patches=PatchImports(GetModuleHandleW(L"kernelbase.dll"),patches,_countof(patches))+PatchImports(GetModuleHandleW(L"kernel32.dll"),patches,_countof(patches));
     std::wstring graphicsPath=logPath+L".graphics.log";DWORD graphicsError=StartHiddenGraphics(graphicsPath.c_str());if(graphicsError){config->error=100+graphicsError;return config->error;}
     DWORD audioError=StartHiddenAudio();if(audioError)Log("audio-bootstrap",L"owned audio tap",L"unavailable; non-audio operations remain usable",audioError);
+    // The host already loads this bootstrap into its own suspended child. Queue
+    // initialization from inside that process, using its actual relocated DLL
+    // address. The primary thread installs only same-thread hooks (hMod=nullptr),
+    // avoiding repeated cross-process DLL-hook registration/session resources.
+    wchar_t ownPath[32768]{};HMODULE own=nullptr;
+    GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS|GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,reinterpret_cast<LPCWSTR>(BootstrapInit),&own);
+    if(!GetModuleFileNameW(own,ownPath,_countof(ownPath))){config->error=201;return config->error;}
+    std::wstring bridgePath=ownPath;auto slash=bridgePath.find_last_of(L'\\');
+    if(slash==bridgePath.npos){config->error=202;return config->error;}
+    bridgePath.resize(slash+1);bridgePath+=L"SC2NativeBridge.dll";
+    HMODULE bridge=LoadLibraryW(bridgePath.c_str());
+    auto attach=bridge?reinterpret_cast<PAPCFUNC>(GetProcAddress(bridge,"BridgeAttachCurrentThread")):nullptr;
+    if(!attach){config->error=203;return config->error;}
+    HANDLE primary=OpenThread(THREAD_SET_CONTEXT|THREAD_QUERY_LIMITED_INFORMATION,FALSE,config->primaryThreadId);
+    if(!primary||GetProcessIdOfThread(primary)!=GetCurrentProcessId()){if(primary)CloseHandle(primary);config->error=204;return config->error;}
+    bool queued=QueueUserAPC(attach,primary,kProtocolVersion)!=0;CloseHandle(primary);
+    if(!queued){config->error=205;return config->error;}
     return config->patches?0:3;
 }
 BOOL WINAPI DllMain(HINSTANCE,DWORD,LPVOID){return TRUE;}

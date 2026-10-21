@@ -1,5 +1,6 @@
 #include "protocol.h"
 #include "document_window.h"
+#include "owned_thread_hooks.h"
 #include <commctrl.h>
 #include <string>
 #include <vector>
@@ -13,9 +14,9 @@
 #include <cstring>
 #pragma comment(lib,"user32.lib")
 #pragma comment(lib,"comctl32.lib")
-static HMODULE module;
 static thread_local Block* current;
 static thread_local bool processing;
+static thread_local OwnedThreadHooks resident;
 static bool PrivateDesktop(){
     wchar_t name[256]{};DWORD size=0;
     return GetUserObjectInformationW(GetThreadDesktop(GetCurrentThreadId()),UOI_NAME,name,sizeof(name),&size)&&wcsncmp(name,L"SC2Native-",10)==0;
@@ -402,6 +403,11 @@ static void GuardedProcess(Block* b) {
     if(capture)EndDiagnosticCapture(b);
 }
 extern "C" __declspec(dllexport) LRESULT CALLBACK BridgeHook(int n,WPARAM wp,LPARAM lp) {
+    if(n>=0&&resident.dispatch){
+        auto message=reinterpret_cast<CWPSTRUCT*>(lp);
+        if(message&&message->hwnd&&!GetParent(message->hwnd)&&PrivateDesktop()&&reinterpret_cast<uintptr_t>(GetPropW(message->hwnd,kDispatchProperty))!=kProtocolVersion)
+            SetPropW(message->hwnd,kDispatchProperty,reinterpret_cast<HANDLE>(uintptr_t(kProtocolVersion)));
+    }
     if(n>=0)ObserveDiagnosticMutation(reinterpret_cast<CWPSTRUCT*>(lp));
     if(n>=0&&!processing){
         auto message=reinterpret_cast<CWPSTRUCT*>(lp);
@@ -412,11 +418,11 @@ extern "C" __declspec(dllexport) LRESULT CALLBACK BridgeHook(int n,WPARAM wp,LPA
                 HANDLE mapping=OpenFileMappingW(FILE_MAP_ALL_ACCESS,FALSE,name);
                 if(mapping){
                     auto b=static_cast<Block*>(MapViewOfFile(mapping,FILE_MAP_ALL_ACCESS,0,0,sizeof(Block)));
-                    if(b&&b->magic==kMagic&&b->version==10&&b->target==reinterpret_cast<uint64_t>(message->hwnd)&&!b->started){
+                    if(b&&b->magic==kMagic&&b->version==kProtocolVersion&&b->pid==GetCurrentProcessId()&&b->tid==GetCurrentThreadId()&&b->target==reinterpret_cast<uint64_t>(message->hwnd)&&PrivateDesktop()&&!b->started){
                         processing=true;current=b;InterlockedExchange(&b->started,1);
-                        HHOOK guard=SetWindowsHookExW(WH_CBT,FocusGuard,module,GetCurrentThreadId());
+                        HHOOK guard=SetWindowsHookExW(WH_CBT,FocusGuard,nullptr,GetCurrentThreadId());
                         if(!guard)Fail(b,16,L"Cannot install thread-local focus/activation guard");else GuardedProcess(b);
-                        if(guard)UnhookWindowsHookEx(guard);
+                        if(guard)b->requestGuardRemoved=UnhookWindowsHookEx(guard)!=0;
                         b->foregroundAfter=reinterpret_cast<uint64_t>(GetForegroundWindow());
                         current=nullptr;processing=false;
                         if((sceneSeekTask&&sceneSeekTask->b==b)||(sceneAudioTask&&sceneAudioTask->b==b)){b=nullptr;}else InterlockedExchange(&b->completed,1);
@@ -427,4 +433,10 @@ extern "C" __declspec(dllexport) LRESULT CALLBACK BridgeHook(int n,WPARAM wp,LPA
         }
     }return CallNextHookEx(nullptr,n,wp,lp);
 }
-BOOL WINAPI DllMain(HINSTANCE h,DWORD reason,LPVOID){if(reason==DLL_PROCESS_ATTACH)module=h;return TRUE;}
+extern "C" __declspec(dllexport) void CALLBACK BridgeAttachCurrentThread(ULONG_PTR version){
+    if(version!=kProtocolVersion||!PrivateDesktop()||resident.dispatch)return;
+    wchar_t exe[32768]{};GetModuleFileNameW(nullptr,exe,_countof(exe));
+    if(_wcsicmp(exe,L"C:\\Program Files (x86)\\StarCraft II\\Support64\\SC2Editor_x64.exe"))return;
+    resident.Start(BridgeFocusGuard,BridgeHook);
+}
+BOOL WINAPI DllMain(HINSTANCE,DWORD,LPVOID){return TRUE;}

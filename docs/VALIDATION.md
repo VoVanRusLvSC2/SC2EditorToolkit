@@ -10,6 +10,63 @@ User maps, scenes, PNG/MP4 captures, raw PCM, tokens and complete runtime logs a
 kept local and are excluded from Git and release assets. Documentation and future
 release notes are maintained in English.
 
+## v0.9.2-rc.1: owned-thread startup fixes the native connection (2026-10-21)
+
+The native block in v0.9.1-rc.1 is resolved by removing its dependency on
+per-request cross-process DLL-hook registration. A minimal owned GUI process
+also reproduced Win32 126 for a loadable two-export DLL; same-thread callbacks
+with a null module parameter succeeded. This isolates the failing Windows API
+path, without claiming a particular kernel resource limit or security product
+as the proven underlying cause. See [startup dispatch](NATIVE_DISPATCH.md).
+
+The existing startup bootstrap loads the bridge inside its suspended owned
+Editor child and queues initialization on that child's primary thread. The
+bridge installs only local GUI-thread callbacks. Host/controller readiness
+requires its versioned window marker; protocol 11 rejects mixed native files.
+Resident callbacks live until the owned Editor exits; request guards are still
+removed after each handler. No user input, desktop switch, security-setting
+change or installed-Editor file modification was used.
+
+| Check | Result |
+|---|---|
+| Python tests / native C++ suites | 50 / 3 PASS |
+| New C++ Windows regression without SC2 | Startup callback before thread entry, real request dispatch, exact thread isolation, input-desktop refusal and cleanup PASS |
+| Packaged HTTP / MCP stdio | PASS; 18 existing tools, no Editor started by these transport tests |
+| Repeated original XML → Galaxy → Compile All | Six alternating A/B submissions in one final packaged worker; native compiler errors zero, exact Galaxy export/download hashes |
+| Wrong authored root, malformed XML and native-discarded orphan GUI | Refused; stale earlier Galaxy export refused; subsequent valid requests recover |
+| Original Glicko GUI candidate | Native generation and compilation PASS; 12,467-byte Galaxy, zero compiler errors |
+| Private Glicko array-declaration negative | Original compiler reports five errors; subsequent valid conversion compiles with zero errors |
+| Nydus v54 with installed dependencies | Original generation/compilation PASS; 342,851 bytes, zero compiler errors, exact file/HTTP export |
+| Native Nydus Save As → Close → disk reopen | Verified; component comparison and source preservation PASS |
+| Malformed private Data XML → diagnostics → healthy reload | Native XML error found, old messages not counted as new, healthy Nydus validation recovers |
+| Saved map-camera A → B → A | Three packaged Terrain captures, actual target/angle/distance/FOV readback and subsequent native compilation PASS |
+| NydusIntroBlue cutscene | Four packaged captures: Front Formation Camera at 990/1980/2970 ms, Top at 1980 ms; native camera/time confirmation and changed frames PASS |
+| Image inspection | Marines/platform in the scene; relief, Command Center, Marines and doodads in the southwest Terrain view |
+| Mixed old bootstrap/new controller | Explicit incompatible-dispatcher failure (Win32 5023); owned-worker reset, stale-export refusal and clean shutdown PASS |
+
+Nydus Galaxy SHA-256 remains
+`ad36611c87c754f9944b978f921e67ee7767f75a277f0a293d98830f2aaff078`.
+The tested Glicko GUI produces
+`5f90bd88560fdc53face5a0498e77558b882dc2fff66627f8a6b7c0acb70f8ff`.
+The archive and XML inputs remain local and unchanged.
+Every completed live run recorded zero visible Editor windows on the user
+desktop, zero Editor foreground samples and zero input-desktop changes. Mouse/
+keyboard injection and desktop-switch APIs were not used. All owned test
+Editors were closed, and the installed Editor's SHA-256 remained unchanged.
+
+Current native recovery now exercises the previously unaccepted dirty-document
+Save As/GUI-loss sequence against the real Editor, rather than mocks alone.
+The deliberate orphan is rejected after the original serializer removes it;
+an empty compiled script is not counted as successful XML conversion. GUI
+identity retention still does not prove complete semantic equivalence.
+
+This release does not expand MCP or waive the neighboring converter's strict
+GUI capability refusals. Saved cameras remain static editor framing, without
+Galaxy-trigger playback. Terrain category exclusion and water acceptance remain
+open. MP4/audio behavior has its earlier dated evidence below and was not rerun
+for this connection correction. Initial native Terrain loads can take minutes;
+general safe cancellation/deadlines remain outside the current API contract.
+
 ## v0.9.1-rc.1: recovery changes; native acceptance blocked (2026-10-21)
 
 This is a diagnostic prerelease. It is **not** a new native stability PASS.

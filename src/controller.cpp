@@ -100,7 +100,7 @@ int wmain(int argc,wchar_t** argv){
     std::wstring mappingName=L"Local\\SC2NativeBridge-"+std::to_wstring(wantedPid)+L"-"+guid;
     HANDLE mapping=CreateFileMappingW(INVALID_HANDLE_VALUE,nullptr,PAGE_READWRITE,0,sizeof(Block),mappingName.c_str());if(!mapping||GetLastError()==ERROR_ALREADY_EXISTS)return Error("Cannot create unique IPC mapping");
     auto b=static_cast<Block*>(MapViewOfFile(mapping,FILE_MAP_ALL_ACCESS,0,0,sizeof(Block)));if(!b)return Error("Cannot map IPC");
-    ZeroMemory(b,sizeof(Block));b->compilerErrors=-1;b->magic=kMagic;b->version=10;b->pid=wantedPid;b->tid=tid;b->target=reinterpret_cast<uint64_t>(target);
+    ZeroMemory(b,sizeof(Block));b->compilerErrors=-1;b->magic=kMagic;b->version=kProtocolVersion;b->pid=wantedPid;b->tid=tid;b->target=reinterpret_cast<uint64_t>(target);
     b->operation=op==L"generate"?Generate:op==L"compile"?Compile:op==L"read"?ReadSource:op==L"freshness-probe"?FreshnessProbe:op==L"load"?LoadDocument:op==L"cancel-load"?CancelLoad:op==L"diagnostics"?Diagnostics:op==L"cutscene"?OpenCutscene:op==L"scene-inspect"?SceneInspect:op==L"scene-load"?SceneLoad:op==L"scene-seek"?SceneSeek:op==L"scene-advance"?SceneAdvance:op==L"scene-audio"?SceneAudio:op==L"terrain"?TerrainView:op==L"terrain-export"?TerrainExport:op==L"save-document"?SaveDocument:op==L"reopen-document"?ReopenDocument:op==L"load-data"?LoadDataModule:op==L"terrain-camera"?TerrainCamera:op==L"terrain-camera-layer"?TerrainCameraLayer:op==L"terrain-camera-select"?TerrainCameraSelect:Inspect;
     wcsncpy_s(b->expectedDocument,expected.c_str(),_TRUNCATE);wcsncpy_s(b->expectedMarker,marker.c_str(),_TRUNCATE);
     wcsncpy_s(b->mapPath,map.c_str(),_TRUNCATE);
@@ -108,20 +108,11 @@ int wmain(int argc,wchar_t** argv){
     wcsncpy_s(b->scope,scope.c_str(),_TRUNCATE);
     b->terrain.size=imageSize;b->terrain.includeUnits=includeUnits;b->terrain.includeDoodads=includeDoodads;
     b->resumeDialog=resumeDialog;b->timeMs=timeMs;wcsncpy_s(b->camera,camera.c_str(),_TRUNCATE);
-    wchar_t self[32768]{};GetModuleFileNameW(nullptr,self,32768);auto dllPath=fs::path(self).parent_path()/L"SC2NativeBridge.dll";
-    HMODULE dll=LoadLibraryW(dllPath.c_str());if(!dll)return Error("Cannot load bridge DLL locally");
-    auto hookProc=reinterpret_cast<HOOKPROC>(GetProcAddress(dll,"BridgeHook"));auto guardProc=reinterpret_cast<HOOKPROC>(GetProcAddress(dll,"BridgeFocusGuard"));
-    if(!hookProc||!guardProc)return Error("Missing bridge exports");
-    HMODULE hookOwner=nullptr,guardOwner=nullptr;
-    GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS|GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,reinterpret_cast<LPCWSTR>(hookProc),&hookOwner);
-    GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS|GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,reinterpret_cast<LPCWSTR>(guardProc),&guardOwner);
-    wchar_t loadedDll[32768]{};GetModuleFileNameW(dll,loadedDll,32768);
-    {std::ofstream preflight(out/"hook-preflight.json");preflight<<"{\"dll\":"<<Q(loadedDll)<<",\"hookOwnerMatches\":"<<(hookOwner==dll?"true":"false")<<",\"guardOwnerMatches\":"<<(guardOwner==dll?"true":"false")<<",\"targetPid\":"<<wantedPid<<",\"targetThread\":"<<tid<<"}";}
-    if(hookOwner!=dll||guardOwner!=dll)return Error("Hook exports do not belong to the loaded bridge module");
-    HHOOK guard=SetWindowsHookExW(WH_CBT,guardProc,dll,tid);if(!guard)return Error("Cannot install Editor-thread focus veto");
-    HHOOK hook=SetWindowsHookExW(WH_CALLWNDPROC,hookProc,dll,tid);if(!hook){UnhookWindowsHookEx(guard);return Error("Cannot install Editor-thread DLL hook");}
+    bool dispatchReady=!desktop.empty()&&reinterpret_cast<uintptr_t>(GetPropW(target,kDispatchProperty))==kProtocolVersion;
+    {std::ofstream preflight(out/"hook-preflight.json");preflight<<"{\"transport\":\"owned-startup-thread-local\",\"protocolVersion\":"<<kProtocolVersion<<",\"dispatchReady\":"<<(dispatchReady?"true":"false")<<",\"crossProcessHookRegistrationUsed\":false,\"targetPid\":"<<wantedPid<<",\"targetThread\":"<<tid<<"}";}
+    if(!dispatchReady){SetLastError(ERROR_INVALID_STATE);return Error("Owned startup dispatcher is absent or incompatible; restart the owned worker with matching native binaries");}
     HWINEVENTHOOK events=SetWinEventHook(EVENT_SYSTEM_FOREGROUND,EVENT_SYSTEM_FOREGROUND,nullptr,ForegroundEvent,0,0,WINEVENT_OUTOFCONTEXT);
-    if(!events){UnhookWindowsHookEx(hook);UnhookWindowsHookEx(guard);return Error("Cannot monitor foreground changes");}
+    if(!events)return Error("Cannot monitor foreground changes");
     ATOM atom=GlobalAddAtomW(mappingName.c_str());UINT msg=RegisterWindowMessageW(kMessageName);if(!atom||!msg)return Error("Cannot initialize IPC name/message");
     uint64_t before=reinterpret_cast<uint64_t>(GetForegroundWindow());std::atomic<bool> finished{false};DWORD sendError=0;BOOL sent=FALSE;DWORD_PTR value=0;
     std::thread sender([&]{sent=static_cast<BOOL>(SendMessageTimeoutW(target,msg,atom,0,SMTO_ABORTIFHUNG|SMTO_BLOCK,30000,&value));if(!sent)sendError=GetLastError();finished=true;});
@@ -132,23 +123,23 @@ int wmain(int argc,wchar_t** argv){
     }sender.join();
     ULONGLONG until=GetTickCount64()+500;while(GetTickCount64()<until){Pump();MsgWaitForMultipleObjects(0,nullptr,FALSE,5,QS_ALLINPUT);}Pump();
     uint64_t after=reinterpret_cast<uint64_t>(GetForegroundWindow());
-    // A timeout does not cancel a native handler. Keep its activation guard alive
-    // until it completes instead of permitting a delayed focus-stealing action.
+    // A timeout does not cancel a native handler. Keep its mapping alive until
+    // completion. The resident dispatcher/guard belongs to the owned worker.
     if(b->started&&!b->completed){
-        std::cerr<<"Native handler pending; keeping worker hooks installed until completion.\n";
+        std::cerr<<"Native handler pending; retaining IPC until completion.\n";
         while(!b->completed&&WaitForSingleObject(process,0)==WAIT_TIMEOUT){
             if(b->loadStage!=previousStage){previousStage=b->loadStage;std::cerr<<"loadStage="<<previousStage<<"\n";std::ofstream progress(out/"progress.json");progress<<"{\"loadStage\":"<<previousStage<<",\"error\":"<<b->error<<"}";}
             Pump();MsgWaitForMultipleObjects(0,nullptr,FALSE,25,QS_ALLINPUT);
         }
     }
-    UnhookWinEvent(events);bool removedHook=UnhookWindowsHookEx(hook)!=0;bool removedGuard=UnhookWindowsHookEx(guard)!=0;GlobalDeleteAtom(atom);
+    UnhookWinEvent(events);bool removedHook=true;bool removedGuard=b->requestGuardRemoved!=0;GlobalDeleteAtom(atom);
     std::ofstream nativeLog(out/"native-log.txt",std::ios::binary);nativeLog<<Utf8(b->log);nativeLog.close();
     if(b->completed&&b->sourceBytes&&b->sourceBytes<kSourceCapacity){std::ofstream source(out/"Native.galaxy",std::ios::binary);source.write(b->source,b->sourceBytes);}
     std::ostringstream r;
     bool success=b->started&&b->completed&&b->error==0&&editorForegroundEvents==0&&removedHook&&removedGuard;
     bool compilePassed=b->compilerCommand&&b->compileCommandReturned&&b->compilerErrors==0&&wcsstr(b->statusAfter,L"Compiled:");
     r<<"{\n\"status\":\""<<(success?"NATIVE_DLL_REQUEST_COMPLETED":"NOT_CONFIRMED")<<"\",\n\"operation\":"<<Q(op)<<",\n\"pid\":"<<wantedPid<<",\"ownerThread\":"<<tid<<",\"dllPid\":"<<b->dllPid<<",\"dllThread\":"<<b->dllTid<<",\n\"started\":"<<b->started<<",\"completed\":"<<b->completed<<",\"error\":"<<b->error<<",\"sendError\":"<<sendError<<",\"exceptionCode\":"<<b->exceptionCode<<",\"failure\":"<<Q(b->failure)<<",\n\"loadCommandId\":"<<b->loadCommand<<",\"loadStage\":"<<b->loadStage<<",\"mapLoaded\":"<<b->mapLoaded<<",\"loadedTitle\":"<<Q(b->loadedTitle)<<",\n\"generatorCommandId\":"<<b->generatorCommand<<",\"compilerCommandId\":"<<b->compilerCommand<<",\"commandsDispatched\":"<<b->commandsDispatched<<",\n\"sourceBytes\":"<<b->sourceBytes<<",\"codePage\":"<<b->codePage<<",\"compilerErrors\":"<<b->compilerErrors<<",\"nativeCompilePassed\":"<<(compilePassed?"true":"false")<<",\n\"compileStatusBefore\":"<<Q(b->statusBefore)<<",\"compileStatusAfter\":"<<Q(b->statusAfter)<<",\n\"activationVetoes\":"<<b->activationVetoes<<",\"focusVetoes\":"<<b->focusVetoes<<",\"editorForegroundEvents\":"<<editorForegroundEvents<<",\"foregroundBefore\":"<<before<<",\"foregroundAfter\":"<<after<<",\"sameForegroundAtEndpoints\":"<<(before==after?"true":"false")<<",\n\"beforeTextFingerprint\":"<<b->beforeTextFingerprint<<",\"afterTextFingerprint\":"<<b->afterTextFingerprint<<",\n\"sourceReadOnly\":"<<b->sourceReadOnly<<",\"poisonApplied\":"<<b->poisonApplied<<",\"poisonReplaced\":"<<b->poisonReplaced<<",\n\"inputInjectionUsed\":false,\"activationApiUsed\":false,\"hooksRemoved\":"<<(removedHook&&removedGuard?"true":"false")<<",\"editorTerminated\":false,\"automaticMapOpeningImplemented\":true,\"byteEqualityToManualExportProven\":false\n}\n";
-    auto json=r.str();
+    auto json=r.str();auto transportEnd=json.rfind("\n}");json.insert(transportEnd,",\n\"transport\":\"owned-startup-thread-local\",\n\"crossProcessHookRegistrationUsed\":false,\n\"residentHooksLifetime\":\"owned-worker\",\n\"requestGuardRemoved\":"+std::string(removedGuard?"true":"false"));
     const std::string activationFlag="\"activationApiUsed\":false";
     if(b->privateFocusUsed){auto flag=json.find(activationFlag);if(flag!=json.npos)json.replace(flag,activationFlag.size(),"\"activationApiUsed\":true");}
     auto ending=json.rfind("\n}");json.insert(ending,",\n\"sceneLoaded\":"+std::to_string(b->sceneLoaded)+",\n\"cameraConfirmed\":"+std::to_string(b->cameraConfirmed)+",\n\"timeConfirmed\":"+std::to_string(b->timeConfirmed)+",\n\"viewport\":"+std::to_string(b->viewport)+",\n\"sceneStatus\":"+Q(b->sceneStatus)+",\n\"actualTimeMs\":"+std::to_string(b->actualTimeMs));
@@ -167,5 +158,5 @@ int wmain(int argc,wchar_t** argv){
     }
     ending=json.rfind("\n}");json.insert(ending,",\n\"diagnosticCapture\":{\"version\":1,\"eventCount\":"+std::to_string(d.eventCount)+",\"eventsComplete\":"+std::string(d.eventsComplete?"true":"false")+"}");
     std::ofstream result(out/"result.json",std::ios::binary);result<<json;result.close();std::cout<<json;
-    UnmapViewOfFile(b);CloseHandle(mapping);CloseHandle(process);FreeLibrary(dll);return !success?2:op==L"compile"&&!compilePassed?1:0;
+    UnmapViewOfFile(b);CloseHandle(mapping);CloseHandle(process);return !success?2:op==L"compile"&&!compilePassed?1:0;
 }

@@ -1,10 +1,12 @@
 # ModKit / original Editor bridge status
 
-Current v0.9.1-rc.1 is a diagnostic preview: local native hook setup currently
-fails with Win32 126, including the unchanged v0.9.0-rc.1 baseline. New recovery
-logic has automated coverage and real startup-failure handling coverage, but no
-new successful native compile acceptance. The table below records historical
-capabilities, not current machine readiness. See [validation history](VALIDATION.md).
+Current v0.9.2-rc.1 replaces the Win32 126 setup dependency with initialization
+inside the owned Editor GUI thread. Native XML generation/compilation, recovery,
+Nydus compilation and selected cutscene frames have passed live checks again.
+No new MCP tool is added. Upgrade all native components and restart the owned
+worker; protocol 11 rejects mixed versions. See [startup dispatch](NATIVE_DISPATCH.md)
+and [dated validation history](VALIDATION.md). Earlier rendering limitations in
+the table below remain in force.
 
 Assessment of the existing toolkit against the five-point integration plan,
 updated 2026-10-21. ModKit remains responsible for fast previews, terrain operations,

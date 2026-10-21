@@ -36,7 +36,7 @@ with (work / 'stdout.log').open('wb') as stdout, (work / 'stderr.log').open('wb'
             time.sleep(.1)
         info = json.loads((work / 'runtime' / 'api-info.json').read_text())
         code, health = call('/health', authorized=False)
-        assert code == 200 and health['version'] == '0.9.1-rc.1' and not health['workerRunning'], health
+        assert code == 200 and health['version'] == '0.9.2-rc.1' and not health['workerRunning'], health
         assert call('/modules', authorized=False)[0] == 403
         assert call('/terrain/export', {'size': 512}, authorized=False)[0] == 403
         code, modules = call('/modules')

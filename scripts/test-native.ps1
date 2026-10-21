@@ -13,4 +13,8 @@ try {
  if($LASTEXITCODE){throw 'Map export path test build failed'}
  & (Join-Path $destination 'MapExportPathTests.exe')
  if($LASTEXITCODE){throw 'Map export path regression test failed'}
+ & $compiler /nologo /utf-8 /W4 /std:c++17 /EHsc /MT (Join-Path $root 'tests\owned_thread_hooks_test.cpp') /Fe:OwnedThreadHooksTests.exe
+ if($LASTEXITCODE){throw 'Owned thread dispatch test build failed'}
+ & (Join-Path $destination 'OwnedThreadHooksTests.exe')
+ if($LASTEXITCODE){throw 'Owned thread dispatch regression test failed'}
 }finally{Pop-Location}

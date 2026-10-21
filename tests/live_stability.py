@@ -27,6 +27,9 @@ def valid(letter):
  code,result=call('/convert',{'template':str(template),'triggers_file':str(root/('tests/fixtures/Triggers-'+letter+'.xml')),
   'context_label':'Native oracle marker 20261020','expect_text':[],'compile':True})
  assert code==200 and result['nativeCompilePassed'] and result['compilerErrors']==0,result.get('error')
+ for native in result['steps'].values():
+  assert native['transport']=='owned-startup-thread-local' and not native['crossProcessHookRegistrationUsed']
+  assert native['requestGuardRemoved'] and native['dllPid']==native['pid'] and native['dllThread']==native['ownerThread']
  value='170121' if letter=='A' else '170122';assert value in result['galaxy']
  code,exported=call('/galaxy/export',{});assert code==200 and exported['artifact']['sha256']==result['sourceSha256']
  req=urllib.request.Request(info['url']+exported['artifact']['download'],headers={'X-SC2-Token':info['token']})
@@ -54,7 +57,7 @@ try:
   tree=ET.fromstring(Path(gui['triggers_file']).read_bytes());removed=0
   for typ in tree.findall('.//VariableType'):
    for extent in typ.findall('ArraySize'):typ.remove(extent);removed+=1
-  assert removed;negative=work/'ScalarDeclarations.xml';negative.write_bytes(ET.tostring(tree,encoding='utf8',xml_declaration=True))
+  assert removed;negative=work/'ScalarDeclarations.xml';negative.write_bytes(ET.tostring(tree,encoding='utf-8',xml_declaration=True))
   code,result=call('/convert',{**gui,'triggers_file':str(negative)})
   assert code==422 and result['failureKind']=='NATIVE_COMPILE_ERRORS' and result['compilerErrors']>0,result.get('error')
   last=valid('B')

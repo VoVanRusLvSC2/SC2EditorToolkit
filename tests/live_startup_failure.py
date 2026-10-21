@@ -1,11 +1,12 @@
 """Opt-in acceptance of a known startup failure, never native compile acceptance."""
-import argparse,json,subprocess,time,urllib.request,urllib.error
+import argparse,json,subprocess,sys,time,urllib.request,urllib.error
 from pathlib import Path
 root=Path(__file__).resolve().parents[1]
 p=argparse.ArgumentParser();p.add_argument('--template',required=True);p.add_argument('--work',required=True)
-p.add_argument('--expected-win32',required=True);a=p.parse_args()
+p.add_argument('--expected-win32',required=True);p.add_argument('--source',action='store_true');a=p.parse_args()
 work=Path(a.work).resolve();work.mkdir(parents=True,exist_ok=False);info=None
-proc=subprocess.Popen([str(root/'dist/SC2NativeAPI.exe'),'serve','--port','0','--work',str(work/'runtime')],
+command=[sys.executable,str(root/'app/hidden_api.py')] if a.source else [str(root/'dist/SC2NativeAPI.exe')]
+proc=subprocess.Popen(command+['serve','--port','0','--work',str(work/'runtime')],
  creationflags=subprocess.CREATE_NO_WINDOW,stdout=(work/'stdout.log').open('wb'),stderr=(work/'stderr.log').open('wb'))
 def call(route,body=None):
  req=urllib.request.Request(info['url']+route,None if body is None else json.dumps(body).encode(),{'X-SC2-Token':info['token'],'Content-Type':'application/json'})
@@ -25,7 +26,7 @@ try:
  observed=result['desktopObservation'];assert not observed['visibleWindowsOnUserDesktopPeak'] and not observed['editorForegroundSamples']
  assert not call('/health')[1]['workerRunning'] and call('/galaxy/export',{})[0]==400
  (work/'VERIFICATION.json').write_text(json.dumps({'status':'NATIVE_STARTUP_FAILURE_HANDLED','expectedWin32':a.expected_win32,
-  'packaged':True,'ownedWorkerReset':True,'staleExportRefused':True,'nativeGenerationVerified':False,
+  'packaged':not a.source,'ownedWorkerReset':True,'staleExportRefused':True,'nativeGenerationVerified':False,
   'nativeCompilationTested':False,'desktopObservation':observed},indent=2),encoding='utf8')
 finally:
  if info:call('/shutdown',{})
