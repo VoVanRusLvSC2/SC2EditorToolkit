@@ -1,15 +1,22 @@
 # ModKit / original Editor bridge status
 
+v0.13.0-rc.1 adds a per-server FIFO job API, cancellation/deadlines and fresh-worker
+recovery; immutable revision-bound native reports; original effective Data fields,
+Object Explorer associations and main Model file checks in the original Archive
+Browser. There are now 26 MCP tools. See
+[jobs and reports](JOBS_AND_REPORTS.md) and [Data and resources](DATA_AND_RESOURCES.md).
+Upgrade the complete matching protocol-14 package and restart owned workers.
+
 v0.12.0-rc.1 completes the native whole-map visibility filters, with independent
 model readback, all four category combinations/restoration, a second owned worker
 and full-resolution model acceptance. See [map export](MAP_EXPORT.md).
-Upgrade the complete protocol-13 package and restart workers. Water-specific
+That release used protocol 13. Water-specific
 acceptance and broader asset/dependency coverage remain separate.
 
 The v0.11.0-rc.1 update removed the fixed installation path and adds Editor discovery,
 `editor_path`, `SC2_EDITOR_PATH` and CLI `--editor`. It validates the supported
 original binary and uses selected-file identity throughout native operations.
-That release used protocol 12; the current complete package uses protocol 13.
+That release used protocol 12; the current complete package uses protocol 14.
 See [presentation readiness](PRESENTATION_READINESS.md) for dated parallel-worker
 and native media evidence, plus the remaining feature limits.
 
@@ -25,7 +32,7 @@ and [dated validation history](VALIDATION.md). Earlier rendering limitations in
 the table below remain in force.
 
 Assessment of the existing toolkit against the five-point integration plan,
-updated 2026-10-23. ModKit remains responsible for fast previews, terrain operations,
+updated 2026-10-24. ModKit remains responsible for fast previews, terrain operations,
 measurements and authoring. This toolkit supplies evidence from an owned hidden
 original Editor. The original assessment used 15 MCP tools. The subsequent
 implementation of items 2 and 5 adds exactly two tools (17 total):
@@ -47,13 +54,17 @@ camera extends the existing `sc2_capture_terrain` tool.
   session. Windows remain on its private desktop, with an invisible technical
   renderer. The installed executable file stays unchanged; physical mouse and
   keyboard input is untouched.
-- Requests are serialized with a busy lock. There is no general queued-job API.
-  MP4 export alone has job identity, progress and cancellation. General queueing,
-  progress, cooperative cancellation and deadlines remain future work.
-- Requests/manifests retain document identities and source hashes, but there is
-  no single map-revision token consistently attached to every operation.
-- Native request timeout handling keeps callbacks alive until an in-progress
-  handler completes; it is not a general safe-abort protocol.
+- Requests use a bounded FIFO queue per server. Status/wait/cancel and execution
+  deadlines are exposed over HTTP/MCP. Running aborts discard only the owned
+  process after PID/creation-time verification; jobs are never replayed.
+- Reports and Data observations include source SHA-256/map revision. The report
+  combines load/Data diagnostics, optional save/reopen, native generation,
+  compilation and exact Galaxy export. It does not execute gameplay.
+- Native request timeout handling retains IPC until a callback completes or
+  the owned process exits. An aborted process is not reused for another job.
+- Native Data values and relationships are original UI observations, not an
+  independently reimplemented inheritance resolver. Main Model file checks do
+  not certify every nested texture/animation/sound or runtime actor combination.
 - ModKit's existing Data reader was exercised separately on its loaded project:
   it found 12,639 declarations and returned requested declared fields with source
   provenance. Runtime override resolution remained explicitly unknown. This proves

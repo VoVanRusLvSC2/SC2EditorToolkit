@@ -26,7 +26,7 @@ foreach($file in 'README.md','THIRD_PARTY.txt','LICENSE','NOTICE'){
 }
 $docsDestination=Join-Path $PSScriptRoot "$OutputDirectory\docs"
 New-Item -ItemType Directory -Force -Path $docsDestination | Out-Null
-foreach($file in 'VALIDATION.md','MODKIT_BRIDGE_STATUS.md','NATIVE_DISPATCH.md','PARALLEL_INSTANCES.md','PRESENTATION_READINESS.md','MAP_EXPORT.md'){
+foreach($file in 'VALIDATION.md','MODKIT_BRIDGE_STATUS.md','NATIVE_DISPATCH.md','PARALLEL_INSTANCES.md','PRESENTATION_READINESS.md','MAP_EXPORT.md','JOBS_AND_REPORTS.md','DATA_AND_RESOURCES.md'){
  Copy-Item -LiteralPath (Join-Path $PSScriptRoot "docs\$file") -Destination $docsDestination
 }
 if($hasVulkan){Copy-Item -LiteralPath (Join-Path $renderer 'LICENSE.txt') -Destination (Join-Path $PSScriptRoot "$OutputDirectory\LICENSE-DXVK.txt")}

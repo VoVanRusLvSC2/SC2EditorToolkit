@@ -293,7 +293,9 @@ static void DiagnosticsSnapshot(Block* b){
 #include "map_export_bridge.inc"
 #include "terrain_camera.inc"
 #include "terrain_bridge.inc"
+#include "data_clipboard.inc"
 #include "document_io.inc"
+#include "data_bridge.inc"
 static void Process(Block* b) {
     b->dllPid=GetCurrentProcessId();b->dllTid=GetCurrentThreadId();b->foregroundBefore=reinterpret_cast<uint64_t>(GetForegroundWindow());
     HWND target=reinterpret_cast<HWND>(b->target);DWORD pid=0;DWORD tid=GetWindowThreadProcessId(target,&pid);
@@ -323,6 +325,7 @@ static void Process(Block* b) {
     if(b->operation==SaveDocument){if(!IsWindowEnabled(target)){Fail(b,12,L"A modal dialog blocks native save");return;}SaveNativeDocument(b,target);return;}
     if(b->operation==ReopenDocument){if(!IsWindowEnabled(target)){Fail(b,12,L"A modal dialog blocks native reopen");return;}ReopenNativeDocument(b,target);return;}
     if(b->operation==LoadDataModule){if(!IsWindowEnabled(target)){Fail(b,12,L"A modal dialog blocks native Data loading");return;}LoadNativeDataModule(b,target);return;}
+    if(b->operation==DataRead||b->operation==DataLinks||b->operation==DataResources||b->operation==DataInspect||b->operation==DataAsset){DataOperation(b,target);return;}
     if(b->operation==TerrainView||b->operation==TerrainExport||(b->operation==TerrainCamera||b->operation==TerrainCameraLayer||b->operation==TerrainCameraSelect)){if(!IsWindowEnabled(target)){Fail(b,12,L"A modal dialog blocks the document");return;}TerrainOperation(b,target);return;}
     if(b->operation==SceneInspect||b->operation==SceneLoad||(b->operation==SceneSeek||b->operation==SceneAdvance||b->operation==SceneAudio)){SceneOperation(b);return;}
     if(b->operation==OpenCutscene){
@@ -398,20 +401,18 @@ static void Process(Block* b) {
     b->foregroundAfter=reinterpret_cast<uint64_t>(GetForegroundWindow());
 }
 static void GuardedProcess(Block* b) {
-    bool capture=b->operation==LoadDocument||b->operation==SaveDocument||b->operation==ReopenDocument||b->operation==LoadDataModule||b->operation==Diagnostics||b->operation==Compile||b->operation==Generate;
+    bool capture=(b->operation>=DataRead&&b->operation<=DataAsset)||b->operation==LoadDocument||b->operation==SaveDocument||b->operation==ReopenDocument||b->operation==LoadDataModule||b->operation==Diagnostics||b->operation==Compile||b->operation==Generate;
     if(capture)BeginDiagnosticCapture(b);
     __try{Process(b);}__except(EXCEPTION_EXECUTE_HANDLER){b->exceptionCode=GetExceptionCode();Fail(b,99,L"SEH exception during native bridge request; no automatic retry");}
     if(capture)EndDiagnosticCapture(b);
 }
-extern "C" __declspec(dllexport) LRESULT CALLBACK BridgeHook(int n,WPARAM wp,LPARAM lp) {
-    if(n>=0&&resident.dispatch){
-        auto message=reinterpret_cast<CWPSTRUCT*>(lp);
+static void HandleBridgeMessage(const CWPSTRUCT* message) {
+    if(resident.dispatch){
         if(message&&message->hwnd&&!GetParent(message->hwnd)&&PrivateDesktop()&&reinterpret_cast<uintptr_t>(GetPropW(message->hwnd,kDispatchProperty))!=kProtocolVersion)
             SetPropW(message->hwnd,kDispatchProperty,reinterpret_cast<HANDLE>(uintptr_t(kProtocolVersion)));
     }
-    if(n>=0)ObserveDiagnosticMutation(reinterpret_cast<CWPSTRUCT*>(lp));
-    if(n>=0&&!processing){
-        auto message=reinterpret_cast<CWPSTRUCT*>(lp);
+    ObserveDiagnosticMutation(message);
+    if(!processing){
         static UINT request=RegisterWindowMessageW(kMessageName);
         if(message&&message->message==request){
             wchar_t name[256]{};
@@ -432,7 +433,22 @@ extern "C" __declspec(dllexport) LRESULT CALLBACK BridgeHook(int n,WPARAM wp,LPA
                 }
             }
         }
-    }return CallNextHookEx(nullptr,n,wp,lp);
+    }
+}
+extern "C" __declspec(dllexport) LRESULT CALLBACK BridgeHook(int n,WPARAM wp,LPARAM lp){
+    if(n>=0)HandleBridgeMessage(reinterpret_cast<CWPSTRUCT*>(lp));
+    return CallNextHookEx(nullptr,n,wp,lp);
+}
+static LRESULT CALLBACK BridgeQueuedHook(int n,WPARAM wp,LPARAM lp){
+    if(n>=0&&wp==PM_REMOVE){
+        auto queued=reinterpret_cast<MSG*>(lp);static UINT request=RegisterWindowMessageW(kMessageName);
+        if(queued&&queued->message==request){
+            CWPSTRUCT message{queued->lParam,queued->wParam,queued->message,queued->hwnd};
+            HandleBridgeMessage(&message);
+            queued->message=WM_NULL;queued->wParam=0;queued->lParam=0;
+        }
+    }
+    return CallNextHookEx(nullptr,n,wp,lp);
 }
 extern "C" __declspec(dllexport) void CALLBACK BridgeAttachCurrentThread(ULONG_PTR version){
     if(version!=kProtocolVersion||!PrivateDesktop()||resident.dispatch)return;
@@ -445,6 +461,6 @@ extern "C" __declspec(dllexport) void CALLBACK BridgeAttachCurrentThread(ULONG_P
         char line[512]{};int size=sprintf_s(line,"%s expected=%d sameFile=%d protocol=%u hookError=%lu\r\n",phase,!expected.empty(),same,kProtocolVersion,resident.error);
         HANDLE file=CreateFileW(path,FILE_APPEND_DATA,FILE_SHARE_READ|FILE_SHARE_WRITE,nullptr,OPEN_ALWAYS,FILE_ATTRIBUTE_NORMAL,nullptr);if(file!=INVALID_HANDLE_VALUE){DWORD written;WriteFile(file,line,size,&written,nullptr);CloseHandle(file);}};
     trace("attach identity");if(!same)return;
-    resident.Start(BridgeFocusGuard,BridgeHook);trace("attach callbacks");
+    resident.Start(BridgeFocusGuard,BridgeHook,BridgeQueuedHook);trace("attach callbacks");
 }
 BOOL WINAPI DllMain(HINSTANCE,DWORD,LPVOID){return TRUE;}

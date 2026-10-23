@@ -1,3 +1,4 @@
+import os
 """No Editor required: exercise packaged HTTP routes and fail-before-start checks."""
 import json
 import subprocess
@@ -26,7 +27,7 @@ def call(route, body=None, authorized=True):
 
 
 with (work / 'stdout.log').open('wb') as stdout, (work / 'stderr.log').open('wb') as stderr:
-    process = subprocess.Popen([str(root / 'dist' / 'SC2NativeAPI.exe'), 'serve',
+    process = subprocess.Popen([str(root / os.environ.get('SC2_PACKAGE_DIR','dist') / 'SC2NativeAPI.exe'), 'serve',
         '--work', str(work / 'runtime'), '--port', '0'], stdout=stdout, stderr=stderr,
         creationflags=subprocess.CREATE_NO_WINDOW)
     try:
@@ -35,8 +36,13 @@ with (work / 'stdout.log').open('wb') as stdout, (work / 'stderr.log').open('wb'
             assert process.poll() is None and time.monotonic() < deadline, 'API startup failed'
             time.sleep(.1)
         info = json.loads((work / 'runtime' / 'api-info.json').read_text())
+        duplicate=subprocess.run([str(root/os.environ.get('SC2_PACKAGE_DIR','dist')/'SC2NativeAPI.exe'),
+            'serve','--work',str(work/'runtime'),'--port','0'],capture_output=True,
+            creationflags=subprocess.CREATE_NO_WINDOW,timeout=20)
+        assert duplicate.returncode!=0,'Two servers unexpectedly acquired the same work directory'
+        assert json.loads((work/'runtime/api-info.json').read_text())==info,'Duplicate startup replaced server identity'
         code, health = call('/health', authorized=False)
-        assert code == 200 and health['version'] == '0.12.0-rc.1' and not health['workerRunning'], health
+        assert code == 200 and health['version'] == '0.13.0-rc.1' and not health['workerRunning'], health
         assert call('/modules', authorized=False)[0] == 403
         assert call('/terrain/export', {'size': 512}, authorized=False)[0] == 403
         code, modules = call('/modules')
@@ -48,6 +54,10 @@ with (work / 'stdout.log').open('wb') as stdout, (work / 'stderr.log').open('wb'
         assert 'list_map_cameras' in terrain['methods']
         editor = next(m for m in modules['modules'] if m['id'] == 'editor')
         assert 'save_reopen' in editor['methods'] and 'validate_document' in editor['methods']
+        for route in ('/jobs/submit','/jobs/status','/jobs/wait','/jobs/cancel','/editor/check','/data/read','/data/links','/data/resources'):
+            assert call(route,{},authorized=False)[0]==403,route
+        for route in ('/data/read','/data/links','/data/resources'):
+            assert call(route,{'catalog':'Wrong','object_id':'Marine'})[0]==400,route
         archive = create_archive(work / 'fixture', root / 'tools/mpqcli/mpqcli.exe')
         assert modules['editorSelection']['requestArgument']=='editor_path'
         assert modules['editorSelection']['binarySha256Verified']

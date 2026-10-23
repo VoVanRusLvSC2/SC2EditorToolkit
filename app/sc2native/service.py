@@ -6,12 +6,14 @@ from http.server import BaseHTTPRequestHandler,ThreadingHTTPServer
 from .runtime import watch_frozen_parent
 from .session import Worker
 from .modules import capabilities
+from .jobs import JobQueue
 
 ROUTES={'/convert':'execute','/open':'open_document','/editor/start':'start','/triggers/compile':'compile_current',
  '/galaxy/export':'export_galaxy','/editor/diagnostics':'diagnostics','/cutscene/open':'cutscene_open','/cutscene/seek':'cutscene_seek',
  '/cutscene/export':'export_video','/cutscene/export/cancel':'cancel_video','/render/capture':'capture_frame','/terrain/capture':'capture_terrain','/terrain/export':'export_map_image',
  '/objects/search':'search_objects','/terrain/region':'capture_map_region','/terrain/cameras':'list_map_cameras',
- '/editor/validate':'validate_document','/editor/save-reopen':'save_reopen_document'}
+ '/editor/validate':'validate_document','/editor/save-reopen':'save_reopen_document','/editor/check':'check_document',
+ '/data/read':'read_data','/data/links':'data_links','/data/resources':'check_resources'}
 
 def main():
     watch_frozen_parent()
@@ -32,7 +34,7 @@ def main():
             if args.response:Path(args.response).write_text(json.dumps({'status':'FAILED','error':str(e)}),encoding='utf8')
             return 2
         finally:worker.close()
-    token=secrets.token_urlsafe(32)
+    jobs=JobQueue(worker);token=secrets.token_urlsafe(32)
     class Handler(BaseHTTPRequestHandler):
         def log_message(self,fmt,*values):
             with (worker.work/'http.log').open('a',encoding='utf8') as f:f.write(time.strftime('%Y-%m-%dT%H:%M:%S')+' '+fmt%values+'\n')
@@ -45,10 +47,14 @@ def main():
         def authorized(self):
             return not self.headers.get('Origin') and secrets.compare_digest(self.headers.get('X-SC2-Token',''),token)
         def do_GET(self):
-            if self.path=='/health':self.reply(200,{'ok':True,'version':'0.12.0-rc.1','workerRunning':worker.alive(),'busy':worker.lock.locked(),'renderBackend':(worker.state or {}).get('renderBackend'),'instanceId':(worker.state or {}).get('instanceId')});return
+            if self.path=='/health':self.reply(200,{'ok':True,'version':'0.13.0-rc.1','workerRunning':worker.alive(),'busy':jobs.busy() or worker.lock.locked(),'renderBackend':(worker.state or {}).get('renderBackend'),'instanceId':(worker.state or {}).get('instanceId')});return
             if not self.authorized():self.reply(403,{'error':'X-SC2-Token required; browser origins are not accepted'});return
             if self.path=='/modules':self.reply(200,capabilities());return
             if self.path=='/cutscene/export/status':self.reply(200,worker.export_video_status());return
+            if self.path.startswith('/jobs/'):
+                try:self.reply(200,jobs.status({'job_id':self.path[len('/jobs/'):]}))
+                except KeyError:self.reply(404,{'error':'Unknown job_id'})
+                return
             if self.path.startswith('/artifacts/'):
                 try:
                     item=worker.artifacts.get(self.path[len('/artifacts/'):]);path=Path(item['path'])
@@ -63,20 +69,23 @@ def main():
         def do_POST(self):
             if not self.authorized():self.reply(403,{'error':'X-SC2-Token required; browser origins are not accepted'});return
             if self.path=='/shutdown':
-                if worker.lock.locked():self.reply(409,{'error':'Worker busy'});return
+                if jobs.busy() or worker.lock.locked():self.reply(409,{'error':'Worker busy; cancel or wait for queued work first'});return
                 self.reply(200,{'ok':True});threading.Thread(target=server.shutdown,daemon=True).start();return
-            if self.path not in ROUTES:self.reply(404,{'error':'Unknown endpoint'});return
+            if self.path not in ROUTES and self.path not in ('/jobs/submit','/jobs/status','/jobs/wait','/jobs/cancel'):self.reply(404,{'error':'Unknown endpoint'});return
             try:
                 length=int(self.headers.get('Content-Length','0'))
                 if not 0<length<=80*1024**2:raise ValueError('Body must be 1 byte to 80 MiB')
                 request=json.loads(self.rfile.read(length))
                 if not isinstance(request,dict):raise ValueError('JSON object required')
-                result=getattr(worker,ROUTES[self.path])(request)
-                self.reply(422 if result.get('status')=='FAILED' else 200,result)
+                if self.path.startswith('/jobs/'):
+                    result=getattr(jobs,self.path.rsplit('/',1)[1])(request)
+                elif self.path=='/cutscene/export/cancel':result=worker.cancel_video(request)
+                else:result=jobs.run(ROUTES[self.path],request)
+                self.reply(202 if self.path=='/jobs/submit' else 422 if result.get('status')=='FAILED' else 200,result)
             except FileExistsError:self.reply(409,{'status':'FAILED','error':'Export target exists; use another path or overwrite=true'})
             except Exception as e:self.reply(409 if worker.lock.locked() else 400,{'status':'FAILED','error':str(e)})
     server=ThreadingHTTPServer(('127.0.0.1',args.port),Handler)
-    (worker.work/'api-info.json').write_text(json.dumps({'url':f'http://127.0.0.1:{server.server_port}','token':token,'pid':os.getpid(),'version':'0.12.0-rc.1'},indent=2),encoding='utf8')
+    (worker.work/'api-info.json').write_text(json.dumps({'url':f'http://127.0.0.1:{server.server_port}','token':token,'pid':os.getpid(),'version':'0.13.0-rc.1'},indent=2),encoding='utf8')
     try:server.serve_forever(poll_interval=.2)
-    finally:server.server_close();worker.close()
+    finally:server.server_close();jobs.close();worker.close()
     return 0

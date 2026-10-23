@@ -91,6 +91,8 @@ def convert(args):
         current_step=None;stage=None
         def step(name,directory,document,**options):
             nonlocal current_step,stage
+            if getattr(args,'check_abort',None):args.check_abort()
+            if getattr(args,'progress',None):args.progress(name,str(job/directory))
             current_step=name;stage=directory;result['stepEvidence'][name]=directory
             try:value=native_step(job,directory,args.pid,document,editor=manifest['editor'],**options)
             except NativeStepError as error:

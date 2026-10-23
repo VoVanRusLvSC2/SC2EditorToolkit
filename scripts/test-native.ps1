@@ -21,4 +21,9 @@ try {
  if($LASTEXITCODE){throw 'Editor identity test build failed'}
  & (Join-Path $destination 'EditorIdentityTests.exe')
  if($LASTEXITCODE){throw 'Editor identity regression test failed'}
+ $clipboardSources=@('tests\data_clipboard_test.cpp','vendor\minhook\src\buffer.c','vendor\minhook\src\hook.c','vendor\minhook\src\trampoline.c','vendor\minhook\src\hde\hde64.c') | ForEach-Object {Join-Path $root $_}
+ & $compiler /nologo /utf-8 /W4 /std:c++17 /EHsc /MT @clipboardSources /Fe:DataClipboardTests.exe user32.lib uuid.lib
+ if($LASTEXITCODE){throw 'Private clipboard test build failed'}
+ & (Join-Path $destination 'DataClipboardTests.exe')
+ if($LASTEXITCODE){throw 'Private clipboard isolation regression failed'}
 }finally{Pop-Location}

@@ -140,6 +140,12 @@ static void ReopenNativeDocument(Block* b,HWND target){
 }
 static void LoadNativeDataModule(Block* b,HWND target){
     if(!PrivateDesktop()){Fail(b,126,L"Native Data loading requires an owned private desktop");return;}
+    if(!EnsureDataClipboard()){Fail(b,151,L"Private clipboard isolation unavailable before original Data initialization");return;}
+    HWND existing=nullptr;
+    for(HWND w:Roots())if(IsWindowVisible(w)&&IsWindowEnabled(w)&&Text(w).rfind(L"Data - [",0)==0&&DocumentWindow(Text(w),b->expectedDocument,nullptr,true)){
+        if(existing){Fail(b,128,L"Ambiguous native Data workspace");return;}existing=w;
+    }
+    if(existing){b->documentIo.dataLoaded=1;wcsncpy_s(b->loadedTitle,Text(existing).c_str(),_TRUNCATE);return;}
     auto command=FindCommand(target,{L"Modules",L"Модули"},{L"Data",L"Данные"});
     if(!command){Fail(b,127,L"Original Data module command unavailable");return;}
     b->moduleCommand=command;++b->commandsDispatched;SendMessageW(target,WM_COMMAND,command,0);

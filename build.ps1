@@ -5,7 +5,8 @@ New-Item -ItemType Directory -Path $destination -Force | Out-Null
 Push-Location $destination
 try {
  $options=@('/nologo','/utf-8','/W4','/std:c++17','/EHsc','/O2','/MT','/DUNICODE','/D_UNICODE')
- & $compiler @options /LD (Join-Path $PSScriptRoot 'src\bridge.cpp') /Fe:SC2NativeBridge.dll
+ $bridgeSources=@('src\bridge.cpp','vendor\minhook\src\buffer.c','vendor\minhook\src\hook.c','vendor\minhook\src\trampoline.c','vendor\minhook\src\hde\hde64.c') | ForEach-Object {Join-Path $PSScriptRoot $_}
+ & $compiler @options /LD @bridgeSources /Fe:SC2NativeBridge.dll
  if($LASTEXITCODE){throw 'Native bridge build failed'}
  & $compiler @options (Join-Path $PSScriptRoot 'src\controller.cpp') /Fe:SC2NativeBridge.exe
  if($LASTEXITCODE){throw 'Controller build failed'}

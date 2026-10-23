@@ -4,10 +4,10 @@
 #include "audio_protocol.h"
 constexpr uint32_t kMagic = 0x53433247;
 constexpr size_t kSourceCapacity = 16 * 1024 * 1024;
-constexpr uint32_t kProtocolVersion=13;
-constexpr wchar_t kMessageName[] = L"SC2.NativeGalaxyBridge.20261020.modules.v13";
-constexpr wchar_t kDispatchProperty[] = L"SC2NativeBridge.OwnedThread.v13";
-enum Operation : uint32_t { Inspect = 0, Generate = 1, Compile = 2, ReadSource = 3, FreshnessProbe = 4, LoadDocument = 5, CancelLoad = 6, Diagnostics=7, OpenCutscene=8, SceneInspect=9, SceneLoad=10, SceneSeek=11, SceneAdvance=12, SceneAudio=13, TerrainView=14, TerrainExport=15, SaveDocument=16, ReopenDocument=17, LoadDataModule=18, TerrainCamera=19, TerrainCameraLayer=20, TerrainCameraSelect=21 };
+constexpr uint32_t kProtocolVersion=14;
+constexpr wchar_t kMessageName[] = L"SC2.NativeGalaxyBridge.20261020.modules.v14";
+constexpr wchar_t kDispatchProperty[] = L"SC2NativeBridge.OwnedThread.v14";
+enum Operation : uint32_t { Inspect = 0, Generate = 1, Compile = 2, ReadSource = 3, FreshnessProbe = 4, LoadDocument = 5, CancelLoad = 6, Diagnostics=7, OpenCutscene=8, SceneInspect=9, SceneLoad=10, SceneSeek=11, SceneAdvance=12, SceneAudio=13, TerrainView=14, TerrainExport=15, SaveDocument=16, ReopenDocument=17, LoadDataModule=18, TerrainCamera=19, TerrainCameraLayer=20, TerrainCameraSelect=21, DataRead=22,DataLinks=23,DataResources=24,DataInspect=25,DataAsset=26 };
 constexpr size_t kDiagnosticCapacity=2*1024*1024;
 struct DiagnosticCapture {uint32_t beforeBytes,afterBytes,eventBytes,eventCount,eventsComplete;char before[kDiagnosticCapacity],after[kDiagnosticCapacity],events[kDiagnosticCapacity];};
 struct DocumentIo {uint32_t saveCommand,closeCommand,saved,closed,reopened,dataLoaded;uint64_t savedBytes;};

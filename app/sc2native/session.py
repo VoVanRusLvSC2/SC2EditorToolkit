@@ -19,9 +19,18 @@ class Worker:
     def __init__(self,work,editor_path=None):
         self.editor_preference=editor_path
         self.work=Path(work).resolve();self.work.mkdir(parents=True,exist_ok=True)
+        import msvcrt
+        self._work_lock=(self.work/'.server.lock').open('a+b')
+        try:
+            self._work_lock.seek(0,2)
+            if self._work_lock.tell()==0:self._work_lock.write(b'\0');self._work_lock.flush()
+            self._work_lock.seek(0);msvcrt.locking(self._work_lock.fileno(),msvcrt.LK_NBLCK,1)
+        except OSError:
+            self._work_lock.close();raise RuntimeError('Work directory is already in use; select a different --work for each server')
         self.state=None;self.monitor=None;self.lock=threading.Lock()
         self.artifacts=ArtifactStore(self.work/'exports');self.last_result=None;self.scene=None
         self.video_progress=None;self.video_cancel=threading.Event()
+        self.operation_abort=threading.Event();self.operation_progress={};self.operation_id=None
         self.job_name='Local\\SC2NativeApi-'+uuid.uuid4().hex
         self.job_handle=kernel.CreateJobObjectW(None,self.job_name)
         limit=ExtendedLimit();limit.Basic.Flags=0x2000
@@ -29,7 +38,21 @@ class Worker:
             raise OSError(ctypes.get_last_error(),'Cannot create owned-worker lifetime job')
         atexit.register(self.close)
     def alive(self):return bool(self.state and process_time(self.state['pid'])==self.state['createTimeFiletime'])
+    def begin_operation(self,identifier):
+        self.operation_id=identifier;self.operation_abort.clear();self.video_cancel.clear();self.operation_progress={'phase':'starting'}
+    def _check_abort(self):
+        if getattr(self,'operation_abort',None) and self.operation_abort.is_set():raise RuntimeError('Owned operation was cancelled or exceeded its deadline')
+    def abort_owned_operation(self,reason):
+        self.operation_abort.set();self.video_cancel.set()
+        self.operation_progress={**self.operation_progress,'stopRequested':reason}
+        state=self.state
+        if state and process_time(state['pid'])==state['createTimeFiletime']:
+            handle=kernel.OpenProcess(0x1000|1,False,state['pid'])
+            if handle:
+                if process_time(state['pid'])==state['createTimeFiletime']:kernel.TerminateProcess(handle,0)
+                kernel.CloseHandle(handle)
     def ensure(self,template,startup_module='triggers',render_backend=None,editor_path=None):
+        self._check_abort()
         if startup_module not in ('triggers','terrain','default'):raise ValueError('startup_module must be triggers, terrain or default')
         requested=requested_backend(render_backend)
         if self.alive():
@@ -39,6 +62,7 @@ class Worker:
                 raise ValueError('The owned worker already uses another render backend; restart that API/MCP worker to change it')
             return
         selected=select_backend(RES,requested)
+        self.operation_progress={'phase':'starting-owned-editor'}
         installation=validate_editor(resolve_editor(editor_path if editor_path is not None else getattr(self,'editor_preference',None)))
         self.scene=None
         if self.monitor:self.monitor.stop();self.monitor=None
@@ -56,12 +80,13 @@ class Worker:
                     try:
                         state=json.loads(state_path.read_text());self.state=state;self.monitor=Observation(state['pid'])
                     except (OSError,ValueError):pass
+                if getattr(self,'operation_abort',None) and self.operation_abort.is_set():self.abort_owned_operation('STARTUP_ABORT')
                 time.sleep(.05)
         state_path=startup/'state.json'
         if not state_path.is_file():raise RuntimeError('Hidden startup failed; see '+str(directory))
         self.state=json.loads(state_path.read_text())
         if child.returncode or self.state['status']!='HIDDEN_EDITOR_READY':
-            reason='Hidden Editor not ready: '+str(self.state['status'])+'; '+str(directory)
+            reason='Hidden Editor not ready: '+str(self.state['status'])+'; hostExitCode='+str(child.returncode)+'; '+str(directory)
             self._reset_owned_editor()
             raise RuntimeError(reason)
         self.state['currentDocument']=seed.name;self.state['documentPath']=str(seed);self.state['startupReport']=str(state_path);self.state['renderBackend']=selected;self.state['editorPath']=installation['path'];self.state['editorInfo']=installation
@@ -79,6 +104,8 @@ class Worker:
     def close(self):
         self._reset_owned_editor()
         if self.job_handle:kernel.CloseHandle(self.job_handle);self.job_handle=None
+        handle=getattr(self,'_work_lock',None)
+        if handle and not handle.closed:handle.close()
     def execute(self,request,_locked=False):
         if not _locked and not self.lock.acquire(blocking=False):raise RuntimeError('Worker busy; serialize requests')
         try:
@@ -105,6 +132,8 @@ class Worker:
                 scope=request.get('scope','mapRoot'),context_label=request.get('context_label'),editor=self.state['editorPath'],mpqcli=None,
                 pid=self.state['pid'],current_document=self.state['currentDocument'],marker=request.get('marker',''),
                 expect_text=request.get('expect_text',[]),compile=bool(request.get('compile',True)))
+            args.check_abort=self._check_abort
+            args.progress=lambda phase,directory:setattr(self,'operation_progress',{'phase':phase,'evidenceDirectory':directory})
             result=oracle.convert(args)
             # Load may succeed even if generation/compilation subsequently fails.
             manifest=Path(args.job)/'manifest.json'
@@ -173,7 +202,9 @@ class Worker:
             if not _locked:self.lock.release()
 
     def _native(self,directory,operation,scope='mapRoot',context='',**options):
+        self._check_abort()
         if not self.alive():raise RuntimeError('Start or open a document first')
+        self.operation_progress={'phase':operation,'evidenceDirectory':str(directory)}
         oracle.ACTIVE_DESKTOP=self.state['desktop']
         return oracle.native_step(directory,'01-'+operation,self.state['pid'],self.state['currentDocument'],context=context,scope=scope,editor=self.state['editorPath'],**options)
 
@@ -249,6 +280,28 @@ class Worker:
         from .document_validation import validate_document
         if not self.lock.acquire(blocking=False):raise RuntimeError('Worker busy')
         try:return validate_document(self,request)
+        finally:self.lock.release()
+
+    def check_document(self,request):
+        from .report import check_document
+        return check_document(self,request)
+
+    def read_data(self,request):
+        from .data import inspect_data
+        if not self.lock.acquire(blocking=False):raise RuntimeError('Worker busy')
+        try:return inspect_data(self,request)
+        finally:self.lock.release()
+
+    def data_links(self,request):
+        from .data import inspect_data
+        if not self.lock.acquire(blocking=False):raise RuntimeError('Worker busy')
+        try:return inspect_data(self,request,'links')
+        finally:self.lock.release()
+
+    def check_resources(self,request):
+        from .data import inspect_data
+        if not self.lock.acquire(blocking=False):raise RuntimeError('Worker busy')
+        try:return inspect_data(self,request,'resources')
         finally:self.lock.release()
 
     def save_reopen_document(self,request):

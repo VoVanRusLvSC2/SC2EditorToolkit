@@ -108,7 +108,11 @@ int wmain(int argc,wchar_t** argv){
         WaitForSingleObject(process.hProcess,500);
     }
     input=OpenInputDesktop(0,FALSE,DESKTOP_READOBJECTS);auto inputAfter=DesktopName(input);if(input)CloseDesktop(input);
+    // Lock/unlock/screensavers are external observations. This host never
+    // switches the input desktop; a ready private Editor remains ready.
+    state.insert(state.size()-1,",\"inputDesktopAfter\":"+Q(inputAfter)+",\"inputDesktopChangedDuringStartup\":"+std::string(inputBefore!=inputAfter?"true":"false"));
+    {std::ofstream file(out/"state.json",std::ios::binary);file<<state;}
     if(!ready&&exitCode==STILL_ACTIVE){TerminateProcess(process.hProcess,41);WaitForSingleObject(process.hProcess,10000);}
     std::cout<<state<<"\n";CloseHandle(process.hProcess);SetThreadDesktop(original);CloseDesktop(isolated);
-    return ready&&inputBefore==inputAfter?0:2;
+    return ready?0:2;
 }

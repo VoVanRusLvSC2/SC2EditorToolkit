@@ -1,8 +1,16 @@
 # Owned Editor startup dispatch
 
-Native protocol **13** adds original map flag-model readback to the export result.
-Checkbox state alone cannot confirm the native renderer's object filters. It
-supersedes protocol 12; restart owned workers with the complete matching bundle.
+Native protocol **14** adds original Data operations and owned queued requests.
+The controller posts a registered message and retains both the mapping and atom
+until completion or owned-process exit. A same-process GETMESSAGE callback runs
+it on the original GUI thread without holding a cross-process synchronous send.
+The native regression checks explicitly confirm `InSendMessageEx == 0` for this
+path. Deadlines/cancellation discard the owned worker, rather than abandoning
+IPC and reusing a callback that may still be running.
+
+Protocol 13 added original map flag-model readback to the export result.
+Checkbox state alone cannot confirm the native renderer's object filters.
+Restart owned workers with the complete matching protocol-14 bundle.
 
 Protocol 12 retained owned-thread startup dispatch and bound native
 requests to the selected Editor executable by file identity rather than a fixed
@@ -45,7 +53,7 @@ an antivirus rejection are not claimed as proven causes. A historical
    verifies that the primary thread belongs to that process, and queues its
    initialization before the host resumes that thread.
 3. Initialization verifies the installed Editor executable and private desktop,
-   then installs CBT and CALLWNDPROC callbacks for **the current thread only**,
+   then installs CBT, CALLWNDPROC and GETMESSAGE callbacks for **the current thread only**,
    with a null module parameter. No cross-process DLL-hook registration occurs.
 4. The dispatcher marks its own top-level windows with the protocol version.
    Host readiness and every controller request require that exact marker.
@@ -54,11 +62,12 @@ an antivirus rejection are not claimed as proven causes. A historical
 5. Requests retain exact document, PID, GUI-thread, protocol and mapping checks.
    They run the existing original Editor commands and capture their results.
    Original generation and compilation remain separate confirmations.
-6. The request-local guard is removed after each handler. The two startup
+6. The request-local guard is removed after each handler. The three startup
    callbacks and loaded DLL live until the owned Editor exits. `hooksRemoved`
    retains its request-cleanup meaning; `requestGuardRemoved`, `transport`,
    `crossProcessHookRegistrationUsed` and `residentHooksLifetime` make that scope
-   explicit. A request timeout retains its IPC while a native handler is pending.
+   explicit. A request timeout retains its mapping and atom while a request is queued or
+   a native handler is pending.
 
 Windows documents both [same-process thread-specific hook callbacks](https://learn.microsoft.com/en-us/windows/win32/winmsg/about-hooks)
 and [initial APC execution before a suspended thread begins running](https://learn.microsoft.com/en-us/windows/win32/api/processthreadsapi/nf-processthreadsapi-queueuserapc).
@@ -68,7 +77,7 @@ host does not assume that a DLL has the same base address in two processes.
 All Editor windows remain on the private desktop. The technical render window
 remains invisible. This change adds no mouse/keyboard automation, input-desktop
 switch, arbitrary-process attachment, filesystem change to the installed Editor,
-or new MCP tool.
+or attachment to a normal Editor.
 
 ## Regression checks
 

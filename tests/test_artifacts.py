@@ -17,5 +17,11 @@ class Exports(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             store=ArtifactStore(directory)
             with self.assertRaises(KeyError):store.get('../../anything')
+    def test_restart_keeps_exact_download_identity_and_tamper_checks(self):
+        with tempfile.TemporaryDirectory() as directory:
+            original=ArtifactStore(directory);item=original.export(b'// original native bytes\r\n')
+            restored=ArtifactStore(directory);self.assertEqual(restored.get(item['id']),item)
+            Path(item['path']).write_bytes(b'changed after restart')
+            with self.assertRaises(RuntimeError):restored.get(item['id'])
 
 if __name__=='__main__':unittest.main()

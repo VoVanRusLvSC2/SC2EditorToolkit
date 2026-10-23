@@ -5,17 +5,20 @@ native generator, compiler and renderer through a DLL, HTTP API and MCP.
 Previously published as SC2 Native Toolkit. Original code author and project
 owner: **VoVanRusLvSC2**.
 
-**v0.12.0-rc.1 fixes native whole-map object filters.** Complete overhead PNG
-export independently controls unit and doodad models using the original flag
-model, checks native readback, and preserves exact native pixels. See
-[map export and object filters](docs/MAP_EXPORT.md) for API/MCP examples and the
-reference-image acceptance test. [Download v0.12.0-rc.1](https://github.com/VoVanRusLvSC2/SC2EditorToolkit/releases/tag/v0.12.0-rc.1).
+**v0.13.0-rc.1 adds queued jobs, revision-bound native reports and original Data access.**
+Read inherited/overridden values, search native Object Explorer associations,
+and check the selected Model's main file through the original Archive Browser
+and native diagnostics. Jobs support status, cancellation, deadlines and recovery.
+See [jobs and reports](docs/JOBS_AND_REPORTS.md),
+[Data and resources](docs/DATA_AND_RESOURCES.md), and
+[map export and object filters](docs/MAP_EXPORT.md).
+[Download v0.13.0-rc.1](https://github.com/VoVanRusLvSC2/SC2EditorToolkit/releases/tag/v0.13.0-rc.1).
 
 Editor installation discovery and explicit selection remain portable.
 There is no fixed drive or user-specific Editor path. Use automatic discovery,
 `SC2_EDITOR_PATH`, CLI `--editor`, or the startup API/MCP `editor_path` argument.
 The supported original binary is verified before launch; changing a live worker's
-installation requires restarting its server. Native protocol 13 requires the
+installation requires restarting its server. Native protocol 14 requires the
 matching complete package. See [presentation readiness](docs/PRESENTATION_READINESS.md).
 
 Vulkan offscreen rendering for an owned second Editor is included.
@@ -59,7 +62,9 @@ saved map-camera framing, remaining camera controls and validation coverage.
 
 | Module | Implemented capabilities |
 |---|---|
-| Editor | Hidden startup, private map/mod copies, new load/Data diagnostics, native save → close → disk reopen and component comparison |
+| Jobs | Per-server FIFO, progress, cancellation, deadlines, persisted history and fresh-worker recovery |
+| Data | Original effective field values, XML identity, Object Explorer associations, main Model file availability |
+| Editor | Revision-bound check report, hidden startup, private map/mod copies, new load/Data diagnostics, native save → close → disk reopen and component comparison |
 | Triggers | Original `Triggers XML → Galaxy` generation and native compilation |
 | Galaxy | Exact `.galaxy` bytes, SHA-256, artifact download, overwrite protection |
 | Objects | Search saved placements by ID/type/name, kind, owner and XY rectangle; no Editor needed |
@@ -538,7 +543,7 @@ Tools: `sc2_modules`, `sc2_editor_start`, `sc2_open_document`, `sc2_convert_xml`
 `sc2_search_objects` and `sc2_capture_map_region` provide saved placement search
 and experimental coordinate-region PNGs. `sc2_validate_document` and
 `sc2_save_reopen` provide native load/Data checks and serialization comparison.
-`sc2_list_map_cameras` exposes saved map-camera metadata (18 tools in total).
+`sc2_list_map_cameras` exposes saved map-camera metadata (26 tools in total).
 Images are returned as MCP image content and PNG artifacts; complete map exports
 embed the bounded preview and provide the full PNG as a downloadable artifact. Large Galaxy output
 uses the export tool rather than being embedded in MCP text. EOF shuts down the

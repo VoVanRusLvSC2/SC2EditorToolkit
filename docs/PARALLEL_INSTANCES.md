@@ -123,3 +123,13 @@ captures the native saved-camera Terrain view while the other compiles. A pass
 applies to two independent owned workers, not an arbitrary number of instances.
 See [presentation readiness](PRESENTATION_READINESS.md) for the tested scope and
 remaining feature limits.
+
+The final v0.13.0-rc.1 bundle repeated compilation/isolation-only coverage with
+five native conversions and zero compiler errors, including closing one worker
+and compiling in the survivor. Automatic Editor discovery was used; both
+pre-existing Editors remained alive and uncontrolled. This run used
+`--allow-screensaver`, which explicitly permits only Default/Screen-saver input
+desktop observations while retaining all owned-visible-window, foreground,
+input-injection, source-preservation and isolation checks. The strict default
+still requires Default throughout. No screen wakeup or screensaver setting
+change is performed; observed desktop names are recorded in the private report.

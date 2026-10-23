@@ -3,6 +3,7 @@ from pathlib import Path
 from .modules import capabilities
 from .runtime import watch_frozen_parent
 from .session import Worker
+from .jobs import JobQueue,OPERATIONS
 
 PROPERTIES={'editor_path':{'type':'string','description':'Owned startup: original x64 Editor EXE or installation directory. Defaults to SC2_EDITOR_PATH, registry and standard install discovery. Supported binary required; restart to change installation.'},'template':{'type':'string'},'map':{'type':'string'},'startup_module':{'type':'string','enum':['triggers','terrain','default'],'default':'triggers'},'triggers_xml':{'type':'string'},'triggers_file':{'type':'string'},
  'render_backend':{'type':'string','enum':['auto','legacy','vulkan'],'description':'Owned worker startup only: auto uses bundled pinned DXVK/Vulkan when present, otherwise system D3D9. Restart the owned worker to change backend.'},
@@ -17,8 +18,20 @@ PROPERTIES={'editor_path':{'type':'string','description':'Owned startup: origina
  'baseline_template':{'type':'string','description':'Optional healthy startup archive for diagnosing a failing map in a fresh worker'},
  'include_diffs':{'type':'boolean','default':False,'description':'Include bounded textual component diffs in the downloadable comparison report'},
  'start_ms':{'type':'number','minimum':0,'maximum':600000},'end_ms':{'type':'number','minimum':0,'maximum':600000},
- 'fps':{'type':'integer','minimum':1,'maximum':60},'keep_frames':{'type':'boolean'},'include_audio':{'type':'boolean','default':True}}
+ 'fps':{'type':'integer','minimum':1,'maximum':60},'keep_frames':{'type':'boolean'},'include_audio':{'type':'boolean','default':True},
+ 'operation':{'type':'string','enum':list(OPERATIONS)},'arguments':{'type':'object'},'job_id':{'type':'string'},
+ 'timeout_seconds':{'type':'number','minimum':1,'maximum':14400},'wait_ms':{'type':'integer','minimum':0,'maximum':30000},
+ 'save_reopen':{'type':'boolean','default':False},'catalog':{'type':'string'},'object_id':{'type':'string'},
+ 'field_offset':{'type':'integer','minimum':0,'maximum':100000},'field_limit':{'type':'integer','minimum':1,'maximum':500},'include_xml':{'type':'boolean','default':False}}
 TOOLS=[
+ ('sc2_submit_job','Queue one operation on the owned hidden Editor. Returns immediately; use job status/wait. FIFO, bounded queue, deadline, no automatic replay.','jobs.submit',['operation']),
+ ('sc2_job_status','Read queued/running/finished job state and native phase without controlling the desktop.','jobs.status',['job_id']),
+ ('sc2_job_wait','Wait up to 30 seconds for a job; may return RUNNING.','jobs.wait',['job_id']),
+ ('sc2_job_cancel','Cancel a queued job, or discard only the owned private Editor to stop a running job. Running cancellation can leave private artifacts; no automatic retry.','jobs.cancel',['job_id']),
+ ('sc2_check_map','Create an immutable report bound to the source SHA-256: original loading/Data diagnostics, Galaxy generation, native compilation and Galaxy export; optional private save/reopen. Unknown is not success.','check_document',[]),
+ ('sc2_read_data','Select exact catalog/object ID in the original Data editor and read native fields, inherited/effective UI values, original object columns and observed object source.','read_data',['catalog','object_id']),
+ ('sc2_data_links','Read original Editor object explorer links for an exact catalog/object ID. Returns observed native links, not a reconstructed XML graph.','data_links',['catalog','object_id']),
+ ('sc2_check_resources','Check the selected Model main file in the original merged Archive Browser with native path-token resolution and diagnostics. Binary integrity, nested resources and other catalogs remain unvalidated.','check_resources',['catalog','object_id']),
  ('sc2_modules','List native modules and implemented capabilities.',None,[]),
  ('sc2_editor_start','Start an owned hidden original SC2 Editor using a map/mod template.','start',['template']),
  ('sc2_open_document','Open a private copy of .SC2Map/.SC2Mod with the original loader.','open_document',['map']),
@@ -57,7 +70,7 @@ def main():
     if hasattr(sys.stdout,'reconfigure'):sys.stdout.reconfigure(encoding='utf8',newline='\n')
     p=argparse.ArgumentParser();p.add_argument('--work',default=str((Path(sys.executable).parent if getattr(sys,'frozen',False) else Path(__file__).resolve().parents[2])/'mcp-data'))
     p.add_argument('--editor',help='Original Editor EXE/install directory; otherwise SC2_EDITOR_PATH or discovery')
-    args=p.parse_args();worker=Worker(args.work,editor_path=args.editor);initialized=False
+    args=p.parse_args();worker=Worker(args.work,editor_path=args.editor);jobs=JobQueue(worker);initialized=False
     try:
         for line in sys.stdin:
             ident=None
@@ -67,7 +80,7 @@ def main():
                 if method=='initialize':
                     version=params.get('protocolVersion','2025-06-18')
                     if version not in ('2024-11-05','2025-03-26','2025-06-18'):version='2025-06-18'
-                    result={'protocolVersion':version,'serverInfo':{'name':'sc2-native-toolkit','version':'0.12.0-rc.1'},'capabilities':{'tools':{'listChanged':False}},
+                    result={'protocolVersion':version,'serverInfo':{'name':'sc2-native-toolkit','version':'0.13.0-rc.1'},'capabilities':{'tools':{'listChanged':False}},
                         'instructions':'Use an installed SC2 Editor. Load a cutscene using scene and a map/mod template, select a unique camera and time_ms, then capture its renderer. Time is sampled on the native 33 ms frame grid. Every editor window remains on a private desktop.'};initialized=True
                 elif method=='ping':result={}
                 elif not initialized:raise ValueError('Initialize the MCP session first')
@@ -77,13 +90,16 @@ def main():
                     name=params.get('name');tool=next((t for t in TOOLS if t[0]==name),None)
                     if not tool:raise ValueError('Unknown tool')
                     try:
-                        data=capabilities() if tool[2] is None else getattr(worker,tool[2])(params.get('arguments',{}))
+                        arguments=params.get('arguments',{})
+                        data=capabilities() if tool[2] is None else getattr(jobs,tool[2].split('.',1)[1])(arguments) if tool[2].startswith('jobs.') else jobs.run(tool[2],arguments)
                         compact={k:v for k,v in data.items() if k!='galaxy'}
                         content=[{'type':'text','text':json.dumps(compact,ensure_ascii=False)}]
                         if name in ('sc2_capture_frame','sc2_capture_terrain') and data.get('artifact'):
                             content.append({'type':'image','mimeType':'image/png','data':base64.b64encode(Path(data['artifact']['path']).read_bytes()).decode('ascii')})
                         if name in ('sc2_export_video','sc2_export_map_image','sc2_capture_map_region') and data.get('preview'):
                             content.append({'type':'image','mimeType':'image/png','data':base64.b64encode(Path(data['preview']['path']).read_bytes()).decode('ascii')})
+                        if name=='sc2_check_resources' and data.get('previewFrame',{}).get('artifact'):
+                            content.append({'type':'image','mimeType':'image/png','data':base64.b64encode(Path(data['previewFrame']['artifact']['path']).read_bytes()).decode('ascii')})
                         result={'content':content,'structuredContent':compact,'isError':data.get('status')=='FAILED'}
                     except Exception as e:result={'content':[{'type':'text','text':str(e)}],'isError':True}
                 else:
@@ -91,5 +107,5 @@ def main():
                 response={'jsonrpc':'2.0','id':ident,'result':result}
             except Exception as e:response={'jsonrpc':'2.0','id':ident,'error':{'code':-32602,'message':str(e)}}
             sys.stdout.write(json.dumps(response,ensure_ascii=False)+'\n');sys.stdout.flush()
-    finally:worker.close()
+    finally:jobs.close();worker.close()
     return 0

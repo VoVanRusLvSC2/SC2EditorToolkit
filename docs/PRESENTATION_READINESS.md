@@ -1,6 +1,6 @@
-# Presentation readiness — 2026-10-23
+# Presentation readiness — 2026-10-24
 
-Scope: **v0.12.0-rc.1** map/filter acceptance, with separately dated
+Scope: **v0.13.0-rc.1** jobs/reports/Data/resource acceptance and focused map/filter regression, with separately dated **v0.12.0-rc.1** full-resolution map/filter acceptance,
 **v0.11.0-rc.1** portable/media and **v0.10.0-rc.1** baseline evidence; original SC2 Editor
 **5.0.17.98310**, DXVK 3.1.1 and the installed test machine/dependencies.
 This is a prerelease developer toolkit. Demonstrate the verified workflow;
@@ -19,14 +19,44 @@ One API/MCP server owns one persistent hidden Editor. Multiple independent
 servers use different work directories, loopback ports, random tokens, instance
 GUIDs, singleton allowlist suffixes, IPC identities, private documents and
 renderer caches. Requests within one worker are serialized; separate workers
-can perform independent operations concurrently. There is no shared worker pool
-or general job queue.
+can perform independent operations concurrently. A bounded FIFO job queue, cancellation and deadlines are available per server;
+there is no shared worker pool. See [jobs and reports](JOBS_AND_REPORTS.md).
 
 The 2026-10-21 live test verified an already-open normal Editor beside the hidden
 worker, including hidden-worker restart. The normal process/document/window
 remained unchanged, no toolkit bridge was loaded into it, and it was left open.
 That was a read-only preservation check, not automated interactive editing of
 the normal Editor. See the dated [validation history](VALIDATION.md).
+
+## v0.13.0-rc.1 background jobs and Data acceptance
+
+The final frozen package passed 88 Python tests, five native C++ suites, packaged
+HTTP and MCP checks (26 tools). Live acceptance covered FIFO/cancellation,
+deadline/fresh-worker recovery, revision-bound reports, native save/reopen,
+generation/compiler/exact Galaxy, inherited/overridden fields, original Explorer
+associations, additional catalogs, malformed Data, missing dependencies,
+localized documents and a private Nydus dependency stack. Nydus compilation had
+zero compiler errors and its supplied source remained unchanged.
+
+Main Model file availability has positive and negative native acceptance using
+the original merged Archive Browser. Demonstrate that scope explicitly; it
+does not validate every texture, animation, sound or runtime actor event. A
+placeholder frame with no Console error is not proof of a valid model file.
+Automatic Data-to-Cutscenes preview is excluded from this operation.
+
+The existing map/filter interface passed a focused 512×384 regression: four
+visibility states, restoration, six reference-geometry regions and visual review.
+Map rendering continued in its independent hidden worker while the Data/report
+worker ran, expired a job and restarted. Use asynchronous jobs for cold module
+initialization, which can take minutes. See [validation](VALIDATION.md),
+[jobs/reports](JOBS_AND_REPORTS.md) and [Data/resources](DATA_AND_RESOURCES.md).
+
+An additional final-bundle simultaneous XML test passed five native conversions,
+zero compiler errors, isolated tokens/scripts/downloads and compilation in the
+survivor after closing the other worker. It ran under the system screensaver
+using the explicit observer option: 418 samples, 345 with both Editors alive,
+zero owned visible/foreground windows, two existing Editors preserved and both
+test Editors closed. This does not automate or wake the user's desktop.
 
 ## v0.12.0-rc.1 map and filter acceptance on 2026-10-23
 
@@ -152,10 +182,10 @@ camera, not whole-map export or trigger-driven gameplay.
 - Whole-map model filters have passed the scoped v0.12 acceptance above.
   A water-specific case and broader map/dependency coverage remain unverified.
   Region crops retain experimental native XY-to-image calibration status.
-- HTTP video export supports progress/cancellation endpoints; the current MCP
-  stdio export call is blocking and exposes no separate progress/cancel tools.
-  General native operations do not
-  have a safe cancellation/deadline API or queued scheduling.
+- The direct MCP video-export call remains blocking. Submit `export_video`
+  through `sc2_submit_job` for generic status, cancellation and deadlines;
+  HTTP also retains its video-specific status/cancel endpoints. The FIFO queue
+  is per server; no cross-server broker is provided.
 - Two verified workers do not establish an unlimited instance count, acceptable
   performance on every map, or support for every Editor build/GPU/driver.
 

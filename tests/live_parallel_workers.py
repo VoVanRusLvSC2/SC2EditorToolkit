@@ -1,4 +1,5 @@
 """Opt-in concurrent owned Editors; never controls existing Editors or games."""
+import os
 import argparse
 import concurrent.futures
 import ctypes
@@ -53,12 +54,13 @@ def existing_editors():
 
 
 class Server:
-    def __init__(self, name, work, packaged, editor=None):
+    def __init__(self, name, work, packaged, editor=None, allow_screensaver=False):
         self.name, self.work, self.info, self.state = name, work, None, None
+        self.allow_screensaver = allow_screensaver
         self.created = None
         self.work.mkdir()
         self.runtime = self.work / 'runtime'
-        executable = [str(ROOT / 'dist/SC2NativeAPI.exe')] if packaged else [sys.executable, str(ROOT / 'app/hidden_api.py')]
+        executable = [str(ROOT / os.environ.get('SC2_PACKAGE_DIR','dist') / 'SC2NativeAPI.exe')] if packaged else [sys.executable, str(ROOT / 'app/hidden_api.py')]
         editor_args = ['--editor', str(editor)] if editor else []
         with (work / 'stdout.log').open('wb') as out, (work / 'stderr.log').open('wb') as err:
             self.process = subprocess.Popen(executable + ['serve', '--port', '0', '--work', str(self.runtime)] + editor_args,
@@ -97,7 +99,10 @@ class Server:
         assert code == 200 and result.get('status') != 'FAILED', result.get('error')
         observed = result.get('desktopObservation')
         if observed:
-            assert observed['visibleWindowsOnUserDesktopPeak'] == observed['editorForegroundSamples'] == observed['inputDesktopChanges'] == 0
+            assert observed['visibleWindowsOnUserDesktopPeak'] == observed['editorForegroundSamples'] == 0
+            assert not observed['inputInjectionUsed'] and not observed['desktopSwitchApiUsed']
+            if not self.allow_screensaver:
+                assert observed['inputDesktopChanges'] == 0
         return result
 
     def download(self, artifact):
@@ -145,6 +150,8 @@ def main():
     parser.add_argument('--template', required=True)
     parser.add_argument('--work', required=True)
     parser.add_argument('--package', action='store_true')
+    parser.add_argument('--allow-screensaver', action='store_true',
+        help='Allow observed Default/Screen-saver transitions; still reject owned foreground/visible windows and input injection')
     parser.add_argument('--editor-path', help='Explicit installation: test CLI selection for A and request selection for B')
     parser.add_argument('--map')
     parser.add_argument('--map-camera', default='2001')
@@ -156,7 +163,7 @@ def main():
     work = Path(args.work).resolve()
     work.mkdir(parents=True, exist_ok=False)
     template = Path(args.template).resolve(strict=True)
-    pins = {template: sha(template), ROOT / 'dist/SC2NativeAPI.exe': sha(ROOT / 'dist/SC2NativeAPI.exe')}
+    pins = {template: sha(template), ROOT / os.environ.get('SC2_PACKAGE_DIR','dist') / 'SC2NativeAPI.exe': sha(ROOT / os.environ.get('SC2_PACKAGE_DIR','dist') / 'SC2NativeAPI.exe')}
     editor = resolve_editor(args.editor_path)
     pins[editor] = sha(editor)
     if args.map:
@@ -169,7 +176,8 @@ def main():
     baseline, servers, owned, samples, errors = existing_editors(), [], {}, [], []
     stop = threading.Event()
     initial_desktop = input_desktop()
-    assert initial_desktop == 'Default', 'Test requires an unlocked interactive desktop'
+    allowed_desktops = ('Default', 'Screen-saver') if args.allow_screensaver else ('Default',)
+    assert initial_desktop in allowed_desktops, 'Test requires Default desktop, or --allow-screensaver for the system screensaver'
 
     def observe():
         while not stop.is_set():
@@ -203,7 +211,8 @@ def main():
     thread.start()
     try:
         for name in ('A', 'B'):
-            servers.append(Server(name, work / ('server-' + name), args.package, args.editor_path if name == 'A' else None))
+            servers.append(Server(name, work / ('server-' + name), args.package,
+                args.editor_path if name == 'A' else None, allow_screensaver=args.allow_screensaver))
         first, second = servers
         assert first.info['url'] != second.info['url'] and first.info['token'] != second.info['token']
         with concurrent.futures.ThreadPoolExecutor(max_workers=2) as pool:
@@ -261,7 +270,8 @@ def main():
         thread.join(5)
         assert samples and not errors, errors
         assert any(sample['ownedAlive'] == 2 for sample in samples), 'No observed concurrent Editors'
-        assert all(sample['desktop'] == initial_desktop and sample['foreground'] not in owned and not sample['ownedVisibleWindows'] for sample in samples)
+        assert all(sample['desktop'] in allowed_desktops and sample['foreground'] not in owned and not sample['ownedVisibleWindows'] for sample in samples)
+        desktop_changes = sum(a['desktop'] != b['desktop'] for a,b in zip(samples,samples[1:]))
         report = {'status': 'CONCURRENT_HIDDEN_EDITORS_PASSED', 'packaged': args.package,
             'concurrentWorkers': 2, 'nativeConversions': 6 if args.map else 5, 'nativeCompilerErrors': 0,
             'distinctInstanceIds': True, 'distinctPids': True, 'parallelScriptMarkersIsolated': True,
@@ -274,7 +284,9 @@ def main():
             'existingEditorsStillAlive': sum(process_time(pid) == created for pid, created in baseline.items()),
             'existingEditorsControlled': False, 'sourcesUnchanged': True, 'allTestEditorsClosed': True,
             'observations': len(samples), 'samplesWithBothAlive': sum(s['ownedAlive'] == 2 for s in samples),
-            'hiddenVisibleWindows': 0, 'hiddenForegroundSamples': 0, 'desktopChanges': 0,
+            'hiddenVisibleWindows': 0, 'hiddenForegroundSamples': 0, 'desktopChanges': desktop_changes,
+            'observedInputDesktops': sorted({s['desktop'] for s in samples}),
+            'screensaverObservationAllowed': args.allow_screensaver,
             'inputInjectionUsed': False, 'desktopSwitchApiUsed': False}
         (work / 'VERIFICATION.json').write_text(json.dumps(report, indent=2), encoding='utf8')
         print(json.dumps(report, indent=2), flush=True)
