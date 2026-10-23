@@ -10,6 +10,55 @@ User maps, scenes, PNG/MP4 captures, raw PCM, tokens and complete runtime logs a
 kept local and are excluded from Git and release assets. Documentation and future
 release notes are maintained in English.
 
+## v0.11.0-rc.1: portable installation and simultaneous workers (2026-10-23)
+
+The API/MCP no longer assumes a fixed Editor installation path. Request
+`editor_path`, CLI `--editor` and `SC2_EDITOR_PATH` precede registry/environment/
+PATH discovery. Distinct installations require explicit selection. The API
+verifies the supported original EXE hash before launch; native host/controllers
+check architecture/version and selected-file identity. The early GUI-thread
+callback compares file identity only, after prelaunch verification. A diagnostic
+candidate reproduced Win32 193 when format probing was repeated inside that
+early callback; removing that redundant early probe resolved the startup failure.
+Native protocol 12 rejects old dispatch markers. See [startup](NATIVE_DISPATCH.md).
+
+| Check | Result |
+|---|---|
+| Automated / native suites | 65 Python tests / 4 C++ suites PASS |
+| Packaged HTTP / MCP | PASS; 18 tools; explicit missing/unsupported binaries rejected with no Editor launched; readonly MCP works with an unavailable configured Editor |
+| Native noncanonical install path | Host, owned GUI-thread attachment and inspect controller PASS through an alias with spaces/Unicode; no fixed drive comparison |
+| Two packaged hidden Editors concurrently | Different PIDs/GUIDs, CLI installation selection for A and request selection for B; six XML generation/compile/export operations PASS, zero native compiler errors |
+| Cross-worker isolation | Different marker scripts retained; exact download hashes; other server's token rejected with 403 and artifact with 404 |
+| Render/compile overlap | Original saved-camera Terrain PNG in A while B compiles PASS; detailed relief, building, Marines and doodad |
+| Nydus-derived scene and short audible MP4 | Native scene frame, camera/time selection, H.264/AAC decode, non-silent native cue and exact MP4 download PASS |
+| Independent shutdown | Close A, then generate/compile/export again in B PASS; all owned test Editors closed |
+| External background observer | 2,002 samples, including 1,912 with both test Editors alive; zero owned visible windows, foreground samples or input-desktop changes |
+| Existing applications and input files | Both pre-existing Editors left running and uncontrolled; source assets and installed Editor hashes unchanged |
+| Embedded native files/dependency | Both packaged EXEs match the tested five native binaries and pinned renderer/license/manifest |
+
+The install alias exercises path handling, not physical asset relocation or
+multiple independent Battle.net profiles. Supported binary: original
+5.0.17.98310 x64, SHA-256
+`e561d76903221bdcd4585b9496bba1d2b9c5ae13b8fbe8c8469d213f22823d91`.
+Other builds/locales require adapter validation. Two verified active workers do
+not certify arbitrary instance counts. Each server owns one Editor; general
+profile preferences may still be shared. Terrain exclusion/water/native region
+coordinate calibration, trigger cinematic playback and general queue/cancellation
+remain outside accepted scope. See [presentation readiness](PRESENTATION_READINESS.md).
+
+Before the portability change, the exact published v0.10.0-rc.1 EXEs/ZIP were also
+rechecked on 2026-10-23: 57 Python tests, 3 C++ suites, HTTP/MCP, two simultaneous
+workers and independent shutdown, six native conversions, Terrain and 1,435
+external observations passed. That baseline additionally recompiled Nydus v54
+with zero errors and an exact 342,851-byte Galaxy export (SHA-256
+`ad36611c87c754f9944b978f921e67ee7767f75a277f0a293d98830f2aaff078`).
+Four actual NydusIntroBlue frames confirmed two cameras and changing animation.
+Original-scene MP4 and a private derivative with Marine_Ready cue passed native
+PCM/AAC, selected camera/range, repeated export and audio cancellation checks.
+PCM/AAC envelope correlation was 0.997786, timing difference approximately
+-0.62 ms. These baseline results remain separately scoped; the portable package's
+media test uses a short audible derivative clip. Captures/PCM/assets stay local.
+
 ## v0.10.0-rc.1: normal Editor plus hidden Vulkan Editor (2026-10-21)
 
 The existing normal Editor was opened first and kept running throughout two

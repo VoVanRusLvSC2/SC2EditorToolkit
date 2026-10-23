@@ -1,3 +1,4 @@
+#include "editor_identity.h"
 #include <windows.h>
 #include <filesystem>
 #include <string>
@@ -44,7 +45,7 @@ static bool InjectBootstrap(PROCESS_INFORMATION& process,const fs::path& dllPath
     if(!ReadProcessMemory(process.hProcess,remote,&config,sizeof(config),&written))return false;VirtualFreeEx(process.hProcess,remote,0,MEM_RELEASE);patches=config.patches;return patches>0;
 }
 int wmain(int argc,wchar_t** argv){
-    fs::path out,document;std::wstring editor=L"C:\\Program Files (x86)\\StarCraft II\\Support64\\SC2Editor_x64.exe",jobName,startupModule=L"default",renderBackend=L"legacy";int timeout=90;
+    fs::path out,document;std::wstring editor,jobName,startupModule=L"default",renderBackend=L"legacy";int timeout=90;
     for(int i=1;i<argc;i++){if(i+1>=argc)return E("Missing argument");std::wstring k=argv[i],v=argv[++i];if(k==L"--out")out=v;else if(k==L"--editor")editor=v;else if(k==L"--document")document=v;else if(k==L"--timeout")timeout=std::stoi(v);else if(k==L"--job-name")jobName=v;else if(k==L"--module")startupModule=v;else if(k==L"--render-backend")renderBackend=v;else return E("Unknown argument");}
     if(startupModule!=L"default"&&startupModule!=L"triggers"&&startupModule!=L"terrain")return E("Unsupported startup module");
     if(renderBackend!=L"legacy"&&renderBackend!=L"vulkan")return E("Render backend must be legacy or vulkan");
@@ -56,7 +57,9 @@ int wmain(int argc,wchar_t** argv){
         CloseHandle(job);
     }
     if(out.empty()||fs::exists(out))return E("Fresh --out required");fs::create_directories(out);
-    if(_wcsicmp(editor.c_str(),L"C:\\Program Files (x86)\\StarCraft II\\Support64\\SC2Editor_x64.exe"))return E("Only installed original Editor allowed");
+    if(editor.empty()||!SupportedEditorFile(editor))return E("Explicit supported original --editor required (5.0.17.98310 x64)");
+    if(!SetEnvironmentVariableW(L"SC2EDITOR_EXPECTED_EXE",editor.c_str()))return E("Cannot bind selected Editor identity");
+    SetEnvironmentVariableW(L"SC2EDITOR_ATTACH_LOG",(out/L"dispatch.log").c_str());
     HDESK input=OpenInputDesktop(0,FALSE,DESKTOP_READOBJECTS);if(!input)return E("Cannot identify input desktop");auto inputBefore=DesktopName(input);CloseDesktop(input);
     HDESK original=GetThreadDesktop(GetCurrentThreadId());GUID id{};CoCreateGuid(&id);wchar_t guid[64]{};StringFromGUID2(id,guid,64);
     std::wstring desktop=L"SC2Native-"+std::wstring(guid),fullDesktop=L"WinSta0\\"+desktop;

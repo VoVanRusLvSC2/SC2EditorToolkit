@@ -1,3 +1,4 @@
+#include "editor_identity.h"
 #include <windows.h>
 #include <tlhelp32.h>
 #include <filesystem>
@@ -6,12 +7,13 @@
 #include "capture_protocol.h"
 namespace fs=std::filesystem;
 int wmain(int argc,wchar_t** argv){
-    DWORD pid=0;uint64_t targetWindow=0;fs::path out;
-    for(int i=1;i<argc;i++){if(i+1>=argc)return 2;std::wstring key=argv[i],value=argv[++i];if(key==L"--pid")pid=std::stoul(value);else if(key==L"--out")out=value;else if(key==L"--viewport")targetWindow=std::stoull(value);else return 2;}
+    DWORD pid=0;uint64_t targetWindow=0;fs::path out,editor;
+    for(int i=1;i<argc;i++){if(i+1>=argc)return 2;std::wstring key=argv[i],value=argv[++i];if(key==L"--pid")pid=std::stoul(value);else if(key==L"--out")out=value;else if(key==L"--editor")editor=value;else if(key==L"--viewport")targetWindow=std::stoull(value);else return 2;}
     if(!pid||out.empty()||!out.is_absolute()||fs::exists(out))return 2;
     HANDLE process=OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION|PROCESS_CREATE_THREAD|PROCESS_VM_READ|PROCESS_VM_WRITE|PROCESS_VM_OPERATION,FALSE,pid);
     if(!process)return 2;wchar_t image[32768]{};DWORD length=32768;
-    if(!QueryFullProcessImageNameW(process,0,image,&length)||_wcsicmp(image,L"C:\\Program Files (x86)\\StarCraft II\\Support64\\SC2Editor_x64.exe")){CloseHandle(process);return 2;}
+    if(editor.empty())editor=OwnedEditorPath();
+    if(!QueryFullProcessImageNameW(process,0,image,&length)||editor.empty()||!SupportedEditorFile(editor)||!SameEditorFile(image,editor)){CloseHandle(process);return 2;}
     uintptr_t base=0;fs::path dll;
     HANDLE snapshot=CreateToolhelp32Snapshot(TH32CS_SNAPMODULE|TH32CS_SNAPMODULE32,pid);
     MODULEENTRY32W module{};module.dwSize=sizeof(module);

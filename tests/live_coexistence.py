@@ -7,6 +7,7 @@ import argparse,ctypes,hashlib,json,subprocess,sys,threading,time,urllib.request
 from ctypes import wintypes as W
 from pathlib import Path
 ROOT=Path(__file__).resolve().parents[1];sys.path.insert(0,str(ROOT/'app'))
+from editor_installation import resolve_editor
 from sc2native.runtime import kernel,user,ENUM,input_desktop,process_time
 p=argparse.ArgumentParser(description=__doc__)
 p.add_argument('--visible-pid',type=int,required=True);p.add_argument('--template',required=True);p.add_argument('--work',required=True)
@@ -18,7 +19,7 @@ sha=lambda path:hashlib.sha256(Path(path).read_bytes()).hexdigest()
 template=Path(a.template).resolve(strict=True);pins={str(template):sha(template)}
 for value in (a.map,a.scene,a.scene_template):
     if value:pins[str(Path(value).resolve())]=sha(value)
-editor=Path(r'C:\Program Files (x86)\StarCraft II\Support64\SC2Editor_x64.exe');pins[str(editor)]=sha(editor)
+editor=resolve_editor();pins[str(editor)]=sha(editor)
 visible_time=process_time(a.visible_pid);assert visible_time,'Specified normal Editor PID is not running'
 handle=kernel.OpenProcess(0x1000,False,a.visible_pid);path=ctypes.create_unicode_buffer(32768);length=W.DWORD(len(path))
 assert handle and kernel.QueryFullProcessImageNameW(handle,0,path,ctypes.byref(length));kernel.CloseHandle(handle)

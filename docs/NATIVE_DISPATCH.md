@@ -1,9 +1,20 @@
 # Owned Editor startup dispatch
 
-Native protocol **11** replaces the per-request cross-process DLL-hook setup.
+Native protocol **12** retains owned-thread startup dispatch and binds native
+requests to the selected Editor executable by file identity rather than a fixed
+installation path. It supersedes protocol 11; upgrade all native components.
+The earlier protocol 11 replaced the per-request cross-process DLL-hook setup.
 Use the matching host, bootstrap, bridge DLL and controller from one release.
 Restart an old owned worker after upgrading. A client-visible Editor is never
 attached to or upgraded in place.
+
+The API verifies the selected original executable's SHA-256 and the host checks
+its architecture/version before creating the child. Its early primary-thread
+callback binds the running image to that selected file by Windows file identity.
+Image-format/resource probing is deliberately outside that early callback: a
+diagnostic candidate reproduced Win32 193 there despite passing prelaunch checks.
+Controllers check the selected file and exact owned PID again. Private startup
+`dispatch.log` records identity/callback setup without map content or tokens.
 
 ## Win32 126 diagnosis
 

@@ -1,4 +1,5 @@
 from .runtime import *
+from editor_installation import resolve_editor,validate_editor
 from .artifacts import ArtifactStore
 from .diagnostics import parse_native_diagnostics,operation_diagnostics
 from .cutscenes import scene_file,seek_arguments,scene_duration
@@ -15,7 +16,8 @@ class Worker:
             if 'wholeMapVerified' in result:result['wholeMapVerified']=False
             if 'regionCropVerified' in result:result['regionCropVerified']=False
         return result
-    def __init__(self,work):
+    def __init__(self,work,editor_path=None):
+        self.editor_preference=editor_path
         self.work=Path(work).resolve();self.work.mkdir(parents=True,exist_ok=True)
         self.state=None;self.monitor=None;self.lock=threading.Lock()
         self.artifacts=ArtifactStore(self.work/'exports');self.last_result=None;self.scene=None
@@ -27,21 +29,24 @@ class Worker:
             raise OSError(ctypes.get_last_error(),'Cannot create owned-worker lifetime job')
         atexit.register(self.close)
     def alive(self):return bool(self.state and process_time(self.state['pid'])==self.state['createTimeFiletime'])
-    def ensure(self,template,startup_module='triggers',render_backend=None):
+    def ensure(self,template,startup_module='triggers',render_backend=None,editor_path=None):
         if startup_module not in ('triggers','terrain','default'):raise ValueError('startup_module must be triggers, terrain or default')
         requested=requested_backend(render_backend)
         if self.alive():
+            if editor_path is not None and not resolve_editor(editor_path).samefile(self.state['editorPath']):
+                raise ValueError('The owned worker uses another Editor installation; restart that API/MCP worker to change it')
             if render_backend is not None and requested!='auto' and requested!=self.state.get('renderBackend','legacy'):
                 raise ValueError('The owned worker already uses another render backend; restart that API/MCP worker to change it')
             return
         selected=select_backend(RES,requested)
+        installation=validate_editor(resolve_editor(editor_path if editor_path is not None else getattr(self,'editor_preference',None)))
         self.scene=None
         if self.monitor:self.monitor.stop();self.monitor=None
         directory=self.work/'workers'/uuid.uuid4().hex;directory.mkdir(parents=True)
         # Seed is a private archive copy. Never ask the worker to edit the user's source.
         seed=directory/('Seed'+Path(template).suffix);shutil.copyfile(template,seed)
         startup=directory/'startup'
-        command=[str(RES/'HiddenEditorHost.exe'),'--document',str(seed),'--out',str(startup),'--timeout','240','--job-name',self.job_name,'--module',startup_module,'--render-backend',selected]
+        command=[str(RES/'HiddenEditorHost.exe'),'--document',str(seed),'--out',str(startup),'--timeout','240','--job-name',self.job_name,'--module',startup_module,'--render-backend',selected,'--editor',installation['path']]
         with (directory/'host.stdout.log').open('wb') as out,(directory/'host.stderr.log').open('wb') as err:
             child=subprocess.Popen(command,stdout=out,stderr=err,creationflags=subprocess.CREATE_NO_WINDOW,env=render_environment(selected,directory))
             # Start monitoring as soon as the host publishes its child PID.
@@ -59,7 +64,7 @@ class Worker:
             reason='Hidden Editor not ready: '+str(self.state['status'])+'; '+str(directory)
             self._reset_owned_editor()
             raise RuntimeError(reason)
-        self.state['currentDocument']=seed.name;self.state['documentPath']=str(seed);self.state['startupReport']=str(state_path);self.state['renderBackend']=selected
+        self.state['currentDocument']=seed.name;self.state['documentPath']=str(seed);self.state['startupReport']=str(state_path);self.state['renderBackend']=selected;self.state['editorPath']=installation['path'];self.state['editorInfo']=installation
         if self.monitor is None:self.monitor=Observation(self.state['pid'])
         oracle.save(self.work/'worker.json',self.state)
     def _reset_owned_editor(self):
@@ -93,11 +98,11 @@ class Worker:
                 if result.returncode:raise ValueError('Cannot read Triggers from the supplied map/mod')
                 xml_path.write_bytes(result.stdout)
             files.checked_xml(xml_path)
-            self.ensure(template,request.get('startup_module','triggers'),request.get('render_backend'))
+            self.ensure(template,request.get('startup_module','triggers'),request.get('render_backend'),editor_path=request.get('editor_path'))
             oracle.ACTIVE_DESKTOP=self.state['desktop']
             args=SimpleNamespace(template=str(template),triggers=str(xml_path),job=str(request_dir/'job'),
                 trigger_strings=request.get('trigger_strings'),game_strings=request.get('game_strings'),locale=request.get('locale','enUS'),
-                scope=request.get('scope','mapRoot'),context_label=request.get('context_label'),editor=str(files.EDITOR),mpqcli=None,
+                scope=request.get('scope','mapRoot'),context_label=request.get('context_label'),editor=self.state['editorPath'],mpqcli=None,
                 pid=self.state['pid'],current_document=self.state['currentDocument'],marker=request.get('marker',''),
                 expect_text=request.get('expect_text',[]),compile=bool(request.get('compile',True)))
             result=oracle.convert(args)
@@ -145,8 +150,8 @@ class Worker:
             archive=directory/('NativeOpen-'+directory.name[:12]+source.suffix);shutil.copyfile(source,archive)
             original_hash=files.sha(source)
             if files.sha(archive)!=original_hash:raise RuntimeError('Document copy does not match original')
-            self.ensure(archive,render_backend=request.get('render_backend'));oracle.ACTIVE_DESKTOP=self.state['desktop']
-            try:native=oracle.native_step(directory,'01-load',self.state['pid'],self.state['currentDocument'],map_path=archive)
+            self.ensure(archive,render_backend=request.get('render_backend'),editor_path=request.get('editor_path'));oracle.ACTIVE_DESKTOP=self.state['desktop']
+            try:native=oracle.native_step(directory,'01-load',self.state['pid'],self.state['currentDocument'],map_path=archive,editor=self.state['editorPath'])
             except oracle.NativeStepError as error:
                 result={'status':'FAILED','error':str(error),'source':str(source),'openedCopy':str(archive),
                     'sourceUnchanged':files.sha(source)==original_hash,'nativeLoad':error.native_result,
@@ -170,14 +175,14 @@ class Worker:
     def _native(self,directory,operation,scope='mapRoot',context='',**options):
         if not self.alive():raise RuntimeError('Start or open a document first')
         oracle.ACTIVE_DESKTOP=self.state['desktop']
-        return oracle.native_step(directory,'01-'+operation,self.state['pid'],self.state['currentDocument'],context=context,scope=scope,**options)
+        return oracle.native_step(directory,'01-'+operation,self.state['pid'],self.state['currentDocument'],context=context,scope=scope,editor=self.state['editorPath'],**options)
 
     def start(self,request):
         if not self.lock.acquire(blocking=False):raise RuntimeError('Worker busy')
         try:
             template=Path(request.get('template') or request.get('map','')).resolve(strict=True)
             if not template.is_file() or template.suffix.lower() not in ('.sc2map','.sc2mod'):raise ValueError('Existing .SC2Map/.SC2Mod template required')
-            self.ensure(template,request.get('startup_module','triggers'),request.get('render_backend'))
+            self.ensure(template,request.get('startup_module','triggers'),request.get('render_backend'),editor_path=request.get('editor_path'))
             directory=self.work/'editor-actions'/uuid.uuid4().hex;directory.mkdir(parents=True)
             try:native=self._native(directory,'inspect')
             except oracle.NativeStepError as error:
@@ -188,7 +193,7 @@ class Worker:
                 self._reset_owned_editor();oracle.save(directory/'start-result.json',result);return result
             return {'status':'HIDDEN_EDITOR_STARTED','pid':self.state['pid'],'document':self.state['currentDocument'],
                 'instanceId':self.state.get('instanceId'),'renderBackend':self.state['renderBackend'],
-                'native':native,'desktopObservation':self.monitor.snapshot()}
+                'editorInfo':self.state.get('editorInfo'),'native':native,'desktopObservation':self.monitor.snapshot()}
         finally:self.lock.release()
 
     def _context(self,request):
@@ -262,7 +267,7 @@ class Worker:
                 if not template:raise ValueError('Start a worker or supply a map/mod template')
                 template=Path(template).resolve(strict=True)
                 if not template.is_file() or template.suffix.lower() not in ('.sc2map','.sc2mod'):raise ValueError('Existing .SC2Map/.SC2Mod template required')
-                self.ensure(template,render_backend=request.get('render_backend'))
+                self.ensure(template,render_backend=request.get('render_backend'),editor_path=request.get('editor_path'))
             directory=self.work/'cutscenes'/uuid.uuid4().hex;directory.mkdir(parents=True)
             native=self._native(directory,'cutscene')
             result={'status':'CUTSCENE_MODULE_OPENED','native':native,'timelineControl':True}
@@ -270,7 +275,7 @@ class Worker:
                 original_hash=files.sha(source);copy=directory/source.name;shutil.copyfile(source,copy)
                 if files.sha(copy)!=original_hash:raise RuntimeError('Scene changed while copying')
                 self.scene=None
-                loaded=oracle.native_step(directory,'02-scene-load',self.state['pid'],self.state['currentDocument'],map_path=copy)
+                loaded=oracle.native_step(directory,'02-scene-load',self.state['pid'],self.state['currentDocument'],map_path=copy,editor=self.state['editorPath'])
                 if not loaded.get('sceneLoaded'):raise RuntimeError('Original scene loading not confirmed')
                 self.scene={'source':str(source),'copy':str(copy),'sha256':original_hash,'cameras':cameras,'frame':None,**scene_duration(copy)}
                 result.update(status='CUTSCENE_LOADED',scene=self.scene.copy(),load=loaded,sourceUnchanged=files.sha(source)==original_hash)
@@ -286,11 +291,11 @@ class Worker:
             directory=self.work/'cutscenes'/uuid.uuid4().hex;directory.mkdir(parents=True)
             oracle.ACTIVE_DESKTOP=self.state['desktop']
             self.scene['frame']=None
-            native=oracle.native_step(directory,'01-scene-advance' if _advance else '01-scene-seek',self.state['pid'],self.state['currentDocument'],camera=camera,time_ms=time_ms)
+            native=oracle.native_step(directory,'01-scene-advance' if _advance else '01-scene-seek',self.state['pid'],self.state['currentDocument'],camera=camera,time_ms=time_ms,editor=self.state['editorPath'])
             if not native.get('cameraConfirmed') or not native.get('timeConfirmed'):raise RuntimeError('Native camera/time not confirmed')
             self.scene['frame']={'camera':camera,'requestedTimeMs':time_ms,'actualTimeMs':native['actualTimeMs'],'nativeStatus':native['sceneStatus'],'viewport':native['viewport'],
                 'timeResolutionMs':33,'timeReadbackResolutionMs':10,'cameraConfirmed':True,'timeConfirmed':True}
-            result={'status':'CUTSCENE_FRAME_SELECTED','frame':self.scene['frame'].copy(),'native':native,'desktopObservation':self.monitor.snapshot()}
+            result={'status':'CUTSCENE_FRAME_SELECTED','frame':self.scene['frame'].copy(),'editorInfo':self.state.get('editorInfo'),'native':native,'desktopObservation':self.monitor.snapshot()}
             self._background_result(result);oracle.save(directory/'selection.json',result);return result
         finally:
             if not _locked:self.lock.release()
@@ -301,7 +306,7 @@ class Worker:
             if not self.alive():raise RuntimeError('Start/open the editor first')
             if _terrain is None and ('camera' in request or 'time_ms' in request):self.cutscene_seek(request,_locked=True)
             directory=Path(_directory) if _directory else self.work/'frames'/uuid.uuid4().hex;directory.mkdir(parents=True)
-            command=[str(RES/'RenderCapture.exe'),'--pid',str(self.state['pid']),'--out',str(directory/'frame.png')]
+            command=[str(RES/'RenderCapture.exe'),'--editor',self.state['editorPath'],'--pid',str(self.state['pid']),'--out',str(directory/'frame.png')]
             frame=None if _terrain is not None else self.scene and self.scene.get('frame')
             if _terrain is None and not frame:raise ValueError('Select a cutscene camera/time first; use terrain/capture for a map view')
             viewport=_terrain['viewport'] if _terrain is not None else frame['viewport']
@@ -342,9 +347,9 @@ class Worker:
         original_hash=files.sha(path)
         if supplied:
             if self.alive():
-                opened=self.open_document({'map':str(path),'render_backend':request.get('render_backend')},_locked=True)
+                opened=self.open_document({'map':str(path),'render_backend':request.get('render_backend'),'editor_path':request.get('editor_path')},_locked=True)
                 if opened['status']=='FAILED':raise RuntimeError(opened.get('error','Native opening failed; see load diagnostics'))
-            else:self.ensure(path,render_backend=request.get('render_backend'))
+            else:self.ensure(path,render_backend=request.get('render_backend'),editor_path=request.get('editor_path'))
         if files.sha(self.state['documentPath'])!=original_hash:raise RuntimeError('Opened private map does not match the source archive')
         return path,original_hash
 

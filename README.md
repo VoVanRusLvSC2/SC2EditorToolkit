@@ -5,7 +5,14 @@ native generator, compiler and renderer through a DLL, HTTP API and MCP.
 Previously published as SC2 Native Toolkit. Original code author and project
 owner: **VoVanRusLvSC2**.
 
-**v0.10.0-rc.1 adds Vulkan offscreen rendering for an owned second Editor.**
+**v0.11.0-rc.1 adds portable Editor installation discovery and explicit selection.**
+There is no fixed drive or user-specific Editor path. Use automatic discovery,
+`SC2_EDITOR_PATH`, CLI `--editor`, or the startup API/MCP `editor_path` argument.
+The supported original binary is verified before launch; changing a live worker's
+installation requires restarting its server. Native protocol 12 requires the
+matching complete package. See [presentation readiness](docs/PRESENTATION_READINESS.md).
+
+Vulkan offscreen rendering for an owned second Editor is included.
 The renderer-enabled package uses pinned DXVK 3.1.1 for the hidden process,
 without acquiring a visible display swapchain. Existing singleton isolation,
 owned-thread native dispatch, original XML generation/compiler and private
@@ -69,7 +76,8 @@ Extract it into a writable directory. Keep LICENSE, NOTICE and third-party notic
 Required:
 
 - Windows x64 with an interactive user session.
-- The original Editor at `C:\Program Files (x86)\StarCraft II\Support64\SC2Editor_x64.exe`.
+- The original x64 SC2 Editor in any local installation directory; discovery and
+  explicit path selection are described below.
 - The map/mod's actual dependencies installed locally. The tested adapter targets
   Editor **5.0.17.98310**, using D3D9. Other builds require validation.
 - For MP4: separately installed **FFmpeg and ffprobe** on PATH, or the
@@ -84,6 +92,35 @@ The renderer-enabled package additionally requires a compatible Vulkan driver.
 `"legacy"` selects system D3D9 and `"vulkan"` explicitly requires DXVK. The
 backend is fixed for the owned worker's lifetime. Detailed coexistence and build
 instructions are in [parallel instances](docs/PARALLEL_INSTANCES.md).
+
+## Editor installation selection
+
+Selection order is request `editor_path`, server CLI `--editor`,
+`SC2_EDITOR_PATH`, then discovery through Windows registry install/uninstall
+records, Program Files environment locations and PATH. Explicit selection accepts
+either the original `SC2Editor_x64.exe` or its installation/Support64 directory.
+Paths with spaces and Unicode are supported. Multiple distinct installations
+require an explicit choice; a bad explicit path never falls back to another one.
+
+```powershell
+.\SC2NativeAPI.exe serve --port 0 --work 'D:\SC2WorkerA' --editor 'D:\Games\StarCraft II'
+.\SC2NativeMCP.exe --work 'D:\SC2WorkerB' --editor 'D:\Games\StarCraft II'
+```
+
+Alternatively set `SC2_EDITOR_PATH`, or start through HTTP/MCP with:
+
+```json
+{"template":"D:\\Fixtures\\Empty.SC2Map","editor_path":"D:\\Games\\StarCraft II"}
+```
+
+This is path portability, not unverified support for every Editor version or
+language. The adapter currently supports the original **5.0.17.98310 x64** binary
+and verifies its SHA-256 before launch. Native components additionally check
+version, architecture and the selected file's identity. Other builds need adapter
+validation; they fail explicitly instead of receiving commands intended for the
+tested UI. A complete valid installation is required; the original Editor
+resolves its game assets and dependencies. Selection does not virtualize its
+Windows/Battle.net profile or certify physically distinct asset installations.
 
 `SC2NativeAPI.exe` is a local HTTP server without a console window.
 `SC2NativeMCP.exe` serves MCP stdio when launched by a client with inherited pipes.

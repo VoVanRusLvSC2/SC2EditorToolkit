@@ -50,9 +50,10 @@ def prepare(args):
     save(manifest_path,manifest)
     return {**result,'workingDocument':str(new),'packedTriggersByteEqual':True}
 
-def native_step(job,stage,pid,current,marker='',context='',map_path=None,scope='mapRoot',camera=None,time_ms=None,terrain=None):
+def native_step(job,stage,pid,current,marker='',context='',map_path=None,scope='mapRoot',camera=None,time_ms=None,terrain=None,editor=None):
     out=job/stage
     command=[str(RES/'SC2NativeBridge.exe'),stage.split('-',1)[1],'--pid',str(pid),'--expect-document',current,'--out',str(out)]
+    if editor:command+=['--editor',str(editor)]
     if marker:command+=['--marker',marker]
     if context:command+=['--context-label',context]
     if map_path:command+=['--map',str(map_path)]
@@ -91,7 +92,7 @@ def convert(args):
         def step(name,directory,document,**options):
             nonlocal current_step,stage
             current_step=name;stage=directory;result['stepEvidence'][name]=directory
-            try:value=native_step(job,directory,args.pid,document,**options)
+            try:value=native_step(job,directory,args.pid,document,editor=manifest['editor'],**options)
             except NativeStepError as error:
                 if error.native_result:result['steps'][name]=error.native_result
                 raise
@@ -162,7 +163,7 @@ def parser():
         for option in ('template','triggers','job'):a.add_argument('--'+option,required=True)
         a.add_argument('--trigger-strings');a.add_argument('--game-strings');a.add_argument('--locale',default='enUS');a.add_argument('--context-label')
         a.add_argument('--scope',default='mapRoot',help='mapRoot or library:<8 hex library ID>')
-        a.add_argument('--editor',default=str(files.EDITOR));a.add_argument('--mpqcli')
+        a.add_argument('--editor',help='Original Editor EXE or install directory; default: discovery / SC2_EDITOR_PATH');a.add_argument('--mpqcli')
         if name=='convert':
             a.add_argument('--pid',type=int,required=True);a.add_argument('--current-document',required=True);a.add_argument('--marker',default='');a.add_argument('--expect-text',action='append',default=[]);a.add_argument('--compile',action='store_true')
     sub.add_parser('api',help='JSON lines requests: operation prepare/convert and args using the same names')

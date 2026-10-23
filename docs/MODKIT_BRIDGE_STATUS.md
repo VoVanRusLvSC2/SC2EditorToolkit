@@ -1,13 +1,20 @@
 # ModKit / original Editor bridge status
 
-Current v0.10.0-rc.1 adds pinned Vulkan offscreen rendering for a separate owned
+Current v0.11.0-rc.1 removes the fixed installation path and adds Editor discovery,
+`editor_path`, `SC2_EDITOR_PATH` and CLI `--editor`. It validates the supported
+original binary and uses selected-file identity throughout native operations.
+Upgrade the complete package and restart owned workers; protocol 12 supersedes 11.
+See [presentation readiness](PRESENTATION_READINESS.md) for dated parallel-worker
+and native media evidence, plus the remaining feature limits.
+
+The v0.10.0-rc.1 change adds pinned Vulkan offscreen rendering for a separate owned
 Editor, following the SC2GameToolkit approach. See
 [parallel instances](PARALLEL_INSTANCES.md) for startup selection and isolation.
 The v0.9.2-rc.1 change replaces the Win32 126 setup dependency with initialization
 inside the owned Editor GUI thread. Native XML generation/compilation, recovery,
 Nydus compilation and selected cutscene frames have passed live checks again.
 No new MCP tool is added. Upgrade all native components and restart the owned
-worker; protocol 11 rejects mixed versions. See [startup dispatch](NATIVE_DISPATCH.md)
+worker; versioned dispatch rejects incompatible components. See [startup dispatch](NATIVE_DISPATCH.md)
 and [dated validation history](VALIDATION.md). Earlier rendering limitations in
 the table below remain in force.
 

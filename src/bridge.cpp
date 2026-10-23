@@ -1,3 +1,4 @@
+#include "editor_identity.h"
 #include "protocol.h"
 #include "document_window.h"
 #include "owned_thread_hooks.h"
@@ -436,7 +437,14 @@ extern "C" __declspec(dllexport) LRESULT CALLBACK BridgeHook(int n,WPARAM wp,LPA
 extern "C" __declspec(dllexport) void CALLBACK BridgeAttachCurrentThread(ULONG_PTR version){
     if(version!=kProtocolVersion||!PrivateDesktop()||resident.dispatch)return;
     wchar_t exe[32768]{};GetModuleFileNameW(nullptr,exe,_countof(exe));
-    if(_wcsicmp(exe,L"C:\\Program Files (x86)\\StarCraft II\\Support64\\SC2Editor_x64.exe"))return;
-    resident.Start(BridgeFocusGuard,BridgeHook);
+    // Host/API already validated binary/version before CreateProcess. The early
+    // primary-thread APC must not repeat image/resource probing: GetBinaryType
+    // can return ERROR_BAD_EXE_FORMAT during this loader stage. Bind by file ID.
+    auto expected=OwnedEditorPath();bool same=!expected.empty()&&SameEditorFile(exe,expected);
+    auto trace=[&](const char* phase){wchar_t path[32768]{};GetEnvironmentVariableW(L"SC2EDITOR_ATTACH_LOG",path,_countof(path));if(!path[0])return;
+        char line[512]{};int size=sprintf_s(line,"%s expected=%d sameFile=%d protocol=%u hookError=%lu\r\n",phase,!expected.empty(),same,kProtocolVersion,resident.error);
+        HANDLE file=CreateFileW(path,FILE_APPEND_DATA,FILE_SHARE_READ|FILE_SHARE_WRITE,nullptr,OPEN_ALWAYS,FILE_ATTRIBUTE_NORMAL,nullptr);if(file!=INVALID_HANDLE_VALUE){DWORD written;WriteFile(file,line,size,&written,nullptr);CloseHandle(file);}};
+    trace("attach identity");if(!same)return;
+    resident.Start(BridgeFocusGuard,BridgeHook);trace("attach callbacks");
 }
 BOOL WINAPI DllMain(HINSTANCE,DWORD,LPVOID){return TRUE;}

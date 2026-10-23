@@ -4,7 +4,7 @@ from .modules import capabilities
 from .runtime import watch_frozen_parent
 from .session import Worker
 
-PROPERTIES={'template':{'type':'string'},'map':{'type':'string'},'startup_module':{'type':'string','enum':['triggers','terrain','default'],'default':'triggers'},'triggers_xml':{'type':'string'},'triggers_file':{'type':'string'},
+PROPERTIES={'editor_path':{'type':'string','description':'Owned startup: original x64 Editor EXE or installation directory. Defaults to SC2_EDITOR_PATH, registry and standard install discovery. Supported binary required; restart to change installation.'},'template':{'type':'string'},'map':{'type':'string'},'startup_module':{'type':'string','enum':['triggers','terrain','default'],'default':'triggers'},'triggers_xml':{'type':'string'},'triggers_file':{'type':'string'},
  'render_backend':{'type':'string','enum':['auto','legacy','vulkan'],'description':'Owned worker startup only: auto uses bundled pinned DXVK/Vulkan when present, otherwise system D3D9. Restart the owned worker to change backend.'},
  'scope':{'type':'string'},'context_label':{'type':'string'},'locale':{'type':'string'},'compile':{'type':'boolean'},
  'output':{'type':'string'},'overwrite':{'type':'boolean'},'scene':{'type':'string'},'camera':{'type':'string'},
@@ -56,7 +56,8 @@ def main():
     if hasattr(sys.stdin,'reconfigure'):sys.stdin.reconfigure(encoding='utf8')
     if hasattr(sys.stdout,'reconfigure'):sys.stdout.reconfigure(encoding='utf8',newline='\n')
     p=argparse.ArgumentParser();p.add_argument('--work',default=str((Path(sys.executable).parent if getattr(sys,'frozen',False) else Path(__file__).resolve().parents[2])/'mcp-data'))
-    args=p.parse_args();worker=Worker(args.work);initialized=False
+    p.add_argument('--editor',help='Original Editor EXE/install directory; otherwise SC2_EDITOR_PATH or discovery')
+    args=p.parse_args();worker=Worker(args.work,editor_path=args.editor);initialized=False
     try:
         for line in sys.stdin:
             ident=None
@@ -66,7 +67,7 @@ def main():
                 if method=='initialize':
                     version=params.get('protocolVersion','2025-06-18')
                     if version not in ('2024-11-05','2025-03-26','2025-06-18'):version='2025-06-18'
-                    result={'protocolVersion':version,'serverInfo':{'name':'sc2-native-toolkit','version':'0.10.0-rc.1'},'capabilities':{'tools':{'listChanged':False}},
+                    result={'protocolVersion':version,'serverInfo':{'name':'sc2-native-toolkit','version':'0.11.0-rc.1'},'capabilities':{'tools':{'listChanged':False}},
                         'instructions':'Use an installed SC2 Editor. Load a cutscene using scene and a map/mod template, select a unique camera and time_ms, then capture its renderer. Time is sampled on the native 33 ms frame grid. Every editor window remains on a private desktop.'};initialized=True
                 elif method=='ping':result={}
                 elif not initialized:raise ValueError('Initialize the MCP session first')

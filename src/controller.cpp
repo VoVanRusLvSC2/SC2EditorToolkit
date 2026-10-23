@@ -1,3 +1,4 @@
+#include "editor_identity.h"
 #include "protocol.h"
 #include "document_window.h"
 #include <string>
@@ -53,8 +54,8 @@ static void DumpMenu(std::ostream& out,HMENU menu){
 }
 int wmain(int argc,wchar_t** argv){
     if(argc<3){std::cout<<"SC2NativeBridge.exe inspect|generate|compile|read|freshness-probe --pid PID --expect-document NativeEmitterProbe.SC2Map --marker MARKER --out NEW_DIRECTORY\n";return 2;}
-    std::wstring op=argv[1],expected,marker,context,scope=L"mapRoot",desktop,camera;uint32_t imageSize=2048;bool includeUnits=true,includeDoodads=true;int64_t timeMs=0;fs::path out,map;bool resumeDialog=false;
-    for(int i=2;i<argc;i++){std::wstring arg=argv[i];if(i+1>=argc)return Error("Missing option value");std::wstring value=argv[++i];if(arg==L"--pid")wantedPid=std::stoul(value);else if(arg==L"--expect-document")expected=value;else if(arg==L"--marker")marker=value;else if(arg==L"--out")out=value;else if(arg==L"--map")map=value;else if(arg==L"--resume-dialog")resumeDialog=value==L"yes";else if(arg==L"--context-label")context=value;else if(arg==L"--scope")scope=value;else if(arg==L"--desktop")desktop=value;else if(arg==L"--camera")camera=value;else if(arg==L"--time-ms")timeMs=std::stoll(value);else if(arg==L"--image-size")imageSize=std::stoul(value);else if(arg==L"--include-units"||arg==L"--include-doodads"){if(value!=L"yes"&&value!=L"no")return Error("Boolean options require yes/no");if(arg==L"--include-units")includeUnits=value==L"yes";else includeDoodads=value==L"yes";}else return Error("Unknown option");}
+    std::wstring op=argv[1],expected,marker,context,scope=L"mapRoot",desktop,camera;uint32_t imageSize=2048;bool includeUnits=true,includeDoodads=true;int64_t timeMs=0;fs::path out,map,editor;bool resumeDialog=false;
+    for(int i=2;i<argc;i++){std::wstring arg=argv[i];if(i+1>=argc)return Error("Missing option value");std::wstring value=argv[++i];if(arg==L"--pid")wantedPid=std::stoul(value);else if(arg==L"--expect-document")expected=value;else if(arg==L"--marker")marker=value;else if(arg==L"--out")out=value;else if(arg==L"--editor")editor=value;else if(arg==L"--map")map=value;else if(arg==L"--resume-dialog")resumeDialog=value==L"yes";else if(arg==L"--context-label")context=value;else if(arg==L"--scope")scope=value;else if(arg==L"--desktop")desktop=value;else if(arg==L"--camera")camera=value;else if(arg==L"--time-ms")timeMs=std::stoll(value);else if(arg==L"--image-size")imageSize=std::stoul(value);else if(arg==L"--include-units"||arg==L"--include-doodads"){if(value!=L"yes"&&value!=L"no")return Error("Boolean options require yes/no");if(arg==L"--include-units")includeUnits=value==L"yes";else includeDoodads=value==L"yes";}else return Error("Unknown option");}
     if(!desktop.empty()){
         if(desktop.rfind(L"SC2Native-",0)!=0)return Error("Only a private SC2Native desktop is allowed");
         HDESK isolated=OpenDesktopW(desktop.c_str(),0,FALSE,GENERIC_ALL);
@@ -68,7 +69,8 @@ int wmain(int argc,wchar_t** argv){
     if(fs::exists(out))return Error("Output directory must be new");
     HANDLE process=OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION|SYNCHRONIZE,FALSE,wantedPid);if(!process)return Error("Cannot query Editor PID");
     wchar_t exe[32768]{};DWORD size=32768;bool queried=QueryFullProcessImageNameW(process,0,exe,&size)!=0;
-    if(!queried||_wcsicmp(exe,L"C:\\Program Files (x86)\\StarCraft II\\Support64\\SC2Editor_x64.exe"))return Error("PID is not the expected installed original Editor");
+    if(editor.empty())editor=OwnedEditorPath();
+    if(!queried||editor.empty()||!SupportedEditorFile(editor)||!SameEditorFile(exe,editor))return Error("PID does not match the selected supported original Editor");
     EnumWindows(Root,0);HWND target=nullptr;
     if(op==L"inventory"){
         fs::create_directories(out);std::ofstream dump(out/"inventory.json");dump<<"[";bool sep=false;

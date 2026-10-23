@@ -17,4 +17,8 @@ try {
  if($LASTEXITCODE){throw 'Owned thread dispatch test build failed'}
  & (Join-Path $destination 'OwnedThreadHooksTests.exe')
  if($LASTEXITCODE){throw 'Owned thread dispatch regression test failed'}
+ & $compiler /nologo /utf-8 /W4 /std:c++17 /EHsc /MT (Join-Path $root 'tests\editor_identity_test.cpp') /Fe:EditorIdentityTests.exe
+ if($LASTEXITCODE){throw 'Editor identity test build failed'}
+ & (Join-Path $destination 'EditorIdentityTests.exe')
+ if($LASTEXITCODE){throw 'Editor identity regression test failed'}
 }finally{Pop-Location}

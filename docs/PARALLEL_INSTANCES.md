@@ -35,6 +35,17 @@ backend is not a universal multi-instance guarantee.
 The named `StarCraft II Editor File` kernel object is isolated; that does not
 grant permission to concurrently overwrite one map file.
 
+## Portable Editor selection
+
+No machine-specific Editor path is compiled into the host, controller, bridge or
+capture helper. The API resolves a unique installation or accepts `editor_path`,
+CLI `--editor`, or `SC2_EDITOR_PATH`. Each hidden child receives its selected
+executable identity. Helpers compare that file with the exact owned PID's image;
+the GUI thread still requires its private desktop and versioned startup marker.
+Protocol 12 rejects older dispatch markers. Unsupported binaries fail before
+launch; the supported UI adapter remains 5.0.17.98310 x64. See
+[selection precedence and examples](../README.md#editor-installation-selection).
+
 ## Renderer selection
 
 `/editor/start` accepts `render_backend: "auto" | "legacy" | "vulkan"`.
@@ -90,3 +101,25 @@ Optional cutscene coverage adds `--scene-template`, `--scene` and
 `--scene-camera`. Tests use fresh private files and keep all maps, images, tokens
 and raw observations outside Git. No toolkit DLL may already be present in the
 normal Editor for the independent-baseline check.
+
+## Reproduce simultaneous hidden workers
+
+The separate 2026-10-23 test starts two API servers and two hidden original
+Editors concurrently. It submits different XML fixtures at the same time,
+checks exact native PID/result identities and downloads, rejects cross-server
+tokens/artifacts, closes one Editor and compiles again in the survivor.
+It observes existing Editors without controlling them.
+
+```powershell
+.venv\Scripts\python.exe tests\live_parallel_workers.py --package `
+  --template 'D:\Fixtures\Empty.SC2Map' `
+  --editor-path 'D:\Games\StarCraft II' `
+  --map 'D:\Fixtures\Cameras.SC2Map' --map-camera 2001 `
+  --work 'D:\FreshConcurrentWorkersTest'
+```
+
+Omit `--map` for compilation/isolation-only coverage. With a map, one worker
+captures the native saved-camera Terrain view while the other compiles. A pass
+applies to two independent owned workers, not an arbitrary number of instances.
+See [presentation readiness](PRESENTATION_READINESS.md) for the tested scope and
+remaining feature limits.

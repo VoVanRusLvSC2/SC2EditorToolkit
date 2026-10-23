@@ -11,7 +11,7 @@ import xml.etree.ElementTree as ET
 
 RES=Path(getattr(sys,'_MEIPASS',Path(__file__).resolve().parent))
 sys.path.insert(0,str(RES/'backend'))
-EDITOR=Path(r'C:\Program Files (x86)\StarCraft II\Support64\SC2Editor_x64.exe')
+from editor_installation import resolve_editor
 LOCAL_MPQ=Path(os.environ.get('SC2_MPQCLI',str(Path(__file__).resolve().parent.parent/'tools'/'mpqcli'/'mpqcli.exe')))
 
 def stamp(): return datetime.now(timezone.utc).isoformat()
@@ -93,7 +93,7 @@ def prepare(args):
     (job/'mpq-create.log').write_text(command([tool,'create',components,'--output',working,'--game','starcraft2']),encoding='utf8')
     original_after={str(p.relative_to(template)):sha(p) for p in template.rglob('*') if p.is_file()} if template.is_dir() else {'archive':sha(template)}
     if original_after!=original_hashes:raise RuntimeError('Template changed during preparation')
-    editor=Path(args.editor).resolve(strict=True)
+    editor=resolve_editor(args.editor)
     build_info=editor.parent.parent/'.build.info'
     manifest={'schema':1,'jobId':str(uuid.uuid4()),'createdUtc':stamp(),'status':'PREPARED_NOT_NATIVE_GENERATED','workingDocument':str(working),'workingDocumentSha256':sha(working),'sourceTemplate':str(template),'templateHashes':original_hashes,'triggersSha256':hashlib.sha256(xml).hexdigest(),'editor':str(editor),'editorSha256':sha(editor),'buildInfoSha256':sha(build_info) if build_info.is_file() else None,'locale':args.locale,'scope':args.scope,'contextLabel':label,'componentHashes':{str(p.relative_to(components)):sha(p) for p in components.rglob('*') if p.is_file()},'dependencyResolutionVerified':False,'savedGalaxyIsNotNativeReference':True}
     save(job/'manifest.json',manifest)

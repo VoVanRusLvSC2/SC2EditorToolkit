@@ -9,7 +9,7 @@ class Terrain(unittest.TestCase):
     def test_terrain_does_not_capture_the_previously_selected_cutscene(self):
         from sc2native.session import Worker
         with tempfile.TemporaryDirectory() as tmp:
-            w=object.__new__(Worker);w.work=Path(tmp);w.state={'pid':123};w.alive=lambda:True
+            w=object.__new__(Worker);w.work=Path(tmp);w.state={'pid':123,'editorPath':'D:\\Fixture\\Support64\\SC2Editor_x64.exe'};w.alive=lambda:True
             w.scene={'frame':{'viewport':999,'camera':'Front'}}
             w.monitor=SimpleNamespace(snapshot=lambda:{'visibleWindowsOnUserDesktopPeak':0,'editorForegroundSamples':0})
             for actual in (42,999):

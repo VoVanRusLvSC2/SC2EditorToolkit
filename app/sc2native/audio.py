@@ -13,7 +13,7 @@ def capture_audio(worker,directory,plan):
     try:
         oracle.ACTIVE_DESKTOP=worker.state['desktop']
         native=oracle.native_step(directory,'01-scene-audio',worker.state['pid'],worker.state['currentDocument'],
-            camera=plan['camera'],time_ms=math.ceil(plan['endMs']),map_path=path)
+            camera=plan['camera'],time_ms=math.ceil(plan['endMs']),map_path=path,editor=worker.state['editorPath'])
     except Exception:
         if worker.video_cancel.is_set():raise InterruptedError('Video export cancelled')
         raise

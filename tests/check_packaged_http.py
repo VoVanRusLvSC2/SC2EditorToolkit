@@ -36,7 +36,7 @@ with (work / 'stdout.log').open('wb') as stdout, (work / 'stderr.log').open('wb'
             time.sleep(.1)
         info = json.loads((work / 'runtime' / 'api-info.json').read_text())
         code, health = call('/health', authorized=False)
-        assert code == 200 and health['version'] == '0.10.0-rc.1' and not health['workerRunning'], health
+        assert code == 200 and health['version'] == '0.11.0-rc.1' and not health['workerRunning'], health
         assert call('/modules', authorized=False)[0] == 403
         assert call('/terrain/export', {'size': 512}, authorized=False)[0] == 403
         code, modules = call('/modules')
@@ -48,6 +48,16 @@ with (work / 'stdout.log').open('wb') as stdout, (work / 'stderr.log').open('wb'
         editor = next(m for m in modules['modules'] if m['id'] == 'editor')
         assert 'save_reopen' in editor['methods'] and 'validate_document' in editor['methods']
         archive = create_archive(work / 'fixture', root / 'tools/mpqcli/mpqcli.exe')
+        assert modules['editorSelection']['requestArgument']=='editor_path'
+        assert modules['editorSelection']['binarySha256Verified']
+        code, invalid_editor = call('/editor/start', {'template':str(archive),'editor_path':str(work/'missing/SC2Editor_x64.exe')})
+        assert code==400 and not call('/health')[1]['workerRunning'],invalid_editor
+        import struct
+        fake=work/'SC2Editor_x64.exe';header=bytearray(160);header[:2]=b'MZ'
+        struct.pack_into('<I',header,60,128);header[128:134]=b'PE\0\0\x64\x86';fake.write_bytes(header)
+        code, invalid_editor = call('/editor/start', {'template':str(archive),'editor_path':str(fake)})
+        assert code==400 and 'Unsupported Editor binary' in invalid_editor['error']
+        assert not call('/health')[1]['workerRunning'] and not (work/'runtime/workers').exists()
         import hashlib
         before_hash = hashlib.sha256(archive.read_bytes()).hexdigest()
         code, found = call('/objects/search', {'map': str(archive), 'query': 'marine', 'limit': 1})
