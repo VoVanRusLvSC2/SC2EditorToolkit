@@ -10,6 +10,60 @@ User maps, scenes, PNG/MP4 captures, raw PCM, tokens and complete runtime logs a
 kept local and are excluded from Git and release assets. Documentation and future
 release notes are maintained in English.
 
+## v0.12.0-rc.1: native full-map geometry and object filters (2026-10-23)
+
+Packaged API/MCP tests used original Editor 5.0.17.98310 x64, pinned DXVK 3.1.1,
+NVIDIA GeForce RTX 2070 and NVIDIA 595.79.0. All automation stayed in owned
+private desktops; no mouse/keyboard input or input-desktop switching was used.
+
+The previous adapter painted TreeView checkboxes without changing the separate
+native renderer flag model. Its Win32 item metadata also differs from stable
+native IDs (the observed first row had metadata 0 and model ID 14). The corrected
+adapter resolves the live model by reciprocal HWND/callback/context identity,
+verifies the fixed row profile and function signatures, then resolves each exact
+tree item to its stable native ID. Original setters/getters update and read back
+the flags. Protocol 13 rejects incomplete or incompatible result layouts.
+
+The private 64×48 Agria fixture contains two relief hills, four distinct corner
+buildings, ten Marines and four placed doodads. One packaged worker exported all
+four unit/doodad visibility combinations and restored both categories without
+reloading between states. A second owned worker concurrently exported both
+categories disabled. Six known building/doodad regions were compared against an
+independent original export of a private copy with placements removed. All
+presence/absence checks passed; the known broken old output failed the same
+geometry check. Visual review confirmed the four corner buildings, all Marines,
+doodads, hills, independent exclusion and restoration. Creep legitimately remains
+as a separate native terrain effect when unit models are hidden.
+
+Exports at 512×384, 1024×768, 2048×1536 and 4096×3072 passed native TGA-to-PNG pixel
+identity and exact artifact download checks. A supplemental 4096×3072 export with
+all models in the second already-owned worker passed six geometry-presence
+checks against the high-resolution empty reference, exact pixels/download and
+visual review. The southwest coordinate crop visibly contains Command Center;
+general coordinate mapping remains explicitly experimental.
+
+Saved placement queries passed kind, case-insensitive query, owner, inclusive XY
+bounds and pagination checks. Typed invalid export arguments returned 400;
+existing-output rejection returned 409 without replacing the file. Original
+Triggers generation/compilation passed with **0 compiler errors**, exact Galaxy
+export/download and a readable, complete, clear actual Editor log.
+
+Recorded checkpoints contain 13,578 main-worker and 9,137 second-worker
+observations: zero owned foreground samples, visible windows or input-desktop
+transitions. Both test-owned Editors closed; source and installed-EXE hashes
+remained unchanged. Existing Editor processes were never controlled. Cold exports
+took about 209–219 seconds; warm same-map captures about 10–12 seconds.
+
+66 Python tests, four native C++ suites, packaged HTTP and windowed stdio MCP
+checks passed (18 existing tools). Both EXEs embed the exact tested five native
+files and pinned renderer DLL/license/manifest. Optional NumPy/BLAS from the build
+machine is excluded because the application does not use it. User maps, captures,
+raw logs, memory diagnostics and tokens remain local, outside Git/release assets.
+See [map export](MAP_EXPORT.md) and [presentation readiness](PRESENTATION_READINESS.md).
+A dedicated water fixture and broad map/dependency/device/localization acceptance
+are not claimed. Earlier portable selection and cutscene/audio results below
+retain their own version/date scopes.
+
 ## v0.11.0-rc.1: portable installation and simultaneous workers (2026-10-23)
 
 The API/MCP no longer assumes a fixed Editor installation path. Request

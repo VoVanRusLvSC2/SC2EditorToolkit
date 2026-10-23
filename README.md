@@ -5,11 +5,17 @@ native generator, compiler and renderer through a DLL, HTTP API and MCP.
 Previously published as SC2 Native Toolkit. Original code author and project
 owner: **VoVanRusLvSC2**.
 
-**v0.11.0-rc.1 adds portable Editor installation discovery and explicit selection.**
+**v0.12.0-rc.1 fixes native whole-map object filters.** Complete overhead PNG
+export independently controls unit and doodad models using the original flag
+model, checks native readback, and preserves exact native pixels. See
+[map export and object filters](docs/MAP_EXPORT.md) for API/MCP examples and the
+reference-image acceptance test. [Download v0.12.0-rc.1](https://github.com/VoVanRusLvSC2/SC2EditorToolkit/releases/tag/v0.12.0-rc.1).
+
+Editor installation discovery and explicit selection remain portable.
 There is no fixed drive or user-specific Editor path. Use automatic discovery,
 `SC2_EDITOR_PATH`, CLI `--editor`, or the startup API/MCP `editor_path` argument.
 The supported original binary is verified before launch; changing a live worker's
-installation requires restarting its server. Native protocol 12 requires the
+installation requires restarting its server. Native protocol 13 requires the
 matching complete package. See [presentation readiness](docs/PRESENTATION_READINESS.md).
 
 Vulkan offscreen rendering for an owned second Editor is included.
@@ -21,10 +27,10 @@ controlled. See [parallel instances](docs/PARALLEL_INSTANCES.md),
 [native startup dispatch](docs/NATIVE_DISPATCH.md) and the dated
 [validation history](docs/VALIDATION.md) for actual acceptance and limits.
 
-Whole-map and coordinate-region export are experimental:
-the original full-map export has now been visually verified on a private fixture
-with hills, placed units and doodads. Water and broader map/dependency coverage
-remain untested. Saved map cameras can drive original Terrain PNG captures.
+The original full-map export supports terrain and native visibility filters for
+placed unit/doodad models. Coordinate-region cropping retains its separate
+experimental calibration status. A water-specific fixture and broader
+map/dependency coverage remain untested. Saved map cameras can drive original Terrain PNG captures.
 Arbitrary Terrain camera overrides and Galaxy-trigger playback are not implemented.
 Operation-scoped load/Data diagnostics and native save/reopen component comparison
 are available. See
@@ -57,7 +63,7 @@ saved map-camera framing, remaining camera controls and validation coverage.
 | Triggers | Original `Triggers XML → Galaxy` generation and native compilation |
 | Galaxy | Exact `.galaxy` bytes, SHA-256, artifact download, overwrite protection |
 | Objects | Search saved placements by ID/type/name, kind, owner and XY rectangle; no Editor needed |
-| Terrain | Current viewport or saved-map-camera PNG with native readback; experimental complete overhead PNG and coordinate-region crops |
+| Terrain | Current viewport or saved-map-camera PNG with native readback; complete overhead PNG with independent unit/doodad filters; experimental coordinate-region crops |
 | Cutscene | Load `.SC2Cutscene`, select camera/time, export PNG and H.264/AAC MP4 |
 | MCP | Windowed stdio executable exposing the same worker operations |
 
@@ -314,7 +320,7 @@ quadrants, a **90°** camera, game lighting, standard shading, water and shadows
 Placed **units and doodads are included by default**. Fog effects and editor
 helper/overlay models are disabled so the map's surface remains visible.
 
-**Limited live acceptance:** a corrected private fixture produced a detailed
+**Scoped live acceptance:** a corrected private fixture produced a detailed
 1024×768 native image showing both hills, four corner buildings, ten Marines and
 four doodads. Native component registration, Objects.version and preloads must be
 valid; writing placement XML alone is insufficient. Water and a broader map
@@ -330,15 +336,17 @@ the currently open `.SC2Map`. `size` is the horizontal pixel resolution: 512,
 preserve the map aspect ratio; the native dialog selected 2048×1536 for a 64×48 map.
 Images above 8192 pixels in height or 32 million total pixels are rejected.
 
-The request exposes `include_units` and `include_doodads` options.
-**Known live-test limitation:** the current adapter's checkbox readback did not
-reliably exclude categories: a request with `include_units:false` still showed
-units. Do not rely on these exclusion options until corrected and visually
-re-tested. The default image with units/doodads enabled was visually confirmed.
+The `include_units` and `include_doodads` booleans independently select native
+unit and doodad models. The adapter uses the original flag-model setter/getter;
+painted checkbox state alone is insufficient. Native model IDs are resolved
+through the exact tree item, independently of row order or Win32 item metadata.
+The response's `objectFiltersVerified:true` requires matching native readback
+and custom export mode. Terrain-derived effects such as creep may remain when
+unit models are hidden. See [map export](docs/MAP_EXPORT.md).
 `output` is optional; an existing PNG requires `overwrite:true`.
 The response contains the full PNG artifact/download/SHA-256 and a preview bounded
 to 1280 pixels for MCP. `wholeMapVerified:true` requires native export completion,
-confirmed Full/All/90° settings, detailed pixels, unchanged source archive and the
+confirmed Full/All/90° settings and object flags, detailed pixels, unchanged source archive and the
 hidden desktop invariant. Black/uniform exports fail rather than being published.
 
 The Editor writes an original private TGA. Its decoded RGB pixels are encoded
@@ -571,7 +579,7 @@ Live tests are opt-in, use private copies and close owned workers. Examples:
   --map 'D:\MyMap.SC2Map' --work 'D:\FreshTerrainTest'
 .venv\Scripts\python.exe tests\make_terrain_fixture.py `
   --base 'D:\EmptyMap.SC2Map' --output 'D:\PrivateFixtures\Hills.SC2Map'
-.venv\Scripts\python.exe tests\live_map_image.py --package `
+.venv\Scripts\python.exe tests\live_map_image.py --package --parallel --all-sizes `
   --map 'D:\PrivateFixtures\Hills.SC2Map' --work 'D:\FreshWholeMapTest'
 .venv\Scripts\python.exe tests\make_camera_fixture.py `
   --base 'D:\EmptyMap.SC2Map' --output 'D:\PrivateFixtures\Cameras.SC2Map'
@@ -580,14 +588,16 @@ Live tests are opt-in, use private copies and close owned workers. Examples:
   --work 'D:\FreshSavedCameraTest'
 ```
 
-The whole-map fixture contains hills, four different corner buildings, Marines
-and doodads. Its opt-in test checks full output dimensions, native TGA/PNG pixel
-identity, category-switch pixel differences, downloads and overwrite protection.
-Visually review the three PNGs for relief, all corner landmarks and doodads;
-automated detailed-pixel checks alone cannot certify those contents. The live
-automated export/download/crop checks passed on the corrected fixture, but visual
-review found category exclusion ineffective and water remains untested. This is
-partial acceptance, not a complete rendering certificate for v0.7.0-rc.2.
+The whole-map fixture contains two hills, four distinct corner buildings, ten
+Marines and four doodads. Its opt-in test checks all four visibility combinations
+and restoration in one persistent worker, an independent second worker, all four
+output sizes, exact native TGA/PNG pixels, exact downloads and output protection.
+Disabled models are compared against an independently rendered private copy with
+placements removed. A full 4096×3072 placed-model frame is checked against its
+empty native reference too. Review the images and southwest crop visually;
+detailed-pixel statistics or animation-only frame differences are insufficient.
+The current results and remaining water/map coverage are in
+[validation history](docs/VALIDATION.md).
 
 The camera fixture builder replaces placements only in a new private copy and
 adds two native-format saved cameras. The camera test checks listing before

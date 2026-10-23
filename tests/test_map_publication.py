@@ -14,9 +14,18 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'app'))
 
 @unittest.skipUnless(sys.platform == 'win32', 'Windows session runtime')
 class MapPublication(unittest.TestCase):
+    def test_invalid_output_never_opens_editor_or_prepares_map(self):
+        from sc2native.session import Worker
+        worker=object.__new__(Worker);worker.lock=threading.Lock();worker._prepare_terrain=Mock()
+        for value in ('', '   ', None, 12, True, []):
+            with self.subTest(output=value),self.assertRaisesRegex(ValueError,'nonempty PNG path'):
+                worker.export_map_image({'output':value})
+            self.assertFalse(worker.lock.locked())
+        worker._prepare_terrain.assert_not_called()
+
     def test_unconfirmed_black_and_visible_exports_are_not_published(self):
         from sc2native.session import Worker
-        for failure in ('unconfirmed', 'black', 'visible'):
+        for failure in ('unconfirmed', 'filters_unconfirmed', 'wrong_filter', 'missing_filter', 'not_custom', 'black', 'visible'):
             with self.subTest(failure=failure), tempfile.TemporaryDirectory() as temporary:
                 work = Path(temporary)
                 source = work / 'Private.SC2Map'
@@ -37,14 +46,20 @@ class MapPublication(unittest.TestCase):
                     if failure != 'black':
                         image.putdata([(i % 256, (i // 4) % 256, (i // 8) % 256) for i in range(512 * 512)])
                     image.save(map_path)
-                    return {'terrainExport': {'exported': failure != 'unconfirmed', 'fullMap': True,
+                    settings={'exported': failure != 'unconfirmed', 'fullMap': True,
                             'topDown': True, 'optionsConfirmed': True, 'size': 512,
-                            'includeUnits': True, 'includeDoodads': True}}
+                            'includeUnits': True, 'includeDoodads': True,'filtersConfirmed': failure != 'filters_unconfirmed',
+                            'customOptions': failure != 'not_custom', 'actualUnits': int(failure != 'wrong_filter'),'actualDoodads':1}
+                    if failure=='missing_filter':del settings['actualUnits']
+                    return {'terrainExport':settings}
 
                 worker._native = native
-                if failure == 'unconfirmed':
+                if failure in ('unconfirmed','filters_unconfirmed','not_custom'):
                     with self.assertRaisesRegex(RuntimeError, 'not confirmed'):
                         worker.export_map_image({'size': 512})
+                elif failure in ('wrong_filter','missing_filter'):
+                    with self.assertRaisesRegex(RuntimeError,'readback did not match'):
+                        worker.export_map_image({'size':512})
                 else:
                     result = worker.export_map_image({'size': 512})
                     self.assertEqual(result['status'], 'FAILED')

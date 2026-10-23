@@ -1,8 +1,12 @@
 # Owned Editor startup dispatch
 
-Native protocol **12** retains owned-thread startup dispatch and binds native
+Native protocol **13** adds original map flag-model readback to the export result.
+Checkbox state alone cannot confirm the native renderer's object filters. It
+supersedes protocol 12; restart owned workers with the complete matching bundle.
+
+Protocol 12 retained owned-thread startup dispatch and bound native
 requests to the selected Editor executable by file identity rather than a fixed
-installation path. It supersedes protocol 11; upgrade all native components.
+installation path. It superseded protocol 11.
 The earlier protocol 11 replaced the per-request cross-process DLL-hook setup.
 Use the matching host, bootstrap, bridge DLL and controller from one release.
 Restart an old owned worker after upgrading. A client-visible Editor is never

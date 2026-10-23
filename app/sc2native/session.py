@@ -493,7 +493,8 @@ class Worker:
         if not _locked and not self.lock.acquire(blocking=False):raise RuntimeError('Worker busy')
         try:
             options=export_options(request)
-            output=Path(request['output']).resolve() if request.get('output') else None
+            if 'output' in request and (not isinstance(request['output'],str) or not request['output'].strip()):raise ValueError('output must be a nonempty PNG path')
+            output=Path(request['output']).resolve() if 'output' in request else None
             if output and output.suffix.lower()!='.png':raise ValueError('Output extension must be .png')
             if output and output.exists() and not request.get('overwrite',False):raise FileExistsError(output)
             path,original_hash=self._prepare_terrain(request)
@@ -501,13 +502,16 @@ class Worker:
             native_image=directory/('NativeMap-'+directory.name[:12]+'.tga');png=directory/'FullMap.png';preview=directory/'Preview.png'
             native=self._native(directory,'terrain-export',map_path=native_image,terrain=options)
             selected=native.get('terrainExport',{})
-            if not all(selected.get(key) for key in ('exported','fullMap','topDown','optionsConfirmed')):raise RuntimeError('Original complete overhead map export was not confirmed')
+            if not all(selected.get(key) for key in ('exported','fullMap','topDown','optionsConfirmed','filtersConfirmed','customOptions')):raise RuntimeError('Original complete overhead map export and native object filters were not confirmed')
             if selected.get('size')!=options['size'] or bool(selected.get('includeUnits'))!=options['include_units'] or bool(selected.get('includeDoodads'))!=options['include_doodads']:raise RuntimeError('Original map export options did not match the request')
+            for key,option in (('actualUnits','include_units'),('actualDoodads','include_doodads')):
+                if selected.get(key) not in (0,1) or bool(selected[key])!=options[option]:raise RuntimeError('Original map export flag-model readback did not match the request')
             if self.scene:self.scene['frame']=None
             image=inspect_image(native_image,preview,png)
             if image['width']!=options['size']:raise RuntimeError('Native output width did not match the requested image size')
             result={'status':'MAP_IMAGE_EXPORTED','module':'terrain','source':'original Editor Export Map Image / CMapImageGenerator',
-                'implementationStatus':'experimental; full rendered-map acceptance test pending',
+                'implementationStatus':'native full-map export with verified original flag-model readback',
+                'objectFiltersVerified':True,'filterVerification':'original Editor model getter and custom export mode; not checkbox state alone',
                 'view':'complete map, top down','desktopScreenshot':False,'wholeMapVerified':image['imageHasDetail'],
                 'native':native,'options':options,'image':image,'sourceUnchanged':files.sha(path)==original_hash,
                 'nativeImageSha256':files.sha(native_image),'nativeImageFormat':image['format'],'outputEncoding':'lossless RGB PNG'}

@@ -1,9 +1,11 @@
 // Original Map Image Export on the owned GUI thread. A private TGA is produced
 // by CMapImageGenerator; the API losslessly encodes its pixels as PNG.
 #include "map_export_paths.h"
+#include "map_export_flags.h"
 struct MapExportTask {
     Block* b;HWND terrain,dialog=nullptr,chooser=nullptr;ULONGLONG deadline;
     int stage=0;bool done=false,submitting=false,browseReturned=false;ULONGLONG chooserDeadline=0,submitAfter=0;HWND filename=nullptr;
+    MapExportFlags flags;
 };
 static thread_local MapExportTask* mapExportTask;
 static HWND MapButton(HWND dialog,int id,const wchar_t* label){
@@ -47,7 +49,8 @@ static bool MapCombo(HWND dialog,int id,const wchar_t* label){
     SendMessageW(dialog,WM_COMMAND,MAKEWPARAM(id,CBN_SELCHANGE),reinterpret_cast<LPARAM>(c));
     return Text(c)==label;
 }
-static bool MapTreeFlag(HWND dialog,const wchar_t* label,bool wanted,Block* b){
+static bool MapTreeFlag(MapExportTask* task,const wchar_t* label,bool wanted,bool apply=true,uint32_t* readback=nullptr){
+    HWND dialog=task->dialog;auto b=task->b;
     HWND tree=Control(dialog,L"SysTreeView32",42);if(!tree||!IsWindowEnabled(tree))return false;
     HTREEITEM found=nullptr;std::vector<HTREEITEM> pending;
     pending.push_back(reinterpret_cast<HTREEITEM>(SendMessageW(tree,TVM_GETNEXTITEM,TVGN_ROOT,0)));
@@ -64,14 +67,20 @@ static bool MapTreeFlag(HWND dialog,const wchar_t* label,bool wanted,Block* b){
     TVITEMW row{};row.mask=TVIF_STATE|TVIF_PARAM;row.stateMask=TVIS_STATEIMAGEMASK;row.hItem=found;
     if(!SendMessageW(tree,TVM_GETITEMW,0,reinterpret_cast<LPARAM>(&row)))return false;
     auto index=(row.state&TVIS_STATEIMAGEMASK)>>12;if(index!=1&&index!=2)return false;
+    bool native=false;
+    if(!task->flags.Value(found,apply,wanted,&native)){
+        Log(b,L"map-export native flag not confirmed option=%s wanted=%d\n",label,wanted);return false;
+    }
+    if(readback)*readback=native?1u:0u;
     if((index==2)!=wanted){
+        if(!apply)return false;
         row.mask=TVIF_STATE;row.state=INDEXTOSTATEIMAGEMASK(wanted?2:1);
         if(!SendMessageW(tree,TVM_SETITEMW,0,reinterpret_cast<LPARAM>(&row)))return false;
     }
     row.mask=TVIF_STATE;row.state=0;
     if(!SendMessageW(tree,TVM_GETITEMW,0,reinterpret_cast<LPARAM>(&row)))return false;
     bool actual=((row.state&TVIS_STATEIMAGEMASK)>>12)==2;
-    Log(b,L"map-export option=%s checked=%d\n",label,actual);return actual==wanted;
+    Log(b,L"map-export option=%s checkbox=%d nativeFlag=%d apply=%d\n",label,actual,native,apply);return actual==wanted&&native==wanted;
 }
 static bool ConfigureMapExport(MapExportTask* task){
     HWND w=task->dialog;auto b=task->b;
@@ -80,15 +89,20 @@ static bool ConfigureMapExport(MapExportTask* task){
         &&MapCombo(w,28,L"(All)")&&MapEdit(w,29,L"90.0")&&MapEdit(w,31,L"0.0")
         &&MapEdit(w,19,std::to_wstring(b->terrain.size))&&MapRadio(w,37,39,39,L"Custom:")&&MapClick(w,40,L"Copy Game");
     if(!ok)return false;
-    for(auto flag:{L"Terrain",L"Water",L"Shadows"})if(!MapTreeFlag(w,flag,true,b))return false;
-    if(!MapTreeFlag(w,L"Units",b->terrain.includeUnits!=0,b)||!MapTreeFlag(w,L"Doodads",b->terrain.includeDoodads!=0,b))return false;
-    for(auto flag:{L"Fog Effects",L"Editor Helper Models",L"Editor-Only Models",L"Bounds",L"Base Height",L"Cameras",L"Points",L"Regions"})if(!MapTreeFlag(w,flag,false,b))return false;
+    if(!task->flags.Bind(Control(w,L"SysTreeView32",42))){Log(b,L"map-export flag-model adapter not verified reason=%u candidates=%u profile=%u rows=%u scanned=%llu row=%u id=%u alias=%d parameter=%lld visible=%u\n",task->flags.Reason(),task->flags.Hits(),task->flags.Profile(),task->flags.Count(),static_cast<unsigned long long>(task->flags.Scanned()),task->flags.Row(),task->flags.Id(),task->flags.Alias(),static_cast<long long>(task->flags.Parameter()),task->flags.Visible());return false;}
+    for(auto flag:{L"Terrain",L"Water",L"Shadows"})if(!MapTreeFlag(task,flag,true))return false;
+    if(!MapTreeFlag(task,L"Units",b->terrain.includeUnits!=0)||!MapTreeFlag(task,L"Doodads",b->terrain.includeDoodads!=0))return false;
+    for(auto flag:{L"Fog Effects",L"Editor Helper Models",L"Editor-Only Models",L"Bounds",L"Base Height",L"Cameras",L"Points",L"Regions"})if(!MapTreeFlag(task,flag,false))return false;
     if(!MapCombo(w,43,L"None")||!MapCombo(w,44,L"Game")||!MapCombo(w,45,L"Standard")||!MapCombo(w,46,L"All")||!MapCombo(w,47,L"(All Players)"))return false;
+    if(!MapRadio(w,37,39,39,L"Custom:"))return false;
+    b->terrain.customOptions=SendMessageW(MapButton(w,39,L"Custom:"),BM_GETCHECK,0,0)==BST_CHECKED;
+    b->terrain.filtersConfirmed=MapTreeFlag(task,L"Units",b->terrain.includeUnits!=0,false,&b->terrain.actualUnits)&&MapTreeFlag(task,L"Doodads",b->terrain.includeDoodads!=0,false,&b->terrain.actualDoodads)&&MapTreeFlag(task,L"Terrain",true,false)&&MapTreeFlag(task,L"Water",true,false);
+    if(!b->terrain.filtersConfirmed||!b->terrain.customOptions)return false;
     auto height=wcstoul(Text(Control(w,L"Edit",22)).c_str(),nullptr,10);
     if(height<64||height>8192||uint64_t(height)*b->terrain.size>32*1024*1024){Log(b,L"map-export dimensions exceed the bounded image budget\n");return false;}
     b->terrain.fullMap=SendMessageW(MapButton(w,26,L"Full"),BM_GETCHECK,0,0)==BST_CHECKED&&Text(Control(w,L"ComboBox",28))==L"(All)";
     b->terrain.topDown=wcstod(Text(Control(w,L"Edit",29)).c_str(),nullptr)==90.0;
-    b->terrain.optionsConfirmed=b->terrain.fullMap&&b->terrain.topDown&&wcstoul(Text(Control(w,L"Edit",19)).c_str(),nullptr,10)==b->terrain.size;
+    b->terrain.optionsConfirmed=b->terrain.fullMap&&b->terrain.topDown&&b->terrain.filtersConfirmed&&b->terrain.customOptions&&wcstoul(Text(Control(w,L"Edit",19)).c_str(),nullptr,10)==b->terrain.size;
     Log(b,L"map-export native configuration width=%s height=%s angle=%s full=%u topDown=%u\n",Text(Control(w,L"Edit",19)).c_str(),Text(Control(w,L"Edit",22)).c_str(),Text(Control(w,L"Edit",29)).c_str(),b->terrain.fullMap,b->terrain.topDown);
     return b->terrain.optionsConfirmed!=0;
 }

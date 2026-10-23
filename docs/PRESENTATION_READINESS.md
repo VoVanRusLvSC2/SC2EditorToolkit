@@ -1,7 +1,7 @@
 # Presentation readiness — 2026-10-23
 
-Scope: **v0.11.0-rc.1** portable selection and the separately dated published
-**v0.10.0-rc.1** baseline, original SC2 Editor
+Scope: **v0.12.0-rc.1** map/filter acceptance, with separately dated
+**v0.11.0-rc.1** portable/media and **v0.10.0-rc.1** baseline evidence; original SC2 Editor
 **5.0.17.98310**, DXVK 3.1.1 and the installed test machine/dependencies.
 This is a prerelease developer toolkit. Demonstrate the verified workflow;
 do not describe every experimental operation as production-complete.
@@ -27,6 +27,42 @@ worker, including hidden-worker restart. The normal process/document/window
 remained unchanged, no toolkit bridge was loaded into it, and it was left open.
 That was a read-only preservation check, not automated interactive editing of
 the normal Editor. See the dated [validation history](VALIDATION.md).
+
+## v0.12.0-rc.1 map and filter acceptance on 2026-10-23
+
+The complete native overhead exporter and its independent unit/doodad model
+filters are ready for a scoped technical demonstration. The fix writes the
+original flag model rather than only painting its checkboxes. Native model IDs
+are resolved through the exact tree item, independently of sorted row positions
+or Win32 item metadata; readback and custom mode are required before publication.
+
+| Check | Result |
+|---|---|
+| Python / native C++ suites | 66 Python tests / 4 native C++ suites PASS |
+| Packaged HTTP / MCP | PASS; the existing 18 tools, no added MCP tools |
+| Native visibility matrix | All, units off, both off, doodads off, then both restored PASS in one persistent map |
+| Independent worker | Separate owned Editor exported both categories off while the first exported all models; distinct instance IDs and correct images |
+| Geometry acceptance | Six building/doodad regions compared with an independently rendered private copy with placements removed; disabled geometry matches the empty reference; known broken old output correctly fails |
+| Image sizes | 512×384, 1024×768, 2048×1536 and 4096×3072 PASS on the 64×48 fixture |
+| Full-resolution objects | Additional 4096×3072 capture in the second worker: buildings, ten Marines and four doodads visually confirmed; six geometry regions and exact TGA/PNG/download checked |
+| Saved-object filters | Query, kinds, owner, inclusive XY bounds and pagination PASS; 14 units and 4 doodads; no Editor needed for search |
+| Compile / Galaxy / Console | Original generation and compilation: 0 compiler errors; exact Galaxy download; actual Editor log readable, complete and clear |
+| Background | 22,715 recorded per-worker observations: zero owned foreground samples, visible windows or input-desktop transitions; no input injection or desktop-switch calls |
+| Preservation / cleanup | Source and installed-Editor hashes unchanged; both owned test Editors closed; existing Editor processes uncontrolled |
+| Package | Exact tested native files and pinned renderer embedded in both EXEs; unused build-machine NumPy/BLAS excluded |
+
+This fixture has textured relief and native placements but no water. A dedicated
+water case and a broader map/dependency matrix remain outside this acceptance.
+The southwest crop visibly contains Command Center, while general region
+calibration retains its explicit experimental status. Earlier portable selection,
+normal-Editor coexistence, cutscene/audio and larger Nydus evidence remain scoped
+to their dated sections below; they are not fresh v0.12 media tests.
+
+For a live demo, warm the map exporter before presenting. The first exports here
+took about 209–219 seconds; subsequent same-map captures took about 10–12 seconds.
+Omit `map` on repeated requests to reuse the current private document. Opening a
+different map can require another native loading period. Use the complete
+protocol-13 package and restart workers when upgrading.
 
 ## v0.11.0-rc.1 portable acceptance on 2026-10-23
 
@@ -113,9 +149,9 @@ camera, not whole-map export or trigger-driven gameplay.
   not zero errors. Opening Data is not an exhaustive engine validator.
 - Saved map-camera framing is implemented. Executing Galaxy triggers to play a
   gameplay cinematic and arbitrary Terrain camera overrides are not implemented.
-- Whole-map export and region crops remain experimental. Default exports with
-  units/doodads have visual evidence; category exclusion is known unreliable,
-  water acceptance and native XY-to-image calibration remain incomplete.
+- Whole-map model filters have passed the scoped v0.12 acceptance above.
+  A water-specific case and broader map/dependency coverage remain unverified.
+  Region crops retain experimental native XY-to-image calibration status.
 - HTTP video export supports progress/cancellation endpoints; the current MCP
   stdio export call is blocking and exposes no separate progress/cancel tools.
   General native operations do not
@@ -138,6 +174,8 @@ camera, not whole-map export or trigger-driven gameplay.
    directory and port. Submit different marker fixtures concurrently, compare
    the scripts, then close one owned worker and show the other still compiles.
 
-Do not demonstrate the known category-exclusion limitation as a finished feature.
+For the map demo, show the full image, independent unit/doodad exclusion and
+restoration using [the map-export guide](MAP_EXPORT.md). Keep the same map loaded
+for repeated captures.
 Use [parallel-instance setup](PARALLEL_INSTANCES.md) and opt-in live tests to
 reproduce the exact scope instead of making a general stability claim.

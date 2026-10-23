@@ -36,12 +36,13 @@ with (work / 'stdout.log').open('wb') as stdout, (work / 'stderr.log').open('wb'
             time.sleep(.1)
         info = json.loads((work / 'runtime' / 'api-info.json').read_text())
         code, health = call('/health', authorized=False)
-        assert code == 200 and health['version'] == '0.11.0-rc.1' and not health['workerRunning'], health
+        assert code == 200 and health['version'] == '0.12.0-rc.1' and not health['workerRunning'], health
         assert call('/modules', authorized=False)[0] == 403
         assert call('/terrain/export', {'size': 512}, authorized=False)[0] == 403
         code, modules = call('/modules')
         terrain = next(m for m in modules['modules'] if m['id'] == 'terrain')
-        assert code == 200 and terrain['fullMap']['experimental']
+        assert code == 200 and not terrain['fullMap']['experimental']
+        assert terrain['fullMap']['independentObjectFilters']
         assert 'export_map_image' in terrain['methods']
         assert 'capture_region' in terrain['methods']
         assert 'list_map_cameras' in terrain['methods']

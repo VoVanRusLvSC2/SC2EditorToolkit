@@ -17,7 +17,7 @@ run=subprocess.run([str(root/'dist'/'SC2NativeMCP.exe'),'--work',str(work),'--ed
 assert run.returncode==0,run.stderr
 result=[json.loads(line) for line in run.stdout.splitlines()]
 assert [r['id'] for r in result]==[1,2,3,4,5,6],run.stdout
-assert result[0]['result']['serverInfo']['version']=='0.11.0-rc.1'
+assert result[0]['result']['serverInfo']['version']=='0.12.0-rc.1'
 for tool in result[1]['result']['tools']:
     assert 'editor_path' in tool['inputSchema']['properties']
 assert result[4]['result']['isError'] and 'nonempty' in result[4]['result']['content'][0]['text']

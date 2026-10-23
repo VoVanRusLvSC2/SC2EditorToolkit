@@ -7,7 +7,9 @@ if($WithVulkan){& (Join-Path $PSScriptRoot 'scripts\fetch-vulkan.ps1') -Destinat
 $hasVulkan=Test-Path -LiteralPath (Join-Path $renderer 'd3d9.dll')
 if($hasVulkan -and (Get-FileHash -LiteralPath (Join-Path $renderer 'd3d9.dll')).Hash -ne 'C126316F7478EAFF1AD8087702EDA5930F2400187B9C8B3592219C34F6632780'){throw 'DXVK renderer hash mismatch'}
 foreach($program in @(@{Name='SC2NativeAPI';Entry='hidden_api.py'},@{Name='SC2NativeMCP';Entry='mcp_server.py'})){
- $pyArgs=@('-m','PyInstaller','--noconfirm','--clean','--onefile','--windowed','--name',$program.Name,
+ # Pillow's optional NumPy integration is unused. Do not pull build-machine
+ # analysis extras (and their BLAS DLLs) into the redistributable toolkit.
+ $pyArgs=@('-m','PyInstaller','--noconfirm','--clean','--onefile','--windowed','--exclude-module','numpy','--name',$program.Name,
   '--distpath',(Join-Path $PSScriptRoot $OutputDirectory),'--workpath',(Join-Path $PSScriptRoot 'pyinstaller-build'),
   '--specpath',$PSScriptRoot,'--paths',(Join-Path $PSScriptRoot 'app'))
  foreach($file in $binaries){$pyArgs+=@('--add-binary',((Join-Path $PSScriptRoot "$BinaryDirectory\$file")+';.'))}
@@ -24,7 +26,7 @@ foreach($file in 'README.md','THIRD_PARTY.txt','LICENSE','NOTICE'){
 }
 $docsDestination=Join-Path $PSScriptRoot "$OutputDirectory\docs"
 New-Item -ItemType Directory -Force -Path $docsDestination | Out-Null
-foreach($file in 'VALIDATION.md','MODKIT_BRIDGE_STATUS.md','NATIVE_DISPATCH.md','PARALLEL_INSTANCES.md','PRESENTATION_READINESS.md'){
+foreach($file in 'VALIDATION.md','MODKIT_BRIDGE_STATUS.md','NATIVE_DISPATCH.md','PARALLEL_INSTANCES.md','PRESENTATION_READINESS.md','MAP_EXPORT.md'){
  Copy-Item -LiteralPath (Join-Path $PSScriptRoot "docs\$file") -Destination $docsDestination
 }
 if($hasVulkan){Copy-Item -LiteralPath (Join-Path $renderer 'LICENSE.txt') -Destination (Join-Path $PSScriptRoot "$OutputDirectory\LICENSE-DXVK.txt")}

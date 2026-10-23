@@ -1,9 +1,15 @@
 # ModKit / original Editor bridge status
 
-Current v0.11.0-rc.1 removes the fixed installation path and adds Editor discovery,
+v0.12.0-rc.1 completes the native whole-map visibility filters, with independent
+model readback, all four category combinations/restoration, a second owned worker
+and full-resolution model acceptance. See [map export](MAP_EXPORT.md).
+Upgrade the complete protocol-13 package and restart workers. Water-specific
+acceptance and broader asset/dependency coverage remain separate.
+
+The v0.11.0-rc.1 update removed the fixed installation path and adds Editor discovery,
 `editor_path`, `SC2_EDITOR_PATH` and CLI `--editor`. It validates the supported
 original binary and uses selected-file identity throughout native operations.
-Upgrade the complete package and restart owned workers; protocol 12 supersedes 11.
+That release used protocol 12; the current complete package uses protocol 13.
 See [presentation readiness](PRESENTATION_READINESS.md) for dated parallel-worker
 and native media evidence, plus the remaining feature limits.
 
@@ -19,7 +25,7 @@ and [dated validation history](VALIDATION.md). Earlier rendering limitations in
 the table below remain in force.
 
 Assessment of the existing toolkit against the five-point integration plan,
-updated 2026-10-21. ModKit remains responsible for fast previews, terrain operations,
+updated 2026-10-23. ModKit remains responsible for fast previews, terrain operations,
 measurements and authoring. This toolkit supplies evidence from an owned hidden
 original Editor. The original assessment used 15 MCP tools. The subsequent
 implementation of items 2 and 5 adds exactly two tools (17 total):
@@ -31,7 +37,7 @@ camera extends the existing `sc2_capture_terrain` tool.
 |---|---|---|
 | 1. Original GUI triggers → Galaxy → Compile All → diagnostics/script | Implemented and live-tested on Nydus v54 with installed dependencies. Native generation and compilation passed with zero compiler errors. Galaxy file and HTTP download matched exactly: 342,851 bytes. | A broader map/dependency matrix, invalid-source cases and explicit Trigger Reviser integration tests. A successful native compile is not a gameplay test. |
 | 2. Map/Data load errors with message type, related ID and new/old separation | Implemented as operation-scoped native observations. Private archive load and original Data opening retain before/after snapshots, output mutations, new errors/warnings and old baselines. Text classification and explicit IDs are returned when available. | Broader localized/native failure-format coverage. This collects what the Editor actually reports; opening Data is not an exhaustive engine validator. Silent invalid references are not certified. Unreadable, truncated or ambiguous output remains unknown. |
-| 3. Reliable original map image with terrain, water, units and doodads | Partial, with successful visual evidence. Original full-map export of the corrected fixture shows textured ground, both hills, four corner buildings, ten Marines and four doodads at 1024×768. | Water acceptance, category-exclusion correction and broader map/dependency coverage. The first generated test fixture omitted native Objects registration/preloads; correcting that private fixture made placements visible without changing renderer/API code. |
+| 3. Reliable original map image with terrain, water, units and doodads | Partial, with successful visual evidence. Original full-map export of the corrected fixture shows textured ground, both hills, four corner buildings, ten Marines and four doodads at 1024×768. | Water-specific acceptance and broader map/dependency coverage. Category exclusion is corrected through original model setter/getter readback; painted checkbox state is insufficient. The first generated test fixture omitted native Objects registration/preloads; correcting that private fixture made placements visible without changing renderer/API code. |
 | 4. Real local-area capture with native camera controls | Saved map-camera framing is implemented: select an exact saved camera ID, invoke original View Selected Camera, read actual target/angles/distance/FOV with original Get Game Camera, verify core values and capture the native Terrain viewport. Full-map cropping and cutscene cameras remain separate. | Arbitrary target/angle/distance/resolution overrides and broader map/UI coverage. This is static editor placement state, not Galaxy-trigger playback or a gameplay timeline. |
 | 5. Native Editor save → reopen → diagnostics/component differences | Implemented. Original File/Save As serializes a private copy, File/Close removes that document, then original File/Open reads the saved archive. Per-phase diagnostics and exact enumerated MPQ member comparisons include locales, metadata and optional bounded text diffs. | Broader map/dependency and Editor-version coverage. Only confirmed commands, complete component reads, stable hashes and known-clear new diagnostics permit publishing a verified saved archive. Failure after saving still retains the save comparison report. |
 
