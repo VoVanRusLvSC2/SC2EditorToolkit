@@ -1,6 +1,6 @@
 # Owned Editor startup dispatch
 
-Native protocol **14** adds original Data operations and owned queued requests.
+Native protocol **15** adds complete effective-catalog audit pages and merged virtual file checks. Protocol 14 introduced individual original Data operations and owned queued requests.
 The controller posts a registered message and retains both the mapping and atom
 until completion or owned-process exit. A same-process GETMESSAGE callback runs
 it on the original GUI thread without holding a cross-process synchronous send.
@@ -10,7 +10,7 @@ IPC and reusing a callback that may still be running.
 
 Protocol 13 added original map flag-model readback to the export result.
 Checkbox state alone cannot confirm the native renderer's object filters.
-Restart owned workers with the complete matching protocol-14 bundle.
+Restart owned workers with the complete matching protocol-15 bundle.
 
 Protocol 12 retained owned-thread startup dispatch and bound native
 requests to the selected Editor executable by file identity rather than a fixed

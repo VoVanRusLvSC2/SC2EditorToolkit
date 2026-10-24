@@ -29,6 +29,7 @@ TOOLS=[
  ('sc2_job_wait','Wait up to 30 seconds for a job; may return RUNNING.','jobs.wait',['job_id']),
  ('sc2_job_cancel','Cancel a queued job, or discard only the owned private Editor to stop a running job. Running cancellation can leave private artifacts; no automatic retry.','jobs.cancel',['job_id']),
  ('sc2_check_map','Create an immutable report bound to the source SHA-256: original loading/Data diagnostics, Galaxy generation, native compilation and Galaxy export; optional private save/reopen. Unknown is not success.','check_document',[]),
+ ('sc2_audit_data','Traverse all original effective Data catalogs in an owned hidden Editor, including loaded map/mod dependencies. Check typed catalog targets and file paths through the original merged Archive Browser; return exact revision, per-catalog coverage, findings and full JSONL artifacts. Opaque types, tokens and runtime/computed references remain explicit coverage gaps. Does not validate resource binary integrity or gameplay semantics. Optional map autostarts a worker; use a queued audit_data job for long audits.','audit_data',[]),
  ('sc2_read_data','Select exact catalog/object ID in the original Data editor and read native fields, inherited/effective UI values, original object columns and observed object source.','read_data',['catalog','object_id']),
  ('sc2_data_links','Read original Editor object explorer links for an exact catalog/object ID. Returns observed native links, not a reconstructed XML graph.','data_links',['catalog','object_id']),
  ('sc2_check_resources','Check the selected Model main file in the original merged Archive Browser with native path-token resolution and diagnostics. Binary integrity, nested resources and other catalogs remain unvalidated.','check_resources',['catalog','object_id']),
@@ -80,7 +81,7 @@ def main():
                 if method=='initialize':
                     version=params.get('protocolVersion','2025-06-18')
                     if version not in ('2024-11-05','2025-03-26','2025-06-18'):version='2025-06-18'
-                    result={'protocolVersion':version,'serverInfo':{'name':'sc2-native-toolkit','version':'0.13.0-rc.1'},'capabilities':{'tools':{'listChanged':False}},
+                    result={'protocolVersion':version,'serverInfo':{'name':'sc2-native-toolkit','version':'0.14.0-rc.1'},'capabilities':{'tools':{'listChanged':False}},
                         'instructions':'Use an installed SC2 Editor. Load a cutscene using scene and a map/mod template, select a unique camera and time_ms, then capture its renderer. Time is sampled on the native 33 ms frame grid. Every editor window remains on a private desktop.'};initialized=True
                 elif method=='ping':result={}
                 elif not initialized:raise ValueError('Initialize the MCP session first')

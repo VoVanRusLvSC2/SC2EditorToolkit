@@ -1,3 +1,5 @@
+v0.14.0-rc.1 adds a full traversal of all original effective catalogs and typed catalog/file checks. Coverage gaps and optional missing identities remain explicit. See [Data audit](DATA_AUDIT.md). The current complete native package uses protocol 15; restart owned workers after upgrading.
+
 # ModKit / original Editor bridge status
 
 v0.13.0-rc.1 adds a per-server FIFO job API, cancellation/deadlines and fresh-worker
@@ -5,7 +7,7 @@ recovery; immutable revision-bound native reports; original effective Data field
 Object Explorer associations and main Model file checks in the original Archive
 Browser. There are now 26 MCP tools. See
 [jobs and reports](JOBS_AND_REPORTS.md) and [Data and resources](DATA_AND_RESOURCES.md).
-Upgrade the complete matching protocol-14 package and restart owned workers.
+Protocol 14 was the matching native package for v0.13.0-rc.1.
 
 v0.12.0-rc.1 completes the native whole-map visibility filters, with independent
 model readback, all four category combinations/restoration, a second owned worker
@@ -16,7 +18,7 @@ acceptance and broader asset/dependency coverage remain separate.
 The v0.11.0-rc.1 update removed the fixed installation path and adds Editor discovery,
 `editor_path`, `SC2_EDITOR_PATH` and CLI `--editor`. It validates the supported
 original binary and uses selected-file identity throughout native operations.
-That release used protocol 12; the current complete package uses protocol 14.
+That release used protocol 12; v0.13.0-rc.1 used protocol 14.
 See [presentation readiness](PRESENTATION_READINESS.md) for dated parallel-worker
 and native media evidence, plus the remaining feature limits.
 
@@ -62,7 +64,7 @@ camera extends the existing `sc2_capture_terrain` tool.
   compilation and exact Galaxy export. It does not execute gameplay.
 - Native request timeout handling retains IPC until a callback completes or
   the owned process exits. An aborted process is not reused for another job.
-- Native Data values and relationships are original UI observations, not an
+- Native Data values use original UI serialization or native reflection; individual Explorer relationships are original UI observations, not an
   independently reimplemented inheritance resolver. Main Model file checks do
   not certify every nested texture/animation/sound or runtime actor combination.
 - ModKit's existing Data reader was exercised separately on its loaded project:

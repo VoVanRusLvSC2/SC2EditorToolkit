@@ -18,11 +18,12 @@ run=subprocess.run([str(root/os.environ.get('SC2_PACKAGE_DIR','dist')/'SC2Native
 assert run.returncode==0,run.stderr
 result=[json.loads(line) for line in run.stdout.splitlines()]
 assert [r['id'] for r in result]==[1,2,3,4,5,6],run.stdout
-assert result[0]['result']['serverInfo']['version']=='0.13.0-rc.1'
+assert result[0]['result']['serverInfo']['version']=='0.14.0-rc.1'
 for tool in result[1]['result']['tools']:
     assert 'editor_path' in tool['inputSchema']['properties']
 assert result[4]['result']['isError'] and 'nonempty' in result[4]['result']['content'][0]['text']
 assert result[5]['result']['isError'] and 'JSON boolean' in result[5]['result']['content'][0]['text']
+assert 'sc2_audit_data' in {t['name'] for t in result[1]['result']['tools']}
 assert 'sc2_capture_frame' in {t['name'] for t in result[1]['result']['tools']}
 assert 'sc2_capture_terrain' in {t['name'] for t in result[1]['result']['tools']}
 assert 'sc2_export_map_image' in {t['name'] for t in result[1]['result']['tools']}

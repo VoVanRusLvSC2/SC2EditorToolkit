@@ -10,7 +10,7 @@ from pathlib import Path
 OPERATIONS = ('start','open_document','execute','compile_current','export_galaxy','diagnostics',
               'validate_document','save_reopen_document','cutscene_open','cutscene_seek','capture_frame',
               'capture_terrain','export_map_image','capture_map_region','list_map_cameras','search_objects',
-              'export_video','check_document','read_data','data_links','check_resources')
+              'export_video','check_document','read_data','data_links','check_resources','audit_data')
 TERMINAL = {'SUCCEEDED','FAILED','CANCELLED','TIMED_OUT','INTERRUPTED'}
 
 
@@ -40,7 +40,7 @@ class JobQueue:
         operation=request.get('operation');arguments=request.get('arguments',{})
         if operation not in OPERATIONS:raise ValueError('Unsupported queued operation')
         if not isinstance(arguments,dict):raise ValueError('arguments must be a JSON object')
-        timeout=request.get('timeout_seconds',14400 if operation=='export_video' else 1800)
+        timeout=request.get('timeout_seconds',14400 if operation in ('export_video','audit_data') else 1800)
         if type(timeout) not in (int,float) or not 1<=timeout<=14400:raise ValueError('timeout_seconds must be 1..14400')
         with self.condition:
             if self.stopping:raise RuntimeError('Job queue is stopping')

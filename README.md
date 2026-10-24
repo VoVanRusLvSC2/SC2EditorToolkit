@@ -5,14 +5,14 @@ native generator, compiler and renderer through a DLL, HTTP API and MCP.
 Previously published as SC2 Native Toolkit. Original code author and project
 owner: **VoVanRusLvSC2**.
 
-**v0.13.0-rc.1 adds queued jobs, revision-bound native reports and original Data access.**
+**v0.14.0-rc.1 adds a full traversal of the original Editor’s effective Data catalogs, with typed reference and virtual resource checks.**
 Read inherited/overridden values, search native Object Explorer associations,
 and check the selected Model's main file through the original Archive Browser
 and native diagnostics. Jobs support status, cancellation, deadlines and recovery.
 See [jobs and reports](docs/JOBS_AND_REPORTS.md),
 [Data and resources](docs/DATA_AND_RESOURCES.md), and
 [map export and object filters](docs/MAP_EXPORT.md).
-[Download v0.13.0-rc.1](https://github.com/VoVanRusLvSC2/SC2EditorToolkit/releases/tag/v0.13.0-rc.1).
+[Download v0.14.0-rc.1](https://github.com/VoVanRusLvSC2/SC2EditorToolkit/releases/tag/v0.14.0-rc.1).
 
 Editor installation discovery and explicit selection remain portable.
 There is no fixed drive or user-specific Editor path. Use automatic discovery,
@@ -63,7 +63,7 @@ saved map-camera framing, remaining camera controls and validation coverage.
 | Module | Implemented capabilities |
 |---|---|
 | Jobs | Per-server FIFO, progress, cancellation, deadlines, persisted history and fresh-worker recovery |
-| Data | Original effective field values, XML identity, Object Explorer associations, main Model file availability |
+| Data | Full effective catalog traversal, typed catalog/file checks with coverage gaps and downloadable JSONL; individual fields, XML identity and Explorer associations |
 | Editor | Revision-bound check report, hidden startup, private map/mod copies, new load/Data diagnostics, native save → close → disk reopen and component comparison |
 | Triggers | Original `Triggers XML → Galaxy` generation and native compilation |
 | Galaxy | Exact `.galaxy` bytes, SHA-256, artifact download, overwrite protection |
@@ -179,6 +179,7 @@ handler while it is still executing inside the Editor.
 | POST | `/galaxy/export` | Export the last verified generated script |
 | GET | `/artifacts/<id>` | Download an artifact's exact bytes |
 | POST | `/editor/diagnostics` | Read Messages/Console controls |
+| POST | `/data/audit` | Traverse all effective native catalogs and check typed references/files with explicit coverage gaps |
 | POST | `/editor/validate` | Load a private map/mod and original Data module; return new native messages by phase |
 | POST | `/editor/save-reopen` | Native Save As → Close → disk reopen, diagnostics and component hashes/diffs |
 | POST | `/terrain/capture` | Capture the current original Terrain viewport |
@@ -213,6 +214,12 @@ under `diagnostics.compilerErrors`; Editor messages are under `diagnostics.edito
 An unreadable log has `clear:null`, not a fabricated zero-error result. Existing
 messages are retained. `/galaxy/export` returns exact native bytes and a SHA-256.
 Existing files require `overwrite:true`.
+
+## Full Data audit
+
+`POST /data/audit` or MCP `sc2_audit_data` walks all 109 original native catalogs in the opened map/mod and loaded dependencies. It follows original getters through arrays and nested structures, checks typed catalog targets against effective native entries, and checks typed file paths in the original merged Archive Browser. The input archive is preserved.
+
+Use a queued `audit_data` job for large projects. The result contains per-catalog counts, explicit coverage gaps, missing reference/file findings, a SHA-256 revision, and downloadable JSONL objects/findings plus a JSON summary. Full traversal does not imply complete semantic validation: opaque types, unresolved tokens, actor command strings and runtime-computed references remain explicit limitations. See [Data audit](docs/DATA_AUDIT.md).
 
 ## Native map/Data checks and save/reopen
 

@@ -46,6 +46,7 @@ static void DataTreeJson(HWND tree,HTREEITEM item,std::string& json,int& count,i
     }
 }
 #include "data_asset_bridge.inc"
+#include "data_audit_bridge.inc"
 static void DataOperation(Block* b,HWND target){
     if(!PrivateDesktop()){Fail(b,140,L"Data access requires owned private desktop");return;}
     LoadNativeDataModule(b,target);if(b->error)return;
@@ -66,6 +67,8 @@ static void DataOperation(Block* b,HWND target){
         if(index==CB_ERR){Fail(b,154,L"Original All Data source scope unavailable");return;}
         SendMessageW(sourceFilter,CB_SETCURSEL,index,0);SendMessageW(GetParent(sourceFilter),WM_COMMAND,MAKEWPARAM(19,CBN_SELCHANGE),reinterpret_cast<LPARAM>(sourceFilter));DataPump(250);
     }
+    if(b->operation==DataAudit){data_audit::Page(b,data);return;}
+    if(b->operation==DataAuditFiles){data_audit::Files(b,data);return;}
     auto explorer=FindCommand(data,{L"View"},{L"Show Object Explorer"});
     if(explorer&&!(GetMenuState(GetMenu(data),explorer,MF_BYCOMMAND)&MF_CHECKED))SendMessageW(data,WM_COMMAND,explorer,0);
     std::string selection="null",preview="null",copies="[]";std::wstring copied;

@@ -30,7 +30,7 @@ an operation's own incomplete/unknown validation fields must still be checked.
 Progress reports phases and elapsed time, not invented completion percentages.
 The queue permits 32 pending jobs and retains up to 256 recent job records.
 Deadlines cover execution, not time waiting in the queue, and accept 1..14400
-seconds (default 1800; video export defaults to 14400 to allow offline rendering).
+seconds (default 1800; video export and full Data audits default to 14400).
 
 ## Cancellation and recovery
 

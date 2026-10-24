@@ -13,7 +13,7 @@ ROUTES={'/convert':'execute','/open':'open_document','/editor/start':'start','/t
  '/cutscene/export':'export_video','/cutscene/export/cancel':'cancel_video','/render/capture':'capture_frame','/terrain/capture':'capture_terrain','/terrain/export':'export_map_image',
  '/objects/search':'search_objects','/terrain/region':'capture_map_region','/terrain/cameras':'list_map_cameras',
  '/editor/validate':'validate_document','/editor/save-reopen':'save_reopen_document','/editor/check':'check_document',
- '/data/read':'read_data','/data/links':'data_links','/data/resources':'check_resources'}
+ '/data/audit':'audit_data','/data/read':'read_data','/data/links':'data_links','/data/resources':'check_resources'}
 
 def main():
     watch_frozen_parent()
@@ -47,7 +47,7 @@ def main():
         def authorized(self):
             return not self.headers.get('Origin') and secrets.compare_digest(self.headers.get('X-SC2-Token',''),token)
         def do_GET(self):
-            if self.path=='/health':self.reply(200,{'ok':True,'version':'0.13.0-rc.1','workerRunning':worker.alive(),'busy':jobs.busy() or worker.lock.locked(),'renderBackend':(worker.state or {}).get('renderBackend'),'instanceId':(worker.state or {}).get('instanceId')});return
+            if self.path=='/health':self.reply(200,{'ok':True,'version':'0.14.0-rc.1','workerRunning':worker.alive(),'busy':jobs.busy() or worker.lock.locked(),'renderBackend':(worker.state or {}).get('renderBackend'),'instanceId':(worker.state or {}).get('instanceId')});return
             if not self.authorized():self.reply(403,{'error':'X-SC2-Token required; browser origins are not accepted'});return
             if self.path=='/modules':self.reply(200,capabilities());return
             if self.path=='/cutscene/export/status':self.reply(200,worker.export_video_status());return
@@ -85,7 +85,7 @@ def main():
             except FileExistsError:self.reply(409,{'status':'FAILED','error':'Export target exists; use another path or overwrite=true'})
             except Exception as e:self.reply(409 if worker.lock.locked() else 400,{'status':'FAILED','error':str(e)})
     server=ThreadingHTTPServer(('127.0.0.1',args.port),Handler)
-    (worker.work/'api-info.json').write_text(json.dumps({'url':f'http://127.0.0.1:{server.server_port}','token':token,'pid':os.getpid(),'version':'0.13.0-rc.1'},indent=2),encoding='utf8')
+    (worker.work/'api-info.json').write_text(json.dumps({'url':f'http://127.0.0.1:{server.server_port}','token':token,'pid':os.getpid(),'version':'0.14.0-rc.1'},indent=2),encoding='utf8')
     try:server.serve_forever(poll_interval=.2)
     finally:server.server_close();jobs.close();worker.close()
     return 0

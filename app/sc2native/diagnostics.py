@@ -38,6 +38,8 @@ def classify_native_message(text, *, channel=None, origin='nativeOutput', sequen
     elif re.search(r'model|\.m3\b|модел',text,re.I) and missing:category='missingModel'
     elif re.search(r'texture|\.dds\b|sound|\.wav\b|asset|текстур',text,re.I) and missing:category='missingAsset'
     elif re.search(r'catalog|\bdata\b|\.xml\b|CUnit|CActor|CEffect|CAbil|данных',text,re.I) and severity in ('error','warning'):category='dataValidation'
+    if (channel or '').startswith(('Console - ','Консоль - ')) and text.strip()=='> browse':
+        severity='info';category='consoleCommandEcho'
     ids=[]
     patterns=[r'\b(?:id|parent|link)\s*[:=]\s*[\'\"]?([A-Za-z_][\w]*)',
               r'\b(?:actor|unit|model|effect|ability|catalog|актор|модель)\s+[\'\"]([A-Za-z_][\w]*)[\'\"]',

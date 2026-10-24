@@ -1,3 +1,5 @@
+For a complete effective-catalog traversal, use the separate [Data audit](DATA_AUDIT.md) operation. The individual-object operations below retain their narrower scopes.
+
 # Original Editor Data, associations and resource checks
 
 These operations use the original Data workspace in the server's owned hidden

@@ -1,5 +1,6 @@
 // Structured native log snapshots and mutations on the owned Editor GUI thread.
-// No keyboard/mouse hooks. Only Console/Messages output control 13 is watched.
+// No keyboard/mouse hooks. Only the verified output of each channel is watched.
+#include "diagnostic_output.h"
 static std::string DiagUtf8(const std::wstring& s){
     if(s.empty())return {};int n=WideCharToMultiByte(CP_UTF8,0,s.data(),int(s.size()),nullptr,0,nullptr,nullptr);
     std::string out(n,0);WideCharToMultiByte(CP_UTF8,0,s.data(),int(s.size()),out.data(),n,nullptr,nullptr);return out;
@@ -10,7 +11,7 @@ static std::string DiagQ(const std::wstring& s){
         else if(c<32){char value[8]{};sprintf_s(value,"\\u%04x",c);out+=value;}else out+=char(c);
     }return out+'"';
 }
-static bool DiagnosticRoot(HWND w){auto s=Text(w);return s.rfind(L"Console - ",0)==0||s.rfind(L"Messages - ",0)==0||s.rfind(L"Консоль - ",0)==0||s.rfind(L"Сообщения - ",0)==0;}
+static bool DiagnosticRoot(HWND w){return DiagnosticOutputId(Text(w))>0;}
 static std::wstring DiagnosticKey(HWND w){auto root=GetAncestor(w,GA_ROOT);return Text(root)+L"|"+Class(w)+L"|"+std::to_wstring(GetDlgCtrlID(w));}
 static std::wstring FullDiagnosticText(HWND w,bool& complete){
     constexpr int bound=262144;int length=GetWindowTextLengthW(w);
@@ -40,7 +41,7 @@ static void CaptureDiagnosticJson(Block* b,bool before){
             auto cls=Class(c);int id=GetDlgCtrlID(c);
             bool rich=cls==L"Edit"||cls.rfind(L"RichEdit",0)==0||cls.rfind(L"RICHEDIT",0)==0;
             // Console's other edit is the command input, never a log channel.
-            if(rich&&id!=13)continue;
+            if(rich&&id!=DiagnosticOutputId(Text(root)))continue;
             if(!rich&&cls!=L"SysListView32"&&cls!=L"ListBox")continue;
             rootRead=true;bool channelComplete=true;std::string entries="[";bool comma=false;
             auto add=[&](int index,const std::vector<std::wstring>& columns){
@@ -79,7 +80,7 @@ static thread_local DiagnosticWatch diagnosticWatch;
 static void ObserveDiagnosticMutationUnsafe(const CWPSTRUCT* m){
     auto& watch=diagnosticWatch;if(!m||!watch.active||watch.reading||!PrivateDesktop())return;
     if(m->message!=WM_SETTEXT&&m->message!=EM_REPLACESEL&&m->message!=WM_CLEAR&&m->message!=WM_USER+73&&m->message!=WM_USER+97)return;
-    HWND w=m->hwnd;if(GetDlgCtrlID(w)!=13||!DiagnosticRoot(GetAncestor(w,GA_ROOT)))return;
+    HWND w=m->hwnd;auto root=GetAncestor(w,GA_ROOT);if(!DiagnosticRoot(root)||GetDlgCtrlID(w)!=DiagnosticOutputId(Text(root)))return;
     auto cls=Class(w);if(cls.rfind(L"RichEdit",0)!=0&&cls.rfind(L"RICHEDIT",0)!=0&&cls!=L"Edit")return;
     watch.reading=true;
     if(watch.count>=1024||watch.events.size()>kDiagnosticCapacity-262144){watch.complete=false;watch.reading=false;return;}

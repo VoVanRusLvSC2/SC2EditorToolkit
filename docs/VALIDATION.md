@@ -1,5 +1,62 @@
 # Validation history
 
+## v0.14.0-rc.1 full native Data audit acceptance — 2026-10-24
+
+The final native protocol-15 bundle completed a full traversal on a private
+Nydus mod copy with Core, Liberty, Swarm, Void, VoidMulti and its two authored
+mod dependencies. Both the supplied mod and private archive remained unchanged.
+
+| Check | Observed result |
+| --- | --- |
+| Catalog coverage | All 109 native catalog slots, including empty catalogs and defaults |
+| Effective objects | 50,129 |
+| Original field getter visits | 7,367,409; 6,906,851 leaf values |
+| Getter failures | 0 |
+| Typed catalog references | 103,197 |
+| Resource occurrences / unique canonical file paths | 56,874 / 26,041 |
+| Original merged Archive Browser presence | 22,592 present; 3,449 absent |
+| New original Editor errors | 0; every recorded phase confirmed new errors clear |
+| Visibility / foreground / input desktop changes | 0 / 0 / 0 |
+| Physical input / input-desktop switch API | Neither used |
+| Source preservation | Supplied and private archive hashes unchanged |
+
+The Nydus audit was repeated on the final DLL after correcting Console channel
+identity. Console output is control 15; control 13 is command input. Messages
+output remains control 13. Console command echoes are retained as informational
+observations. The final per-operation snapshots and append observations read the
+correct output channel and retain complete native text within documented bounds.
+
+A separate complete acceptance run used the packaged windowed HTTP EXE with a
+private negative map. All 109 catalogs and 39,290 objects were traversed;
+5,162,469 getter visits produced zero getter failures. It found the deliberately
+undefined ability and weapon at their exact inherited Unit field paths, retained
+the inherited `move` ability, confirmed the existing Marine model and rejected
+the deliberately absent model file. Models, DDS textures, WAV/OGG sounds and
+other file families were present in the native merged-tree results. Authenticated
+object/findings/report downloads matched their returned sizes and SHA-256 hashes.
+The actual Console output snapshot contained the original `> browse` echo at
+control 15 and excluded the command input. Both test workers/servers closed.
+
+Regression acceptance: **97 Python tests**, **6 native suites**, native builds,
+packaged HTTP validation/authentication tests and windowed MCP stdio tests
+(**27 tools**) passed. Two independent hidden audit workers ran concurrently
+without visible windows, foreground samples or physical input.
+
+These are traversal and typed-identity observations, not a clean-gameplay
+certificate. Nydus retained 26,842 absent typed catalog targets, 3,045 unresolved
+catalog targets, 1,318 non-file/unresolved-token resource occurrences and
+1,090,726 conservatively unclassified native values. Many default/optional
+references legitimately lack targets; unclassified values include engine/scalar
+native types without a verified reference visitor. The report therefore returns
+`referenceAndFileValidationComplete=false`,
+`allObservedTypedTargetsPresent=false`, `nativeNewErrorsClear=true`, and
+`validationPassed=null`. Missing optional identities do not assert an Editor
+error. Unknown coverage never becomes a trustworthy zero-error certificate.
+
+Private maps, complete object records, native images and raw user reports are
+not distributed. See [Data audit](DATA_AUDIT.md) and
+[adapter maintenance](DATA_NATIVE_ADAPTER.md) for scope and limits.
+
 Unless explicitly dated otherwise, earlier results below are from 2026-10-20.
 Live tests use the original installed SC2 Editor
 5.0.17.98310 on Windows x64. They operate on owned hidden workers and private

@@ -45,6 +45,14 @@ class OperationDiagnostics(unittest.TestCase):
             ("Warning: actor 'DuplicateActor' already exists",'actorConflict'),
             ('Error: texture missing','missingAsset')]:
             self.assertEqual(classify_native_message(message)['type'],category)
+    def test_console_echo_is_preserved_without_masking_real_errors(self):
+        channel='Console - StarCraft II Editor|RichEdit20W|15'
+        echo=classify_native_message('> browse',channel=channel)
+        self.assertEqual(echo['severity'],'info');self.assertEqual(echo['type'],'consoleCommandEcho')
+        self.assertEqual(echo['message'],'> browse')
+        self.assertEqual(classify_native_message('Error: actual failure',channel=channel)['severity'],'error')
+        self.assertEqual(classify_native_message('> browse',channel='Messages|13')['severity'],'unknown')
+
     def test_missing_capture_unknown(self):
         self.assertIsNone(operation_diagnostics(self.temp.name)['newErrorsClear'])
 

@@ -26,4 +26,8 @@ try {
  if($LASTEXITCODE){throw 'Private clipboard test build failed'}
  & (Join-Path $destination 'DataClipboardTests.exe')
  if($LASTEXITCODE){throw 'Private clipboard isolation regression failed'}
+ & $compiler /nologo /utf-8 /W4 /std:c++17 /EHsc /MT (Join-Path $root 'tests\diagnostic_output_test.cpp') /Fe:DiagnosticOutputTests.exe
+ if($LASTEXITCODE){throw 'Diagnostic output test build failed'}
+ & (Join-Path $destination 'DiagnosticOutputTests.exe')
+ if($LASTEXITCODE){throw 'Diagnostic output identity regression failed'}
 }finally{Pop-Location}

@@ -201,10 +201,10 @@ class Worker:
         finally:
             if not _locked:self.lock.release()
 
-    def _native(self,directory,operation,scope='mapRoot',context='',**options):
+    def _native(self,directory,operation,scope='mapRoot',context='',_progress=None,**options):
         self._check_abort()
         if not self.alive():raise RuntimeError('Start or open a document first')
-        self.operation_progress={'phase':operation,'evidenceDirectory':str(directory)}
+        self.operation_progress={**(_progress or {}),'phase':operation,'evidenceDirectory':str(directory)}
         oracle.ACTIVE_DESKTOP=self.state['desktop']
         return oracle.native_step(directory,'01-'+operation,self.state['pid'],self.state['currentDocument'],context=context,scope=scope,editor=self.state['editorPath'],**options)
 
@@ -296,6 +296,12 @@ class Worker:
         from .data import inspect_data
         if not self.lock.acquire(blocking=False):raise RuntimeError('Worker busy')
         try:return inspect_data(self,request,'links')
+        finally:self.lock.release()
+
+    def audit_data(self,request):
+        from .data_audit import audit_data
+        if not self.lock.acquire(blocking=False):raise RuntimeError('Worker busy')
+        try:return audit_data(self,request)
         finally:self.lock.release()
 
     def check_resources(self,request):

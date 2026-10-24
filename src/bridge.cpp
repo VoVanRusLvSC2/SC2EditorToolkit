@@ -263,6 +263,7 @@ static void DiagnosticsSnapshot(Block* b){
         for(HWND c:Children(root)){
             auto cls=Class(c);int id=GetDlgCtrlID(c);
             Log(b,L"diagnostics control=%d class=%s\n",id,cls.c_str());
+            if((cls==L"Edit"||cls.rfind(L"RichEdit",0)==0||cls.rfind(L"RICHEDIT",0)==0)&&id!=DiagnosticOutputId(title))continue;
             if(cls==L"SysListView32"){
                 int count=static_cast<int>(SendMessageW(c,LVM_GETITEMCOUNT,0,0));
                 Log(b,L"diagnostics readable=listview count=%d\n",count);
@@ -325,7 +326,7 @@ static void Process(Block* b) {
     if(b->operation==SaveDocument){if(!IsWindowEnabled(target)){Fail(b,12,L"A modal dialog blocks native save");return;}SaveNativeDocument(b,target);return;}
     if(b->operation==ReopenDocument){if(!IsWindowEnabled(target)){Fail(b,12,L"A modal dialog blocks native reopen");return;}ReopenNativeDocument(b,target);return;}
     if(b->operation==LoadDataModule){if(!IsWindowEnabled(target)){Fail(b,12,L"A modal dialog blocks native Data loading");return;}LoadNativeDataModule(b,target);return;}
-    if(b->operation==DataRead||b->operation==DataLinks||b->operation==DataResources||b->operation==DataInspect||b->operation==DataAsset){DataOperation(b,target);return;}
+    if(b->operation==DataRead||b->operation==DataLinks||b->operation==DataResources||b->operation==DataInspect||b->operation==DataAsset||b->operation==DataAudit||b->operation==DataAuditFiles){DataOperation(b,target);return;}
     if(b->operation==TerrainView||b->operation==TerrainExport||(b->operation==TerrainCamera||b->operation==TerrainCameraLayer||b->operation==TerrainCameraSelect)){if(!IsWindowEnabled(target)){Fail(b,12,L"A modal dialog blocks the document");return;}TerrainOperation(b,target);return;}
     if(b->operation==SceneInspect||b->operation==SceneLoad||(b->operation==SceneSeek||b->operation==SceneAdvance||b->operation==SceneAudio)){SceneOperation(b);return;}
     if(b->operation==OpenCutscene){
@@ -401,7 +402,7 @@ static void Process(Block* b) {
     b->foregroundAfter=reinterpret_cast<uint64_t>(GetForegroundWindow());
 }
 static void GuardedProcess(Block* b) {
-    bool capture=(b->operation>=DataRead&&b->operation<=DataAsset)||b->operation==LoadDocument||b->operation==SaveDocument||b->operation==ReopenDocument||b->operation==LoadDataModule||b->operation==Diagnostics||b->operation==Compile||b->operation==Generate;
+    bool capture=(b->operation>=DataRead&&b->operation<=DataAuditFiles)||b->operation==LoadDocument||b->operation==SaveDocument||b->operation==ReopenDocument||b->operation==LoadDataModule||b->operation==Diagnostics||b->operation==Compile||b->operation==Generate;
     if(capture)BeginDiagnosticCapture(b);
     __try{Process(b);}__except(EXCEPTION_EXECUTE_HANDLER){b->exceptionCode=GetExceptionCode();Fail(b,99,L"SEH exception during native bridge request; no automatic retry");}
     if(capture)EndDiagnosticCapture(b);

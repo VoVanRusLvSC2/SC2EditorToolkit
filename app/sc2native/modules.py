@@ -2,9 +2,10 @@
 MODULES=[
  {'id':'jobs','version':1,'methods':['submit','status','wait','cancel'],'perServerEditors':1,'pendingCapacity':32,'history':256,
   'executionDeadlineSeconds':{'default':1800,'videoDefault':14400,'maximum':14400},'automaticRetry':False,'restartReplay':False,'restartIncompleteStatus':'INTERRUPTED'},
- {'id':'data','version':1,'methods':['read','links','resources'],'source':'original Data editor; process-private Copy As Text, native Object Explorer and Archive Browser',
+ {'id':'data','version':2,'methods':['read','links','resources','audit'],'source':'original Data editor; process-private Copy As Text, native Object Explorer and Archive Browser',
   'catalogs':['Unit','Model','Actor','Abil','Behavior','Effect','Sound','Texture','Weapon','Validator','Upgrade','Requirement'],
   'fullFieldValues':'original Copy As Text with header/row-count confirmation; clipped cells are incomplete',
+  'audit':{'nativeCatalogs':109,'scope':'merged effective map/mod and loaded dependencies','typedCatalogTargets':True,'typedFilePaths':'original merged Archive Browser','opaqueTypes':'explicit coverage gaps','fullArtifacts':'JSONL objects/findings and JSON summary','runtimeSemanticValidation':False},
   'userClipboardAccessUsed':False,'relationships':'native Explorer associations; edge direction/transitivity not inferred',
   'resources':'main Model file presence in original merged Archive Browser and native diagnostics; binary integrity, nested assets and other catalogs remain incomplete'},
  {'id':'editor','version':4,'methods':['start','open','status','diagnostics','validate_document','save_reopen','check_map','stop'],'report':{'sourceRevision':'SHA-256','downloadable':True,'nativeCompilerSeparateFromMessages':True},'operationDiagnostics':{'source':'original Messages/Console output; operation snapshots and native append observations','unknownIsZero':False},'saveReopen':{'nativeSerialization':True,'nativeCloseBeforeReopen':True,'componentHashesByLocale':True,'textDiffsOptional':True,'sourcePreserved':True},'startupModules':['Terrain','Triggers','Data','Import','AI','UI','Text','Overview']},
@@ -17,7 +18,7 @@ MODULES=[
   'video':{'format':'mp4','codec':'h264','audioIncluded':True,'audioCodec':'aac','audioSource':'owned Editor output buffers','audioOptional':True,'defaultFps':30,'maxFps':60,'requires':['ffmpeg','ffprobe']}},
 ]
 
-def capabilities():return {'version':'0.13.0-rc.1','modules':MODULES,'background':True,'mouseKeyboardAutomation':False,
+def capabilities():return {'version':'0.14.0-rc.1','modules':MODULES,'background':True,'mouseKeyboardAutomation':False,
  'editorSelection':{'requestArgument':'editor_path','environmentVariable':'SC2_EDITOR_PATH','cliArgument':'--editor',
  'discovery':['Windows registry','Program Files environment locations','PATH'],'ambiguousInstallation':'explicit selection required',
  'supportedBuilds':['5.0.17.98310 x64'],'binarySha256Verified':True,'pathTiedToOneMachine':False},

@@ -42,7 +42,7 @@ with (work / 'stdout.log').open('wb') as stdout, (work / 'stderr.log').open('wb'
         assert duplicate.returncode!=0,'Two servers unexpectedly acquired the same work directory'
         assert json.loads((work/'runtime/api-info.json').read_text())==info,'Duplicate startup replaced server identity'
         code, health = call('/health', authorized=False)
-        assert code == 200 and health['version'] == '0.13.0-rc.1' and not health['workerRunning'], health
+        assert code == 200 and health['version'] == '0.14.0-rc.1' and not health['workerRunning'], health
         assert call('/modules', authorized=False)[0] == 403
         assert call('/terrain/export', {'size': 512}, authorized=False)[0] == 403
         code, modules = call('/modules')
@@ -54,9 +54,9 @@ with (work / 'stdout.log').open('wb') as stdout, (work / 'stderr.log').open('wb'
         assert 'list_map_cameras' in terrain['methods']
         editor = next(m for m in modules['modules'] if m['id'] == 'editor')
         assert 'save_reopen' in editor['methods'] and 'validate_document' in editor['methods']
-        for route in ('/jobs/submit','/jobs/status','/jobs/wait','/jobs/cancel','/editor/check','/data/read','/data/links','/data/resources'):
+        for route in ('/jobs/submit','/jobs/status','/jobs/wait','/jobs/cancel','/editor/check','/data/audit','/data/read','/data/links','/data/resources'):
             assert call(route,{},authorized=False)[0]==403,route
-        for route in ('/data/read','/data/links','/data/resources'):
+        for route in ('/data/audit','/data/read','/data/links','/data/resources'):
             assert call(route,{'catalog':'Wrong','object_id':'Marine'})[0]==400,route
         archive = create_archive(work / 'fixture', root / 'tools/mpqcli/mpqcli.exe')
         assert modules['editorSelection']['requestArgument']=='editor_path'

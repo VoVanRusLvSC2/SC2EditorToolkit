@@ -1,5 +1,7 @@
 # Presentation readiness — 2026-10-24
 
+Current addition: **v0.14.0-rc.1** full original effective Data traversal, typed reference checks and merged virtual file presence checks. Final Nydus and packaged negative-map acceptance, 97 Python tests and six native suites passed. Reports preserve coverage gaps, optional missing identities and unknown diagnostics explicitly. [Acceptance evidence](VALIDATION.md) and [Data audit usage](DATA_AUDIT.md).
+
 Scope: **v0.13.0-rc.1** jobs/reports/Data/resource acceptance and focused map/filter regression, with separately dated **v0.12.0-rc.1** full-resolution map/filter acceptance,
 **v0.11.0-rc.1** portable/media and **v0.10.0-rc.1** baseline evidence; original SC2 Editor
 **5.0.17.98310**, DXVK 3.1.1 and the installed test machine/dependencies.
