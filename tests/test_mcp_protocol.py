@@ -15,6 +15,9 @@ class Mcp(unittest.TestCase):
             self.assertEqual([r['id'] for r in output],[1,2,3])
             self.assertEqual(output[0]['result']['protocolVersion'],'2025-06-18')
             self.assertIn('sc2_export_galaxy',{t['name'] for t in output[1]['result']['tools']})
+            tools={t['name']:t for t in output[1]['result']['tools']}
+            self.assertTrue(tools['sc2_export_galaxy']['annotations']['destructiveHint'])
+            self.assertFalse(tools['sc2_query_audit']['annotations']['destructiveHint'])
             self.assertIn('sc2_validate_document',{t['name'] for t in output[1]['result']['tools']})
             self.assertIn('sc2_save_reopen',{t['name'] for t in output[1]['result']['tools']})
             self.assertIn('sc2_list_map_cameras',{t['name'] for t in output[1]['result']['tools']})

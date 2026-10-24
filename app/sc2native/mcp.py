@@ -101,7 +101,7 @@ def main():
                 elif method=='ping':result={}
                 elif not initialized:raise ValueError('Initialize the MCP session first')
                 elif method=='tools/list':
-                    result={'tools':[{'name':name,'description':description,'inputSchema':schema(target,PROPERTIES),'outputSchema':OUTPUT_SCHEMA,'annotations':{'readOnlyHint':target in (None,'doctor','query_audit','find_object_uses','compare_audits','search_objects','list_map_cameras','jobs.status','jobs.wait'),'destructiveHint':False,'openWorldHint':False}} for name,description,target,required in TOOLS]}
+                    result={'tools':[{'name':name,'description':description,'inputSchema':schema(target,PROPERTIES),'outputSchema':OUTPUT_SCHEMA,'annotations':{'readOnlyHint':target in (None,'doctor','query_audit','find_object_uses','compare_audits','search_objects','list_map_cameras','jobs.status','jobs.wait'),'destructiveHint':target in ('export_galaxy','capture_frame','capture_terrain','export_map_image','capture_map_region','export_video','save_reopen_document','jobs.submit','jobs.cancel'),'openWorldHint':False}} for name,description,target,required in TOOLS]}
                 elif method=='tools/call':
                     name=params.get('name');tool=next((t for t in TOOLS if t[0]==name),None)
                     if not tool:raise ValueError('Unknown tool')

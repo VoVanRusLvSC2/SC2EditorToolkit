@@ -34,7 +34,8 @@ interactive desktop and optional media tools. It does not launch an Editor.
 `tools/list` advertises a separate input schema for every tool, a common result
 envelope and read-only/destructive/open-world annotations. Unexpected arguments,
 missing requirements, invalid types, nonfinite numbers and unsupported nested job
-arguments fail before admission. No coercion of string booleans is performed.
+arguments fail before admission. No coercion of string booleans is performed. Export tools advertise their possible
+overwrite behavior; existing output files still require explicit overwrite=true.
 The HTTP POST operations enforce the same contracts. Existing legacy payload
 fields remain; additive contract metadata is available from `sc2_modules`.
 
