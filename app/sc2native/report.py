@@ -3,6 +3,7 @@ import json
 import time
 import uuid
 import xml.etree.ElementTree as ET
+from xml.parsers import expat
 from pathlib import Path
 import file_prepare as files
 from .document_validation import _archive
@@ -15,8 +16,16 @@ def read_declared_dependencies(source,work):
         if len(members)!=1 or members[0]['bytes']>2*1024**2:raise ValueError('Unique bounded DocumentInfo required')
         _,text=read_member(source,members[0],tool,work,text=True)
         if text is None or '<!DOCTYPE' in text.upper() or '<!ENTITY' in text.upper():raise ValueError('Unsupported DocumentInfo XML')
-        if not text.strip():
-            return {'complete':True,'values':[],'source':'empty saved DocumentInfo; no explicit dependency declarations; native sources are checked separately'}
+        # Original archives may store only an XML declaration (no root). Expat
+        # distinguishes that empty document from an unclosed root, which can
+        # produce the same NO_ELEMENTS error. Never treat malformed XML as empty.
+        parser=expat.ParserCreate();elements=[]
+        parser.StartElementHandler=lambda *args:elements.append(True)
+        try:parser.Parse(text,True)
+        except expat.ExpatError as error:
+            if not elements and error.code==expat.errors.codes[expat.errors.XML_ERROR_NO_ELEMENTS]:
+                return {'complete':True,'values':[],'source':'empty saved DocumentInfo; no explicit dependency declarations; native sources are checked separately'}
+            raise
         root=ET.fromstring(text)
         return {'complete':True,'values':[n.text or '' for n in root.findall('./Dependencies/Value')],
                 'source':'saved DocumentInfo declarations; original Editor performs actual dependency resolution'}

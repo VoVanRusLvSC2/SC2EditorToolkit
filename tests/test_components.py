@@ -2,10 +2,31 @@ import shutil,subprocess,sys,tempfile,unittest
 from pathlib import Path
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]/'app'))
 from sc2native.components import snapshot_components,compare_components,read_string_table
+from sc2native.report import read_declared_dependencies
 from map_archive_fixture import create_archive
 
 ROOT=Path(__file__).resolve().parents[1]
 class Components(unittest.TestCase):
+    @unittest.skipUnless((ROOT/'tools/mpqcli/mpqcli.exe').is_file(),'mpqcli required')
+    def test_dependency_header_only_is_empty_but_unclosed_root_stays_incomplete(self):
+        with tempfile.TemporaryDirectory() as directory:
+            work=Path(directory);tool=ROOT/'tools/mpqcli/mpqcli.exe';source=create_archive(work,tool)
+            cases=[(b'<?xml version="1.0" encoding="utf-8"?>\r\n',True,[]),
+                   (b'\xef\xbb\xbf<?xml version="1.0"?>\n<!-- empty -->',True,[]),
+                   (b' \r\n',True,[]),
+                   (b'<?xml version="1.0"?><DocInfo>',False,None),
+                   (b'<?xml version="1.0"?><DocInfo><Dependencies>',False,None),
+                   (b'<!-- unclosed',False,None),
+                   (b'<?xml version="1.0"?>garbage',False,None),
+                   (b'<DocInfo><Dependencies><Value>file:Mods/Shared.SC2Mod</Value></Dependencies></DocInfo>',True,['file:Mods/Shared.SC2Mod'])]
+            for text,complete,values in cases:
+                with self.subTest(text=text):
+                    payload=work/'DocumentInfo';payload.write_bytes(text)
+                    subprocess.run([str(tool),'add','-w','-p','DocumentInfo',str(source),str(payload)],check=True,capture_output=True,
+                                   creationflags=getattr(subprocess,'CREATE_NO_WINDOW',0))
+                    result=read_declared_dependencies(source,work)
+                    self.assertEqual(result['complete'],complete,result)
+                    self.assertEqual(result['values'],values,result)
     @unittest.skipUnless((ROOT/'tools/mpqcli/mpqcli.exe').is_file(),'mpqcli required')
     def test_localized_context_uses_exact_stored_member_spelling(self):
         with tempfile.TemporaryDirectory() as directory:
