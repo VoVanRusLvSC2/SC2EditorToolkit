@@ -131,12 +131,17 @@ static void CALLBACK BrowserTimer(HWND,UINT,UINT_PTR,DWORD){
         auto treeButton=Control(browser,L"Button",19);if(!treeButton)throw std::runtime_error("Original archive tree view unavailable");
         SendMessageW(GetParent(treeButton),WM_COMMAND,MAKEWPARAM(19,BN_CLICKED),reinterpret_cast<LPARAM>(treeButton));
         auto tree=Control(browser,L"SysTreeView32",17);if(!tree||!IsWindowVisible(tree))throw std::runtime_error("Original archive file tree unavailable");
+        // Hidden tree expansion otherwise animates every directory (about
+        // 250 ms each, especially on a locked/screensaver desktop). Suppress
+        // redraw only on this owned control; restore it on every exit path.
+        Log(task->b,L"Resource tree original scroll time=%u ms\n",UINT(SendMessageW(tree,TVM_GETSCROLLTIME,0,0)));
+        OwnedTreeTraversalScope redraw(tree);
         std::map<HTREEITEM,std::map<std::wstring,HTREEITEM>> children;size_t nodes=0;
         auto enumerate=[&](HTREEITEM parent)->const std::map<std::wstring,HTREEITEM>&{
             auto existing=children.find(parent);if(existing!=children.end())return existing->second;
-            if(parent)SendMessageW(tree,TVM_EXPAND,TVE_EXPAND,reinterpret_cast<LPARAM>(parent));
             std::map<std::wstring,HTREEITEM> list;
             auto node=reinterpret_cast<HTREEITEM>(SendMessageW(tree,TVM_GETNEXTITEM,parent?TVGN_CHILD:TVGN_ROOT,reinterpret_cast<LPARAM>(parent)));
+            if(parent&&!node){SendMessageW(tree,TVM_EXPAND,TVE_EXPAND,reinterpret_cast<LPARAM>(parent));node=reinterpret_cast<HTREEITEM>(SendMessageW(tree,TVM_GETNEXTITEM,TVGN_CHILD,reinterpret_cast<LPARAM>(parent)));}
             while(node){
                 if(++nodes>1000000||GetTickCount64()-task->start>300000)throw std::runtime_error("Original virtual file traversal bound exceeded");
                 auto name=DataTreeText(tree,node);if(name.empty()||name.size()>=4095||name.find_first_of(L"\\/")!=name.npos)throw std::runtime_error("Unsupported original virtual file tree node");

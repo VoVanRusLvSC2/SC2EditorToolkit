@@ -4,6 +4,7 @@ from .modules import capabilities
 from .runtime import watch_frozen_parent
 from .session import Worker
 from .jobs import JobQueue,OPERATIONS
+from .contracts import schema,validate_call,decorate,error_info,OUTPUT_SCHEMA
 
 PROPERTIES={'editor_path':{'type':'string','description':'Owned startup: original x64 Editor EXE or installation directory. Defaults to SC2_EDITOR_PATH, registry and standard install discovery. Supported binary required; restart to change installation.'},'template':{'type':'string'},'map':{'type':'string'},'startup_module':{'type':'string','enum':['triggers','terrain','default'],'default':'triggers'},'triggers_xml':{'type':'string'},'triggers_file':{'type':'string'},
  'render_backend':{'type':'string','enum':['auto','legacy','vulkan'],'description':'Owned worker startup only: auto uses bundled pinned DXVK/Vulkan when present, otherwise system D3D9. Restart the owned worker to change backend.'},
@@ -23,7 +24,21 @@ PROPERTIES={'editor_path':{'type':'string','description':'Owned startup: origina
  'timeout_seconds':{'type':'number','minimum':1,'maximum':14400},'wait_ms':{'type':'integer','minimum':0,'maximum':30000},
  'save_reopen':{'type':'boolean','default':False},'catalog':{'type':'string'},'object_id':{'type':'string'},
  'field_offset':{'type':'integer','minimum':0,'maximum':100000},'field_limit':{'type':'integer','minimum':1,'maximum':500},'include_xml':{'type':'boolean','default':False}}
+PROPERTIES.update({
+ 'report_id':{'type':'string','minLength':32,'maxLength':32},
+ 'before_report_id':{'type':'string','minLength':32,'maxLength':32},'after_report_id':{'type':'string','minLength':32,'maxLength':32},
+ 'section':{'type':'string','enum':['objects','findings'],'default':'findings'},
+ 'kind':{'type':'string','minLength':1},'finding_status':{'type':'string','enum':['present','missing','unknown']},
+ 'target_catalog':{'type':'string','minLength':1},'target_id':{'type':'string','minLength':1},
+ 'trigger_strings':{'type':'string','minLength':1},'game_strings':{'type':'string','minLength':1},
+ 'marker':{'type':'string'},'expect_text':{'type':'array','maxItems':100,'items':{'type':'string'}}})
+for _name in ('editor_path','template','map','scope','context_label','locale','output','scene','camera','map_camera_id','job_id','catalog','object_id','baseline_template','triggers_file','triggers_xml'):
+    PROPERTIES[_name]['minLength']=1
 TOOLS=[
+ ('sc2_doctor','Read-only installation preflight: supported Editor binary, packaged helpers, renderer, work storage, desktop and optional media helpers. Does not launch Editor or claim a GPU device was tested.','doctor',[]),
+ ('sc2_query_audit','Read a bounded page of immutable audit objects or findings by report_id (reportArtifact.id). Exact catalog/object and finding filters; no Editor launch.','query_audit',['report_id']),
+ ('sc2_find_object_uses','Find incoming original typed catalog references to target_catalog/target_id in a completed audit. Return source object and exact native field path. Excludes opaque actor strings, computed references and trigger uses. No Editor launch.','find_object_uses',['report_id','target_catalog','target_id']),
+ ('sc2_compare_audits','Compare two immutable audit report IDs. Paginate added/removed findings or added/removed/modified typed object observations. Reports project revisions and adapter comparability; not a complete scalar Data value diff. No Editor launch.','compare_audits',['before_report_id','after_report_id']),
  ('sc2_submit_job','Queue one operation on the owned hidden Editor. Returns immediately; use job status/wait. FIFO, bounded queue, deadline, no automatic replay.','jobs.submit',['operation']),
  ('sc2_job_status','Read queued/running/finished job state and native phase without controlling the desktop.','jobs.status',['job_id']),
  ('sc2_job_wait','Wait up to 30 seconds for a job; may return RUNNING.','jobs.wait',['job_id']),
@@ -81,19 +96,20 @@ def main():
                 if method=='initialize':
                     version=params.get('protocolVersion','2025-06-18')
                     if version not in ('2024-11-05','2025-03-26','2025-06-18'):version='2025-06-18'
-                    result={'protocolVersion':version,'serverInfo':{'name':'sc2-native-toolkit','version':'0.14.0-rc.1'},'capabilities':{'tools':{'listChanged':False}},
-                        'instructions':'Use an installed SC2 Editor. Load a cutscene using scene and a map/mod template, select a unique camera and time_ms, then capture its renderer. Time is sampled on the native 33 ms frame grid. Every editor window remains on a private desktop.'};initialized=True
+                    result={'protocolVersion':version,'serverInfo':{'name':'sc2-native-toolkit','version':'1.0.0'},'capabilities':{'tools':{'listChanged':False}},
+                        'instructions':'Run sc2_doctor first. Use sc2_submit_job for long native operations, then status/wait/cancel. Job SUCCEEDED means execution completed, not validation passed: inspect result.outcome and native validation/compiler fields. Use audit reportArtifact.id for query, incoming uses and comparison. Unknown coverage is incomplete. Each server owns one hidden Editor; multiple servers require distinct work directories. No physical input or visible Editor attachment.'};initialized=True
                 elif method=='ping':result={}
                 elif not initialized:raise ValueError('Initialize the MCP session first')
                 elif method=='tools/list':
-                    result={'tools':[{'name':name,'description':description,'inputSchema':{'type':'object','properties':PROPERTIES,'required':required,'additionalProperties':False}} for name,description,target,required in TOOLS]}
+                    result={'tools':[{'name':name,'description':description,'inputSchema':schema(target,PROPERTIES),'outputSchema':OUTPUT_SCHEMA,'annotations':{'readOnlyHint':target in (None,'doctor','query_audit','find_object_uses','compare_audits','search_objects','list_map_cameras','jobs.status','jobs.wait'),'destructiveHint':False,'openWorldHint':False}} for name,description,target,required in TOOLS]}
                 elif method=='tools/call':
                     name=params.get('name');tool=next((t for t in TOOLS if t[0]==name),None)
                     if not tool:raise ValueError('Unknown tool')
                     try:
                         arguments=params.get('arguments',{})
+                        validate_call(tool[2],arguments,PROPERTIES)
                         data=capabilities() if tool[2] is None else getattr(jobs,tool[2].split('.',1)[1])(arguments) if tool[2].startswith('jobs.') else jobs.run(tool[2],arguments)
-                        compact={k:v for k,v in data.items() if k!='galaxy'}
+                        compact=decorate({k:v for k,v in data.items() if k!='galaxy'})
                         content=[{'type':'text','text':json.dumps(compact,ensure_ascii=False)}]
                         if name in ('sc2_capture_frame','sc2_capture_terrain') and data.get('artifact'):
                             content.append({'type':'image','mimeType':'image/png','data':base64.b64encode(Path(data['artifact']['path']).read_bytes()).decode('ascii')})
@@ -101,8 +117,10 @@ def main():
                             content.append({'type':'image','mimeType':'image/png','data':base64.b64encode(Path(data['preview']['path']).read_bytes()).decode('ascii')})
                         if name=='sc2_check_resources' and data.get('previewFrame',{}).get('artifact'):
                             content.append({'type':'image','mimeType':'image/png','data':base64.b64encode(Path(data['previewFrame']['artifact']['path']).read_bytes()).decode('ascii')})
-                        result={'content':content,'structuredContent':compact,'isError':data.get('status')=='FAILED'}
-                    except Exception as e:result={'content':[{'type':'text','text':str(e)}],'isError':True}
+                        result={'content':content,'structuredContent':compact,'isError':compact['outcome'] in ('failed','cancelled')}
+                    except Exception as e:
+                        failure=decorate({'status':'FAILED','error':str(e),'errorInfo':error_info(e)})
+                        result={'content':[{'type':'text','text':json.dumps(failure,ensure_ascii=False)}],'structuredContent':failure,'isError':True}
                 else:
                     sys.stdout.write(json.dumps({'jsonrpc':'2.0','id':ident,'error':{'code':-32601,'message':'Method not found'}})+'\n');sys.stdout.flush();continue
                 response={'jsonrpc':'2.0','id':ident,'result':result}

@@ -55,7 +55,10 @@ class Jobs(unittest.TestCase):
         self.assertEqual(self.done(a)['status'],'TIMED_OUT');self.assertEqual(self.done(b)['status'],'SUCCEEDED')
         self.assertEqual(self.worker.calls,[1,2]);self.assertEqual(self.worker.resets,1)
     def test_synchronous_error_type_is_preserved(self):
-        with self.assertRaises(FileExistsError):self.queue.run('search_objects',{})
+        with self.assertRaises(FileExistsError) as caught:self.queue.run('search_objects',{})
+        from sc2native.contracts import error_info
+        failure=error_info(caught.exception)
+        self.assertEqual(failure['code'],'OUTPUT_EXISTS');self.assertEqual(len(failure['jobId']),32)
         self.assertFalse(self.queue.busy())
     def test_invalid_requests_never_execute(self):
         for body in ({'operation':'close'},{'operation':'diagnostics','arguments':[]},{'operation':'diagnostics','timeout_seconds':True},

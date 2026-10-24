@@ -4,7 +4,7 @@ import tempfile
 import unittest
 from pathlib import Path
 from unittest.mock import patch
-from sc2native.data_audit import check_page,resource_key,audit_data,audit_options
+from sc2native.data_audit import check_page,resource_key,audit_data,audit_options,resource_batches
 from sc2native.artifacts import ArtifactStore
 
 
@@ -42,6 +42,13 @@ class DataAuditCoverageTests(unittest.TestCase):
         for path in ['Assets/##id##.m3','StandardFont','Assets/../bad.m3','C:/bad.m3','/bad.m3','Assets//bad.m3','bad\n.m3']:
             with self.subTest(path=path):
                 key,reason=resource_key(path);self.assertIsNone(key);self.assertTrue(reason)
+    def test_resource_batches_cover_sorted_paths_once_and_bound_each_call(self):
+        resources={str(i):{'path':f'Assets/{i:05}.m3'} for i in range(1300)}
+        batches=list(resource_batches(resources))
+        self.assertEqual([len(b) for b in batches],[512,512,276])
+        self.assertEqual(len({v['path'] for b in batches for v in b}),1300)
+        long={str(i):{'path':'Assets/'+str(i)+'x'*10000+'.m3'} for i in range(200)}
+        self.assertTrue(all(sum(len(v['path'].encode())+1 for v in b)<=1024**2 for b in resource_batches(long)))
 
     def test_invalid_or_ambiguous_requests_fail_before_editor_start(self):
         for request in [{'map':''},{'map':True},{'limit':True},{'limit':501},{'output':'ignored.json'},
@@ -73,6 +80,7 @@ class AuditWorkerFixture:
                                      {'field':'Token','type':'CModelPath','path':'Assets/##id##.m3'}])]
             value=dict(schemaVersion=1,traversalComplete=True,variant=0,catalogIndex=index,catalog=f'Catalog{index}',
                        dataSources=['All Data','Core.SC2Mod','Map.SC2Map'],totalEntries=len(obj),offset=0,nextOffset=None,objects=obj)
+            if obj and getattr(self,'many_resources',False):obj[0]['resources']=[{'field':f'Path[{i}]','type':'CModelPath','path':f'Assets/{i:05}.m3'} for i in range(1300)]
         else:
             paths=Path(args['map_path']).read_text().splitlines()
             value={'complete':True,'source':'original merged Archive Browser',
@@ -109,6 +117,14 @@ class DataAuditAggregationTests(unittest.TestCase):
             with patch('sc2native.data_audit.operation_diagnostics',return_value=self.diagnostics()):
                 with self.assertRaisesRegex(RuntimeError,'omitted paths'):audit_data(worker,{})
             self.assertEqual(worker.artifacts.items,{})
+    def test_large_resource_set_is_completed_across_multiple_native_calls(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            worker=AuditWorkerFixture(Path(temporary));worker.many_resources=True
+            with patch('sc2native.data_audit.operation_diagnostics',return_value=self.diagnostics()):report=audit_data(worker,{})
+            calls=[args for op,args in worker.calls if op=='data-audit-files']
+            self.assertEqual(len(calls),3)
+            self.assertEqual([a['_progress']['resourcePathsChecked'] for a in calls],[0,512,1024])
+            self.assertEqual(report['counts']['uniqueResources'],1300);self.assertEqual(report['counts']['resources_present'],1300)
 
 
 if __name__=='__main__':unittest.main()

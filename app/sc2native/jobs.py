@@ -10,7 +10,8 @@ from pathlib import Path
 OPERATIONS = ('start','open_document','execute','compile_current','export_galaxy','diagnostics',
               'validate_document','save_reopen_document','cutscene_open','cutscene_seek','capture_frame',
               'capture_terrain','export_map_image','capture_map_region','list_map_cameras','search_objects',
-              'export_video','check_document','read_data','data_links','check_resources','audit_data')
+              'export_video','check_document','read_data','data_links','check_resources','audit_data',
+              'query_audit','find_object_uses','compare_audits','doctor')
 TERMINAL = {'SUCCEEDED','FAILED','CANCELLED','TIMED_OUT','INTERRUPTED'}
 
 
@@ -96,7 +97,9 @@ class JobQueue:
         if job['status'] in ('SUCCEEDED','FAILED') and 'result' in job:
             if job.get('exceptionType'):
                 kind={'FileExistsError':FileExistsError,'FileNotFoundError':FileNotFoundError,'ValueError':ValueError,'KeyError':KeyError}.get(job['exceptionType'],RuntimeError)
-                raise kind(job['result'].get('error','Queued operation failed'))
+                failure=kind(job['result'].get('error','Queued operation failed'))
+                failure.error_info=copy.deepcopy(job['result'].get('errorInfo',{}));failure.job_id=job['jobId']
+                raise failure
             return {**job['result'],'jobId':job['jobId']}
         raise RuntimeError(job.get('error') or 'Job '+job['status'])
 
@@ -113,10 +116,11 @@ class JobQueue:
                     job.update(status='FAILED',finishedAt=time.time(),error='Job history could not be written: '+str(failure),progress={'phase':'persistence-failed'})
                     self.active=None;self.condition.notify_all();continue
             try:
-                result=getattr(self.worker,job['operation'])(copy.deepcopy(job['arguments']))
+                from .contracts import decorate,error_info
+                result=decorate(getattr(self.worker,job['operation'])(copy.deepcopy(job['arguments'])))
                 state='FAILED' if result.get('status')=='FAILED' else 'SUCCEEDED';error=None
             except Exception as failure:
-                result={'status':'FAILED','error':str(failure)};state='FAILED';error=str(failure);job['exceptionType']=type(failure).__name__
+                result=decorate({'status':'FAILED','error':str(failure),'errorInfo':error_info(failure)});state='FAILED';error=str(failure);job['exceptionType']=type(failure).__name__
             with self.condition:
                 stopped=job.get('stopRequested')
                 if stopped:

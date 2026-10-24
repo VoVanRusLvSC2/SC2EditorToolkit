@@ -1,4 +1,5 @@
 """Opt-in native full-scene/range/cancel MP4 validation, always on a hidden copy."""
+import os
 import argparse,concurrent.futures,hashlib,json,subprocess,sys,time,urllib.request,urllib.error
 from pathlib import Path
 
@@ -7,7 +8,7 @@ def main():
     p.add_argument('--camera',required=True);p.add_argument('--work',required=True);p.add_argument('--package',action='store_true');p.add_argument('--smoke',action='store_true');a=p.parse_args()
     root=Path(__file__).resolve().parents[1];work=Path(a.work).resolve();work.mkdir(parents=True,exist_ok=False)
     sources=[Path(a.template).resolve(),Path(a.scene).resolve()];hashes=[hashlib.sha256(f.read_bytes()).hexdigest() for f in sources]
-    cmd=[str(root/'dist'/'SC2NativeAPI.exe')] if a.package else [sys.executable,str(root/'app'/'hidden_api.py')]
+    cmd=[str(root/os.environ.get('SC2_PACKAGE_DIR','dist')/'SC2NativeAPI.exe')] if a.package else [sys.executable,str(root/'app'/'hidden_api.py')]
     proc=subprocess.Popen(cmd+['serve','--work',str(work/'runtime'),'--port','0'],creationflags=subprocess.CREATE_NO_WINDOW,
         stdout=(work/'stdout.log').open('wb'),stderr=(work/'stderr.log').open('wb'))
     info=None

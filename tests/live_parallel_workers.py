@@ -256,6 +256,7 @@ def main():
                 'output':str(work/'NativeAudioClip.mp4')})
             assert clip['status']=='CUTSCENE_MP4_EXPORTED' and clip['video']['fullDecodePassed'] and clip['audio']['fullDecodePassed']
             assert clip['audioIncluded']
+            assert clip['audio']['capture']['rendererWarmup']['nativeCaptureConfirmed']
             if args.require_audio: assert not clip['audio']['silent'], 'Expected native cue was silent'
             first.download(clip['artifact'])
         for server in servers:

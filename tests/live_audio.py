@@ -1,4 +1,5 @@
 """Opt-in original Nydus scene plus a private Nydus copy with a native sound cue."""
+import os
 import argparse,concurrent.futures,hashlib,json,subprocess,sys,time,urllib.request,urllib.error,uuid,array
 from pathlib import Path
 
@@ -11,7 +12,7 @@ def main():
  cue=work/'NydusAudioVerification.SC2Cutscene';text=sources[1].read_text(encoding='utf8')
  node=f'<CCutsceneNodeSound guid="{uuid.uuid4().int>>64}" name="Native audio test" soundLink="Marine_Ready" soundIndex="0" mode="2" useRandomIndex="0" nonSeeking="0"><CCutsceneElementObject guid="{uuid.uuid4().int>>64}" start="500" duration="3000"/></CCutsceneNodeSound>'
  cue.write_text(text.replace('</CutsceneState>',node+'</CutsceneState>'),encoding='utf8')
- command=[str(root/'dist'/'SC2NativeAPI.exe')] if a.package else [sys.executable,str(root/'app'/'hidden_api.py')]
+ command=[str(root/os.environ.get('SC2_PACKAGE_DIR','dist')/'SC2NativeAPI.exe')] if a.package else [sys.executable,str(root/'app'/'hidden_api.py')]
  proc=subprocess.Popen(command+['serve','--work',str(work/'runtime'),'--port','0'],creationflags=subprocess.CREATE_NO_WINDOW,
      stdout=(work/'stdout.log').open('wb'),stderr=(work/'stderr.log').open('wb'));info=None
  def call(route,body=None):

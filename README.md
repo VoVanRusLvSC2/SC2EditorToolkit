@@ -5,20 +5,21 @@ native generator, compiler and renderer through a DLL, HTTP API and MCP.
 Previously published as SC2 Native Toolkit. Original code author and project
 owner: **VoVanRusLvSC2**.
 
-**v0.14.0-rc.1 adds a full traversal of the original Editor’s effective Data catalogs, with typed reference and virtual resource checks.**
+**v1.0.0 provides a versioned MCP/HTTP contract for the original Editor, indexed Data audits, incoming object references, audit comparison and installation preflight.**
 Read inherited/overridden values, search native Object Explorer associations,
 and check the selected Model's main file through the original Archive Browser
 and native diagnostics. Jobs support status, cancellation, deadlines and recovery.
-See [jobs and reports](docs/JOBS_AND_REPORTS.md),
+See [the 1.0 MCP contract](docs/MCP_CONTRACT.md), [indexed audit queries](docs/DATA_AUDIT.md),
+and [jobs and reports](docs/JOBS_AND_REPORTS.md),
 [Data and resources](docs/DATA_AND_RESOURCES.md), and
 [map export and object filters](docs/MAP_EXPORT.md).
-[Download v0.14.0-rc.1](https://github.com/VoVanRusLvSC2/SC2EditorToolkit/releases/tag/v0.14.0-rc.1).
+[Download v1.0.0](https://github.com/VoVanRusLvSC2/SC2EditorToolkit/releases/tag/v1.0.0).
 
 Editor installation discovery and explicit selection remain portable.
 There is no fixed drive or user-specific Editor path. Use automatic discovery,
 `SC2_EDITOR_PATH`, CLI `--editor`, or the startup API/MCP `editor_path` argument.
 The supported original binary is verified before launch; changing a live worker's
-installation requires restarting its server. Native protocol 14 requires the
+installation requires restarting its server. Native protocol 15 requires the
 matching complete package. See [presentation readiness](docs/PRESENTATION_READINESS.md).
 
 Vulkan offscreen rendering for an owned second Editor is included.
@@ -32,16 +33,30 @@ controlled. See [parallel instances](docs/PARALLEL_INSTANCES.md),
 
 The original full-map export supports terrain and native visibility filters for
 placed unit/doodad models. Coordinate-region cropping retains its separate
-experimental calibration status. A water-specific fixture and broader
-map/dependency coverage remain untested. Saved map cameras can drive original Terrain PNG captures.
+experimental calibration status. A water-containing campaign map has also
+passed native export and visual review; broader map/water variants retain their own validation scope. Saved map cameras can drive original Terrain PNG captures.
 Arbitrary Terrain camera overrides and Galaxy-trigger playback are not implemented.
 Operation-scoped load/Data diagnostics and native save/reopen component comparison
 are available. See
-[validation history](docs/VALIDATION.md). The previous stable release is v0.6.0.
+[validation history](docs/VALIDATION.md). The stable API/MCP contract is version 1; see [the contract and setup guide](docs/MCP_CONTRACT.md) and [1.0 acceptance](docs/V1_ACCEPTANCE.md).
 
 The installed Editor runs on an owned, private Windows desktop. Its technical
 render window stays invisible. Operations do not inject mouse/keyboard input or
 call `SwitchDesktop`; you can keep using your computer.
+
+## MCP 1.0 workflow
+
+Run `sc2_doctor` first. Submit long native work with `sc2_submit_job`, then use
+status/wait/cancel. A completed audit returns `reportId`: read bounded observations
+with `sc2_query_audit`, find incoming typed references with `sc2_find_object_uses`,
+and compare two revisions with `sc2_compare_audits`. These three operations read
+immutable local evidence without starting an Editor. HTTP equivalents are
+`POST /doctor`, `/data/audit/query`, `/data/audit/uses`, `/data/audit/compare`.
+
+Each tool has its own validated schema. Responses include `outcome`; failures
+include a stable error code and next step. Job SUCCEEDED means execution finished,
+so check validation/compilation and coverage fields separately. See the
+[contract](docs/MCP_CONTRACT.md) for installation, compatibility and limitations.
 
 ## License and attribution
 
@@ -284,8 +299,8 @@ The diagnostic recovery implementation uses original Save As on a fresh private
 archive before generating a dirty document. It refuses native serialization
 that discards submitted typed GUI identities and retains the comparison report.
 Generation's saved-document guard remains enabled. This does not certify full
-GUI semantic equivalence or repair the submitted XML. **Live acceptance of this
-new recovery sequence is pending** because of the current Win32 126 failure.
+GUI semantic equivalence or repair the submitted XML. **Acceptance of this
+recovery sequence is recorded in the dated validation history**. A historical Win32 126 startup failure is not a current blanket blocker; fresh installation failures must be diagnosed with `sc2_doctor` and native evidence.
 
 ## Saved map cameras
 

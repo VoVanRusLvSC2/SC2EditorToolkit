@@ -1,3 +1,11 @@
+# Current bridge contract — 1.0.0
+
+The stable integration has 31 MCP tools, API contract 1 and native protocol 15.
+It adds precise tool schemas/errors, installation preflight, indexed native Data
+audit queries, incoming typed object uses, audit comparison and project dependency
+revision manifests. [Setup and contract](MCP_CONTRACT.md), [final acceptance](V1_ACCEPTANCE.md).
+The following sections retain dated implementation history.
+
 v0.14.0-rc.1 adds a full traversal of all original effective catalogs and typed catalog/file checks. Coverage gaps and optional missing identities remain explicit. See [Data audit](DATA_AUDIT.md). The current complete native package uses protocol 15; restart owned workers after upgrading.
 
 # ModKit / original Editor bridge status

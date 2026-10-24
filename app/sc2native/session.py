@@ -38,6 +38,18 @@ class Worker:
             raise OSError(ctypes.get_last_error(),'Cannot create owned-worker lifetime job')
         atexit.register(self.close)
     def alive(self):return bool(self.state and process_time(self.state['pid'])==self.state['createTimeFiletime'])
+    def doctor(self,request):
+        from .doctor import doctor
+        return doctor(self,request)
+    def query_audit(self,request):
+        from .audit_store import query_audit
+        return query_audit(self,request)
+    def find_object_uses(self,request):
+        from .audit_store import query_audit
+        return query_audit(self,request,uses=True)
+    def compare_audits(self,request):
+        from .audit_store import compare_audits
+        return compare_audits(self,request)
     def begin_operation(self,identifier):
         self.operation_id=identifier;self.operation_abort.clear();self.video_cancel.clear();self.operation_progress={'phase':'starting'}
     def _check_abort(self):

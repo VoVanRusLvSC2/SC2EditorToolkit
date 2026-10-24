@@ -1,5 +1,6 @@
 #include "editor_identity.h"
 #include "protocol.h"
+#include "owned_tree_traversal.h"
 #include "document_window.h"
 #include "owned_thread_hooks.h"
 #include <commctrl.h>

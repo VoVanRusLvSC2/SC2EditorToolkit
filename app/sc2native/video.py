@@ -85,7 +85,17 @@ def export_video(worker,request):
         audio_evidence=None;wave=None
         if request.get('include_audio',True):
             from .audio import capture_audio
+            # Prime original models/shaders and the selected camera before the
+            # real-time audio pass. Cold rendering must not consume its clock.
+            update(stage='warmingRenderer')
+            warm_stamp=plan['sampleTimesMs'][0]
+            selected=worker.cutscene_seek({'camera':plan['camera'],'time_ms':warm_stamp},_locked=True)
+            if selected.get('status')=='FAILED':raise RuntimeError('Native audio warmup camera/time was not confirmed')
+            warmed=worker.capture_frame({'allow_empty':True},_locked=True,_directory=directory/'audio-warmup',_register=False)
+            if warmed.get('status')=='FAILED':raise RuntimeError('Original renderer warmup was not confirmed')
+            cancelled()
             update(stage='recordingAudio');wave,audio_evidence=capture_audio(worker,directory,plan);cancelled()
+            audio_evidence['rendererWarmup']={'camera':plan['camera'],'timeMs':warm_stamp,'nativeCaptureConfirmed':True}
         samples=plan['sampleTimesMs'];previous_time=None;previous_bytes=None;preview_index=None;detailed=0;black=0;duplicates=0;dimensions=None
         temporary=directory/'encoded.mp4';update(stage='rendering')
         with (directory/'encoder.log').open('wb') as error_log,(directory/'frames.jsonl').open('w',encoding='utf8') as manifest:

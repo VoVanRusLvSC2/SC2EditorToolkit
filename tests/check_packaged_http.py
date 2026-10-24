@@ -42,7 +42,7 @@ with (work / 'stdout.log').open('wb') as stdout, (work / 'stderr.log').open('wb'
         assert duplicate.returncode!=0,'Two servers unexpectedly acquired the same work directory'
         assert json.loads((work/'runtime/api-info.json').read_text())==info,'Duplicate startup replaced server identity'
         code, health = call('/health', authorized=False)
-        assert code == 200 and health['version'] == '0.14.0-rc.1' and not health['workerRunning'], health
+        assert code == 200 and health['version'] == '1.0.0' and not health['workerRunning'], health
         assert call('/modules', authorized=False)[0] == 403
         assert call('/terrain/export', {'size': 512}, authorized=False)[0] == 403
         code, modules = call('/modules')

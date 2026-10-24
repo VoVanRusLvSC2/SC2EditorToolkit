@@ -10,6 +10,8 @@ from pathlib import Path
 import file_prepare as files
 from .document_validation import _archive
 from .diagnostics import operation_diagnostics
+from .audit_store import build_index
+from .revisions import snapshot as dependency_snapshot, bind_sources
 
 
 def check_page(value, catalog_index, offset, previous=None):
@@ -63,10 +65,26 @@ def audit_options(request):
     return limit
 
 
+def resource_batches(resources):
+    """Bound each original browser request independently of project size/load."""
+    batch=[];size=0
+    for item in sorted(resources.values(),key=lambda value:value['path'].casefold()):
+        following=len(item['path'].encode('utf8'))+1
+        if batch and (len(batch)>=512 or size+following>1024**2):
+            yield batch;batch=[];size=0
+        batch.append(item);size+=following
+    if batch:yield batch
+
+
 def audit_data(worker,request):
     limit=audit_options(request);load_diagnostics=None;fresh_session=not worker.alive()
     supplied=request.get('map') or request.get('template')
     source=_archive(supplied or (worker.state or {}).get('documentPath',''));source_hash=files.sha(source)
+    editor=(worker.state or {}).get('editorInfo',{}).get('path')
+    if editor is None and hasattr(worker,'editor_preference'):
+        from editor_installation import resolve_editor
+        editor=str(resolve_editor(request.get('editor_path') or worker.editor_preference))
+    revision_before=dependency_snapshot(source,editor,worker.work,worker._check_abort)
     if supplied:
         if worker.alive():
             opened=worker.open_document({**request,'map':str(source)},_locked=True)
@@ -137,27 +155,32 @@ def audit_data(worker,request):
             catalogs.append({'catalog':value['catalog'],'index':catalog_index,'objects':entry_count,'complete':True})
         # Paths come from original typed getters; the original merged Archive
         # Browser performs file existence checks, including dependency/imports.
-        request_file=directory/'resource-paths.txt'
-        request_file.write_text(''.join(v['path']+'\n' for v in resources.values()),encoding='utf8',newline='\n')
-        if request_file.stat().st_size>16*1024**2:raise RuntimeError('Native resource request exceeds its complete input bound')
-        folder=directory/'resources';folder.mkdir()
-        worker.operation_progress={'phase':'data-resource-index','uniquePaths':len(resources)}
-        native=worker._native(folder,'data-audit-files',map_path=request_file);native_calls+=1
-        phase_diagnostics.append({'phase':'merged-resources',**operation_diagnostics(folder/'01-data-audit-files',native)})
-        result=json.loads((folder/'01-data-audit-files'/'Native.data.json').read_text(encoding='utf8'))
-        if result.get('complete') is not True or result.get('source')!='original merged Archive Browser':
-            raise RuntimeError('Original virtual resource index was not confirmed complete')
         checked=set()
-        for item in result.get('resources',[]):
-            key,reason=resource_key(item.get('path'))
-            if reason or key not in resources or key in checked or item.get('status') not in ('present','missing'):
-                raise RuntimeError('Original resource check identity/coverage mismatch')
-            checked.add(key);counts['resources_'+item['status']]+=1
-            if item['status']=='missing':finding(findings,{'kind':'missing-resource',**resources[key],'status':'missing'})
+        for number,batch in enumerate(resource_batches(resources)):
+            worker._check_abort();folder=directory/f'resources-{number:04d}';folder.mkdir()
+            request_file=folder/'paths.txt';request_file.write_text(''.join(v['path']+'\n' for v in batch),encoding='utf8',newline='\n')
+            expected={resource_key(v['path'])[0] for v in batch}
+            progress={'resourcePathsChecked':len(checked),'uniquePaths':len(resources),'resourceBatch':number,'resourceBatchSize':len(batch)}
+            native=worker._native(folder,'data-audit-files',map_path=request_file,_progress=progress);native_calls+=1
+            phase_diagnostics.append({'phase':f'merged-resources-{number}',**operation_diagnostics(folder/'01-data-audit-files',native)})
+            result=json.loads((folder/'01-data-audit-files'/'Native.data.json').read_text(encoding='utf8'))
+            if result.get('complete') is not True or result.get('source')!='original merged Archive Browser':
+                raise RuntimeError('Original virtual resource index was not confirmed complete')
+            observed=set()
+            for item in result.get('resources',[]):
+                key,reason=resource_key(item.get('path'))
+                if reason or key not in expected or key in checked or item.get('status') not in ('present','missing'):
+                    raise RuntimeError('Original resource check identity/coverage mismatch')
+                checked.add(key);observed.add(key);counts['resources_'+item['status']]+=1
+                if item['status']=='missing':finding(findings,{'kind':'missing-resource',**resources[key],'status':'missing'})
+            if observed!=expected:raise RuntimeError('Original resource check omitted paths in its batch')
         if checked!=resources.keys():raise RuntimeError('Original resource check omitted paths')
         counts['uniqueResources']=len(resources)
     worker._check_abort()
     if files.sha(source)!=source_hash or files.sha(document)!=document_hash:raise RuntimeError('Source/private document changed during Data audit')
+    revision_after=dependency_snapshot(source,editor,worker.work,worker._check_abort)
+    if revision_after['revision']!=revision_before['revision']:raise RuntimeError('Project dependencies changed during Data audit; discard this result and audit again')
+    dependency_manifest=bind_sources(revision_after,sources,document.name)
     folder=directory/'diagnostics';folder.mkdir();native=worker._native(folder,'diagnostics');native_calls+=1
     diagnostics=operation_diagnostics(folder/'01-diagnostics',native)
     phase_diagnostics.append({'phase':'final-diagnostics',**diagnostics})
@@ -169,6 +192,7 @@ def audit_data(worker,request):
     samples=[entry for group in priority for entry in sample_groups.get(group,[])][:limit]
     report={'status':'NATIVE_DATA_AUDIT_COMPLETED' if coverage else 'NATIVE_DATA_AUDIT_COMPLETED_WITH_COVERAGE_GAPS',
             'schemaVersion':1,'mapRevision':source_hash,'sourceUnchanged':True,'privateDocumentUnchanged':True,
+            'projectRevision':dependency_manifest['revision'],'dependencyManifest':dependency_manifest,
             'scope':'All effective catalog entries in the opened map/mod and loaded dependencies; overridden historical definitions are not separate effective objects',
             'variant':0,'catalogTraversalComplete':True,'catalogs':catalogs,'dataSources':sources,'counts':dict(counts),
             'referenceAndFileValidationComplete':coverage,'nativeCalls':native_calls,'diagnostics':diagnostics,'diagnosticPhases':phase_diagnostics,
@@ -184,5 +208,8 @@ def audit_data(worker,request):
     if report['status']=='FAILED':report['validationPassed']=False
     report['objectsArtifact']=worker.artifacts.publish_file(records_path,suffix='.jsonl',mime='application/x-ndjson')
     report['findingsArtifact']=worker.artifacts.publish_file(findings_path,suffix='.jsonl',mime='application/x-ndjson')
+    index=build_index(directory,records_path,findings_path,worker._check_abort)
+    report['indexArtifact']=worker.artifacts.publish_file(index,suffix='.sqlite3',mime='application/vnd.sqlite3')
     report['reportArtifact']=worker.artifacts.export(json.dumps(report,ensure_ascii=False,indent=2).encode('utf8'),suffix='.json',mime='application/json')
+    report['reportId']=report['reportArtifact']['id']
     return report

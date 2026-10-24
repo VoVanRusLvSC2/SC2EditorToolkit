@@ -30,4 +30,8 @@ try {
  if($LASTEXITCODE){throw 'Diagnostic output test build failed'}
  & (Join-Path $destination 'DiagnosticOutputTests.exe')
  if($LASTEXITCODE){throw 'Diagnostic output identity regression failed'}
+ & $compiler /nologo /utf-8 /W4 /std:c++17 /EHsc /MT (Join-Path $root 'tests\owned_tree_traversal_test.cpp') /Fe:OwnedTreeTraversalTests.exe
+ if($LASTEXITCODE){throw 'Owned tree traversal test build failed'}
+ & (Join-Path $destination 'OwnedTreeTraversalTests.exe')
+ if($LASTEXITCODE){throw 'Owned tree traversal state restoration failed'}
 }finally{Pop-Location}

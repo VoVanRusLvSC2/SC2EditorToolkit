@@ -15,6 +15,8 @@ def read_declared_dependencies(source,work):
         if len(members)!=1 or members[0]['bytes']>2*1024**2:raise ValueError('Unique bounded DocumentInfo required')
         _,text=read_member(source,members[0],tool,work,text=True)
         if text is None or '<!DOCTYPE' in text.upper() or '<!ENTITY' in text.upper():raise ValueError('Unsupported DocumentInfo XML')
+        if not text.strip():
+            return {'complete':True,'values':[],'source':'empty saved DocumentInfo; no explicit dependency declarations; native sources are checked separately'}
         root=ET.fromstring(text)
         return {'complete':True,'values':[n.text or '' for n in root.findall('./Dependencies/Value')],
                 'source':'saved DocumentInfo declarations; original Editor performs actual dependency resolution'}

@@ -7,8 +7,10 @@ from .runtime import watch_frozen_parent
 from .session import Worker
 from .modules import capabilities
 from .jobs import JobQueue
+from .contracts import validate_call,decorate,error_info
+from .mcp import PROPERTIES
 
-ROUTES={'/convert':'execute','/open':'open_document','/editor/start':'start','/triggers/compile':'compile_current',
+ROUTES={'/doctor':'doctor','/data/audit/query':'query_audit','/data/audit/uses':'find_object_uses','/data/audit/compare':'compare_audits','/convert':'execute','/open':'open_document','/editor/start':'start','/triggers/compile':'compile_current',
  '/galaxy/export':'export_galaxy','/editor/diagnostics':'diagnostics','/cutscene/open':'cutscene_open','/cutscene/seek':'cutscene_seek',
  '/cutscene/export':'export_video','/cutscene/export/cancel':'cancel_video','/render/capture':'capture_frame','/terrain/capture':'capture_terrain','/terrain/export':'export_map_image',
  '/objects/search':'search_objects','/terrain/region':'capture_map_region','/terrain/cameras':'list_map_cameras',
@@ -18,12 +20,19 @@ ROUTES={'/convert':'execute','/open':'open_document','/editor/start':'start','/t
 def main():
     watch_frozen_parent()
     p=argparse.ArgumentParser(description='SC2 Native Toolkit — hidden original Editor modules')
-    p.add_argument('operation',nargs='?',choices=['serve','convert'],default='serve')
+    p.add_argument('operation',nargs='?',choices=['serve','convert','doctor'],default='serve')
     base=Path(sys.executable).parent if getattr(sys,'frozen',False) else Path(__file__).resolve().parents[2]
     p.add_argument('--work',default=str(base/'api-data'));p.add_argument('--port',type=int,default=8765)
     p.add_argument('--request');p.add_argument('--response')
     p.add_argument('--editor',help='Original Editor EXE/install directory; otherwise SC2_EDITOR_PATH or discovery')
     args=p.parse_args();worker=Worker(args.work,editor_path=args.editor)
+    if args.operation=='doctor':
+        try:
+            result=decorate(worker.doctor({}))
+            target=Path(args.response) if args.response else worker.work/'doctor.json'
+            target.write_text(json.dumps(result,ensure_ascii=False,indent=2),encoding='utf8')
+            return 0 if result['status']=='PREFLIGHT_PASSED' else 2
+        finally:worker.close()
     if args.operation=='convert':
         try:
             if not args.request or not args.response:raise ValueError('--request and --response required')
@@ -31,7 +40,7 @@ def main():
             Path(args.response).write_text(json.dumps(result,ensure_ascii=False,indent=2),encoding='utf8')
             return 2 if result.get('status')=='FAILED' else 0
         except Exception as e:
-            if args.response:Path(args.response).write_text(json.dumps({'status':'FAILED','error':str(e)}),encoding='utf8')
+            if args.response:Path(args.response).write_text(json.dumps(decorate({'status':'FAILED','error':str(e),'errorInfo':error_info(e)})),encoding='utf8')
             return 2
         finally:worker.close()
     jobs=JobQueue(worker);token=secrets.token_urlsafe(32)
@@ -47,7 +56,7 @@ def main():
         def authorized(self):
             return not self.headers.get('Origin') and secrets.compare_digest(self.headers.get('X-SC2-Token',''),token)
         def do_GET(self):
-            if self.path=='/health':self.reply(200,{'ok':True,'version':'0.14.0-rc.1','workerRunning':worker.alive(),'busy':jobs.busy() or worker.lock.locked(),'renderBackend':(worker.state or {}).get('renderBackend'),'instanceId':(worker.state or {}).get('instanceId')});return
+            if self.path=='/health':self.reply(200,{'ok':True,'version':'1.0.0','workerRunning':worker.alive(),'busy':jobs.busy() or worker.lock.locked(),'renderBackend':(worker.state or {}).get('renderBackend'),'instanceId':(worker.state or {}).get('instanceId')});return
             if not self.authorized():self.reply(403,{'error':'X-SC2-Token required; browser origins are not accepted'});return
             if self.path=='/modules':self.reply(200,capabilities());return
             if self.path=='/cutscene/export/status':self.reply(200,worker.export_video_status());return
@@ -78,14 +87,18 @@ def main():
                 request=json.loads(self.rfile.read(length))
                 if not isinstance(request,dict):raise ValueError('JSON object required')
                 if self.path.startswith('/jobs/'):
+                    validate_call('jobs.'+self.path.rsplit('/',1)[1],request,PROPERTIES)
                     result=getattr(jobs,self.path.rsplit('/',1)[1])(request)
                 elif self.path=='/cutscene/export/cancel':result=worker.cancel_video(request)
-                else:result=jobs.run(ROUTES[self.path],request)
+                else:
+                    validate_call(ROUTES[self.path],request,PROPERTIES)
+                    result=jobs.run(ROUTES[self.path],request)
+                result=decorate(result)
                 self.reply(202 if self.path=='/jobs/submit' else 422 if result.get('status')=='FAILED' else 200,result)
-            except FileExistsError:self.reply(409,{'status':'FAILED','error':'Export target exists; use another path or overwrite=true'})
-            except Exception as e:self.reply(409 if worker.lock.locked() else 400,{'status':'FAILED','error':str(e)})
+            except FileExistsError as e:self.reply(409,decorate({'status':'FAILED','error':'Export target exists; use another path or overwrite=true','errorInfo':error_info(e)}))
+            except Exception as e:self.reply(409 if worker.lock.locked() else 400,decorate({'status':'FAILED','error':str(e),'errorInfo':error_info(e)}))
     server=ThreadingHTTPServer(('127.0.0.1',args.port),Handler)
-    (worker.work/'api-info.json').write_text(json.dumps({'url':f'http://127.0.0.1:{server.server_port}','token':token,'pid':os.getpid(),'version':'0.14.0-rc.1'},indent=2),encoding='utf8')
+    (worker.work/'api-info.json').write_text(json.dumps({'url':f'http://127.0.0.1:{server.server_port}','token':token,'pid':os.getpid(),'version':'1.0.0'},indent=2),encoding='utf8')
     try:server.serve_forever(poll_interval=.2)
     finally:server.server_close();jobs.close();worker.close()
     return 0

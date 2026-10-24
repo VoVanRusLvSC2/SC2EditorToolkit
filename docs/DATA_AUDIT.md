@@ -66,7 +66,14 @@ Native Messages/Console observations remain separate from Galaxy compilation.
 
 The traversal samples the original saved Data model's default variant (0).
 It does not execute triggers or apply runtime upgrade/player modifications.
-Dependency file bytes are not independently versioned by this operation; the report describes the loaded native model and records its original source names. `mapRevision` identifies the supplied archive only.
+`mapRevision` identifies the supplied archive. Version 1.0 additionally records
+`projectRevision` and `dependencyManifest`: recursively declared local archives
+and the installed CASC build manifest are SHA-256 checked before/after traversal.
+The observed native source names must match the recorded identities for
+`projectRevisionComplete:true`. Unresolved remote/cache declarations and unmatched
+sources remain explicit. Physical native-loader paths and all individual CASC
+resource bytes are not independently verified (`nativeResolvedPhysicalPathsVerified:false`).
+No automatic cache reuses a report for another revision.
 
 Unclassified-value counts are conservative coverage counters, not error counts;
 they also include engine/scalar types without a verified reference visitor.
@@ -85,3 +92,24 @@ The reflection adapter is pinned to the verified original x64 Editor build
 5.0.17.98310 and checks native lookup signatures and metadata bounds. Installation
 paths are discovered/configurable. Other binaries are rejected before native
 calls; the code does not guess offsets for another version.
+
+## Indexed queries, incoming uses and comparison (1.0)
+
+A completed audit publishes an additional immutable SQLite index artifact and
+`reportId` equal to `reportArtifact.id`. Use `sc2_query_audit`,
+`sc2_find_object_uses` and `sc2_compare_audits`, or the corresponding authenticated
+`/data/audit/query`, `/data/audit/uses`, `/data/audit/compare` POST endpoints.
+Queries do not launch an Editor, work after reopening the artifact store and
+check original report/index hashes. Results are bounded and paginated.
+
+See [the version 1 contract](MCP_CONTRACT.md) for arguments, revision guarantees,
+inline omission flags and comparison limits. The v0.14 report format has no index;
+create a new 1.0 audit before using the new query operations. Historical reports
+remain downloadable and are never silently rewritten.
+
+Resource checks use bounded requests of at most 512 paths / 1 MiB encoded input,
+with resourcePathsChecked, uniquePaths and resourceBatch progress. Every expected
+path must occur exactly once across the complete set of native responses before
+audit publication. Cancellation/deadlines remain active between batches.
+The original private Archive Browser tree is temporarily redraw-suppressed during
+traversal and restored on every exit; no system animation preference is changed.

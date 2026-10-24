@@ -1,12 +1,17 @@
 # Presentation readiness — 2026-10-24
 
-Current addition: **v0.14.0-rc.1** full original effective Data traversal, typed reference checks and merged virtual file presence checks. Final Nydus and packaged negative-map acceptance, 97 Python tests and six native suites passed. Reports preserve coverage gaps, optional missing identities and unknown diagnostics explicitly. [Acceptance evidence](VALIDATION.md) and [Data audit usage](DATA_AUDIT.md).
+Current release: **1.0.0**, API contract 1, native protocol 15 and 31 MCP tools.
+See [1.0 acceptance](V1_ACCEPTANCE.md) and [setup/contracts](MCP_CONTRACT.md) for
+the exact supported scope, installation preflight and current acceptance gates.
+
+Previous addition: **v0.14.0-rc.1** full original effective Data traversal, typed reference checks and merged virtual file presence checks. Final Nydus and packaged negative-map acceptance, 97 Python tests and six native suites passed. Reports preserve coverage gaps, optional missing identities and unknown diagnostics explicitly. [Acceptance evidence](VALIDATION.md) and [Data audit usage](DATA_AUDIT.md).
 
 Scope: **v0.13.0-rc.1** jobs/reports/Data/resource acceptance and focused map/filter regression, with separately dated **v0.12.0-rc.1** full-resolution map/filter acceptance,
 **v0.11.0-rc.1** portable/media and **v0.10.0-rc.1** baseline evidence; original SC2 Editor
 **5.0.17.98310**, DXVK 3.1.1 and the installed test machine/dependencies.
-This is a prerelease developer toolkit. Demonstrate the verified workflow;
-do not describe every experimental operation as production-complete.
+The entries below are dated prerelease evidence. Version 1.0 stable scope and
+final-package acceptance are documented separately; coordinate-region cropping
+remains experimental and runtime semantic completeness is not advertised.
 
 ## What the product does
 
