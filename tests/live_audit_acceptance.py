@@ -11,9 +11,13 @@ from live_parallel_workers import ROOT,Server,sha,existing_editors,process_time
 
 def main():
     parser=argparse.ArgumentParser();parser.add_argument('--nydus',required=True);parser.add_argument('--work',required=True);parser.add_argument('--package',action='store_true')
+    parser.add_argument('--original-audit',help='Reuse an immutable completed native audit after metadata-only fixes')
+    parser.add_argument('--original-store',help='Stopped runtime directory containing that audit artifact store')
     args=parser.parse_args();work=Path(args.work).resolve();work.mkdir(parents=True,exist_ok=False)
+    assert bool(args.original_audit)==bool(args.original_store),'Supply both original audit and store'
     source=Path(args.nydus).resolve(strict=True);original=sha(source);baseline=existing_editors()
-    summary={'status':'STARTED','checks':{},'sourceSha256':original};server=Server('audit',work/'server',args.package)
+    index=Path(args.original_store)/'exports/artifacts.json' if args.original_store else None
+    summary={'status':'STARTED','checks':{},'sourceSha256':original};server=Server('audit',work/'server',args.package,artifact_index=index)
     def call(route,body):
         code,value=server.call(route,body);assert code in (200,202),(code,value)
         observed=value.get('desktopObservation')
@@ -22,7 +26,7 @@ def main():
             assert not observed['inputInjectionUsed'] and not observed['desktopSwitchApiUsed']
         return value
     def queued(operation,arguments):
-        job=call('/jobs/submit',{'operation':operation,'arguments':arguments,'timeout_seconds':3600})
+        job=call('/jobs/submit',{'operation':operation,'arguments':arguments,'timeout_seconds':14400 if operation=='audit_data' else 3600})
         while job['status'] in ('QUEUED','RUNNING'):
             job=call('/jobs/wait',{'job_id':job['jobId'],'wait_ms':30000})
             print(json.dumps({'operation':operation,'status':job['status'],'progress':job.get('progress')}),flush=True)
@@ -34,11 +38,33 @@ def main():
         checked=queued('check_document',{'map':str(source),'scope':'library:810D62ED'})
         assert checked['nativeCompilePassed'] and checked['sourceUnchanged'],checked
         assert server.download(checked['checks']['galaxyExport']['artifact']);summary['checks']['nativeCompileAndExactExport']=True
-        first=queued('audit_data',{'map':str(source),'limit':50})
+        if args.original_audit:
+            from sc2native.artifacts import ArtifactStore
+            from sc2native.revisions import snapshot,bind_sources,BUILTIN
+            first=json.loads(Path(args.original_audit).read_text(encoding='utf8'))
+            stored=ArtifactStore(Path(args.original_store)/'exports').get(first['reportId'])
+            recorded=json.loads(Path(stored['path']).read_text(encoding='utf8'))
+            assert all(first.get(key)==value for key,value in recorded.items()),'Original audit response differs from immutable report'
+            assert first['mapRevision']==original and not first['dependencyManifest']['unmatchedNativeSources']
+            editor=next(check['details']['path'] for check in doctor['checks'] if check['check']=='originalEditor')
+            current=snapshot(source,editor,work)
+            assert current['revision']==first['projectRevision'],'Project changed since completed traversal'
+            assert current['archives']==first['dependencyManifest']['archives']
+            assert current['gameBuildManifests']==first['dependencyManifest']['gameBuildManifests']
+            known={v['name'].casefold() for v in current['archives']}|BUILTIN
+            aliases=[name for name in first['dataSources'][1:] if name.casefold() not in known]
+            assert len(aliases)==1,'Cannot uniquely preserve the previously verified private document alias'
+            manifest=bind_sources(current,first['dataSources'],aliases[0])
+            summary['checks']['completedNativeAuditReusedUnchanged']=True
+            summary['checks']['dependencyMetadataRevalidated']=True
+            (work/'dependency-revalidation.json').write_text(json.dumps({'originalReportId':first['reportId'],
+                'originalReportUnchanged':True,'nativeTraversalRepeated':False,'manifest':manifest},ensure_ascii=False,indent=2),encoding='utf8')
+        else:
+            first=queued('audit_data',{'map':str(source),'limit':50});manifest=first['dependencyManifest']
         (work/'original-audit.json').write_text(json.dumps(first,ensure_ascii=False,indent=2),encoding='utf8')
         assert first['catalogTraversalComplete'] and len(first['catalogs'])==109 and first['counts']['getterErrors']==0
         assert first['sourceUnchanged'] and first['privateDocumentUnchanged'] and first['nativeNewErrorsClear'] is True
-        manifest=first['dependencyManifest'];assert manifest['projectRevisionComplete'],manifest
+        assert manifest['projectRevisionComplete'],manifest
         assert len(manifest['archives'])>=3 and manifest['gameBuildIdentityVerified']
         report=first['reportId'];assert report==first['reportArtifact']['id']
         uses=call('/data/audit/uses',{'report_id':report,'target_catalog':'Weapon','target_id':'GuassRifle','catalog':'Unit','limit':500})
@@ -57,6 +83,7 @@ def main():
         second=queued('audit_data',{'map':str(changed),'limit':50})
         (work/'changed-audit.json').write_text(json.dumps(second,ensure_ascii=False,indent=2),encoding='utf8')
         assert second['counts']['getterErrors']==0 and first['projectRevision']!=second['projectRevision']
+        assert second['dependencyManifest']['projectRevisionComplete'] and second['nativeNewErrorsClear'] is True
         diff=call('/data/audit/compare',{'before_report_id':report,'after_report_id':second['reportId'],'section':'objects','catalog':'Model','object_id':'ToolkitV100MissingModel'})
         assert diff['counts']=={'added':1,'removed':0,'modified':0},diff
         assert diff['sameEditorAdapter'] and not diff['sameProjectRevision'];summary['checks']['changedProjectObjectDiff']=True

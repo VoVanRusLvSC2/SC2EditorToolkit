@@ -22,12 +22,15 @@ visible Editor, inject physical mouse/keyboard input or switch desktops.
   dependencies plus the installed CASC build manifest, matched to observed
   native Data source names. Unresolved/cache/physical-path guarantees remain
   explicit instead of being silently treated as verified.
+- Original header-only DocumentInfo dependency metadata is recognized as empty;
+  unclosed or otherwise malformed XML remains incomplete. This fixes a false
+  incomplete project manifest on the tested Nydus dependencies.
 - Read-only installation preflight through sc2_doctor, POST /doctor or the
   windowed API executable's doctor command. Checks original Editor identity,
   embedded native component version/protocol/hashes, renderer package, writable
   storage, desktop and optional FFmpeg/ffprobe. GPU readiness requires a live test.
 - Bounded native resource batches with progress and temporary private-tree
-  redraw suppression, avoiding per-folder animation costs. Renderer warmup before
+  redraw/scroll settings restored after traversal. Renderer warmup before
   original audio recording retains strict audio/timeline confirmation.
 - English setup/contracts/acceptance documentation and a reproducible allowlisted
   release packager that checks frozen toolkit code against committed source.

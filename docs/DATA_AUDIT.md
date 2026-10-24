@@ -30,10 +30,20 @@ Omit `map` to audit the worker's current saved document. `.SC2Mod` is supported.
 `limit` bounds summary finding samples to 1–500; it never limits traversal or the
 downloadable reports. Use a different `--work` for each independent server.
 
-Progress reports the current catalog and observed object/field counts. The
+Progress reports the current catalog and observed object/field counts, then
+`resourcePathsChecked`, `uniquePaths`, `resourceBatch` and `resourceBatchSize`
+during bounded original Archive Browser checks. Large dependency sets can take
+a long time; full audits default to a four-hour execution deadline. Summary
+`limit` does not shorten the traversal. Use queued status/wait calls rather than
+holding a client request open for the entire run. The
 existing FIFO, cancellation and deadline watchdog apply. A cancelled or failed
 native operation never publishes a complete audit and never automatically
 replays against another document. Only the owned worker can be discarded.
+
+Dependency metadata may contain an XML declaration with no root element in
+original Editor-compatible archives. This is treated as an empty declaration
+set. An unclosed root, broken comment or other malformed XML stays incomplete;
+the archive bytes are never rewritten to normalize it.
 
 ## Results and coverage
 

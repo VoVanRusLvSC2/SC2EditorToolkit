@@ -1,5 +1,36 @@
 # Validation history
 
+## v1.0.0 stable contract acceptance — 2026-10-24
+
+Acceptance completed original Nydus compilation and two full native Data audit
+observations, a private added-Model comparison and saved-report MCP queries after
+restarting the server. The completed original report remains immutable;
+header-only dependency metadata was revalidated separately against identical
+archive/build hashes after the parser fix. Native component bytes are unchanged;
+the entire added-Model audit ran on the final fixed package.
+Original Nydus: 109 catalogs, 50,129 objects,
+7,367,409 field visits, zero getter errors, 103,197 typed references and 26,041
+unique file paths (22,592 present, 3,449 absent). Native new-error snapshots
+remained confirmed clear. Coverage gaps remain explicit; validationPassed is
+null rather than an unsupported all-Data-healthy claim.
+
+Regression: 113 Python tests, seven native suites, packaged HTTP and 31-tool MCP
+contracts, a Unicode/space-path ZIP install, two independent hidden Editors,
+six native conversions with zero compiler errors, exact Galaxy downloads,
+private native save/close/reopen, cancellation/deadline fresh-worker recovery,
+inherited/overridden Data and negative diagnostics passed. Native full-map
+filters, a water-containing existing campaign map and original Nydus cutscene
+PNG/H.264/AAC were visually reviewed; non-silent MP4 decoded successfully.
+
+All task-owned workers closed. Source archives remained unchanged. No physical
+input injection, desktop-switch API, user-desktop owned visible windows or owned
+foreground samples were used. The user's screen-saver transition remains an
+observation, not a toolkit desktop-switch claim. Final packaging verifies the
+frozen toolkit code against committed source and checks all bundled native,
+renderer and archive-helper hashes. Complete evidence and limitations:
+[1.0 acceptance](V1_ACCEPTANCE.md), [versioned contract](MCP_CONTRACT.md).
+
+
 ## v0.14.0-rc.1 full native Data audit acceptance — 2026-10-24
 
 The final native protocol-15 bundle completed a full traversal on a private

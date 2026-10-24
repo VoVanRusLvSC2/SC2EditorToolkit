@@ -5,6 +5,7 @@ import concurrent.futures
 import ctypes
 import hashlib
 import json
+import shutil
 import subprocess
 import sys
 import threading
@@ -54,12 +55,16 @@ def existing_editors():
 
 
 class Server:
-    def __init__(self, name, work, packaged, editor=None, allow_screensaver=False):
+    def __init__(self, name, work, packaged, editor=None, allow_screensaver=False, artifact_index=None):
         self.name, self.work, self.info, self.state = name, work, None, None
         self.allow_screensaver = allow_screensaver
         self.created = None
         self.work.mkdir()
         self.runtime = self.work / 'runtime'
+        if artifact_index is not None:
+            exports = self.runtime / 'exports'
+            exports.mkdir(parents=True)
+            shutil.copyfile(artifact_index, exports / 'artifacts.json')
         executable = [str(ROOT / os.environ.get('SC2_PACKAGE_DIR','dist') / 'SC2NativeAPI.exe')] if packaged else [sys.executable, str(ROOT / 'app/hidden_api.py')]
         editor_args = ['--editor', str(editor)] if editor else []
         with (work / 'stdout.log').open('wb') as out, (work / 'stderr.log').open('wb') as err:
