@@ -37,6 +37,9 @@ def main():
         archive=CArchiveReader(str(dist/name));pyz=archive.open_embedded_archive('PYZ.pyz')
         assert json.loads(archive.extract('native-manifest.json').decode('utf-8-sig'))==components
         for file,digest in hashes.items():assert hashlib.sha256(archive.extract(file)).hexdigest()==digest
+        for file in ('d3d9.dll','LICENSE.txt','manifest.json'):
+            assert hashlib.sha256(archive.extract('renderers\\dxvk\\'+file)).hexdigest()==sha(native/'renderers/dxvk'/file)
+        assert hashlib.sha256(archive.extract('mpqcli.exe')).hexdigest()==sha(ROOT/'tools/mpqcli/mpqcli.exe')
         for source in (ROOT/'app/sc2native').glob('*.py'):
             module='sc2native' if source.stem=='__init__' else 'sc2native.'+source.stem
             if module not in pyz.toc:
