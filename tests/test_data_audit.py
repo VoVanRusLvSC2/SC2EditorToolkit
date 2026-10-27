@@ -4,11 +4,34 @@ import tempfile
 import unittest
 from pathlib import Path
 from unittest.mock import patch
-from sc2native.data_audit import check_page,resource_key,audit_data,audit_options,resource_batches
+from sc2native.data_audit import check_page,resource_key,audit_data,audit_options,resource_batches,check_storage,AUDIT_MINIMUM_FREE
 from sc2native.artifacts import ArtifactStore
 
 
 class DataAuditCoverageTests(unittest.TestCase):
+    def test_low_storage_stops_before_native_work(self):
+        from types import SimpleNamespace
+        from sc2native.contracts import error_info
+        with tempfile.TemporaryDirectory() as temporary:
+            worker=AuditWorkerFixture(Path(temporary))
+            with patch('sc2native.data_audit.shutil.disk_usage',return_value=SimpleNamespace(free=AUDIT_MINIMUM_FREE-1)):
+                with self.assertRaises(OSError) as caught:audit_data(worker,{})
+            self.assertEqual(caught.exception.errno,28);self.assertEqual(error_info(caught.exception)['code'],'STORAGE_FULL')
+            self.assertEqual(worker.calls,[]);self.assertEqual(worker.artifacts.items,{})
+            with patch('sc2native.data_audit.shutil.disk_usage',return_value=SimpleNamespace(free=AUDIT_MINIMUM_FREE)):
+                check_storage(worker.work)
+    def test_schema_two_requires_unique_serialized_values_and_exact_error_count(self):
+        value=self.page();value['schemaVersion']=2;obj=value['objects'][0];obj['leafValuesVisited']=1
+        obj['fieldValues']=[{'field':'LifeMax','type':'CFixed','status':'serialized','value':'45','scalarBits':'0002d000'}]
+        obj['valueSerializationErrors']=0
+        check_page(value,94,0)
+        for mutate in (lambda o:o.pop('fieldValues'),lambda o:o['fieldValues'].append(o['fieldValues'][0]),
+                       lambda o:o.update(valueSerializationErrors=1),lambda o:o['fieldValues'][0].update(value=None)):
+            broken=copy.deepcopy(value);mutate(broken['objects'][0])
+            with self.assertRaises(RuntimeError):check_page(broken,94,0)
+        incomplete=copy.deepcopy(value);incomplete['objects'][0]['fieldValues'][0]['status']='unsupported';incomplete['objects'][0]['valueSerializationErrors']=1
+        check_page(incomplete,94,0)
+
     def page(self):
         return dict(schemaVersion=1,traversalComplete=True,variant=0,catalogIndex=94,catalog='Unit',
                     dataSources=['All Data','Liberty','PrivateMap'],totalEntries=2,offset=0,nextOffset=1,
@@ -80,6 +103,12 @@ class AuditWorkerFixture:
                                      {'field':'Token','type':'CModelPath','path':'Assets/##id##.m3'}])]
             value=dict(schemaVersion=1,traversalComplete=True,variant=0,catalogIndex=index,catalog=f'Catalog{index}',
                        dataSources=['All Data','Core.SC2Mod','Map.SC2Map'],totalEntries=len(obj),offset=0,nextOffset=None,objects=obj)
+            if getattr(self,'field_values',False):
+                value.update(schemaVersion=2,fieldValueEncodingVersion=2)
+                for entry in obj:
+                    entry['fieldValues']=[{'field':f'Value[{i}]','type':'NativeValue','status':'serialized','value':str(i)} for i in range(6)]
+                    entry['fieldValues'][0].update(status='unsupported',value='',reason='Unverified native formatter')
+                    entry['valueSerializationErrors']=1
             if obj and getattr(self,'many_resources',False):obj[0]['resources']=[{'field':f'Path[{i}]','type':'CModelPath','path':f'Assets/{i:05}.m3'} for i in range(1300)]
         else:
             paths=Path(args['map_path']).read_text().splitlines()
@@ -91,7 +120,21 @@ class AuditWorkerFixture:
 
 
 class DataAuditAggregationTests(unittest.TestCase):
+    def setUp(self):
+        mocked=patch('sc2native.data_audit.check_storage');mocked.start();self.addCleanup(mocked.stop)
     def diagnostics(self):return {'newErrors':[],'newWarnings':[],'newErrorsClear':None}
+
+    def test_native_value_failure_is_recorded_indexed_and_visible_in_summary(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            worker=AuditWorkerFixture(Path(temporary));worker.field_values=True
+            with patch('sc2native.data_audit.operation_diagnostics',return_value=self.diagnostics()):report=audit_data(worker,{})
+            self.assertTrue(report['fieldValuesRecorded']);self.assertEqual(report['fieldValueEncodingVersion'],2)
+            self.assertFalse(report['fieldValueCoverage']['complete']);self.assertEqual(report['counts']['valueSerializationErrors'],1)
+            self.assertEqual(report['counts']['recordedFieldValues'],6);self.assertEqual(report['counts']['serializedFieldValues'],5)
+            self.assertIn('field-value-gap',[v['kind'] for v in report['findingSamples']]);self.assertIsNone(report['validationPassed'])
+            from sc2native.audit_store import query_audit
+            page=query_audit(worker,{'report_id':report['reportId'],'section':'fields','field':'Value[0]'})
+            self.assertEqual(page['items'][0]['status'],'unsupported')
 
     def test_full_catalog_coverage_artifacts_and_priority_findings(self):
         with tempfile.TemporaryDirectory() as temporary:

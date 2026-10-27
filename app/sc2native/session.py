@@ -437,6 +437,11 @@ class Worker:
             # Camera and time_ms refer to cutscenes; never silently reuse those
             # arguments for a terrain screenshot of a different module.
             if 'camera' in request or 'time_ms' in request:raise ValueError('Terrain capture uses the current native map view; cutscene camera/time_ms are not supported')
+            custom=None
+            if 'terrain_camera' in request:
+                from .map_cameras import terrain_camera_options
+                custom=terrain_camera_options(request['terrain_camera'])
+                if 'map_camera_id' in request:raise ValueError('Supply terrain_camera or map_camera_id, not both')
             selected=None
             if 'map_camera_id' in request:
                 from .map_cameras import read_camera_records,choose_camera
@@ -455,6 +460,13 @@ class Worker:
                 self._native(directory,'terrain-camera-select',camera=selected['name'])
                 time.sleep(.3)
                 native=self._native(directory,'terrain-camera',camera=selected['name'])
+            elif custom:
+                self._native(directory,'terrain-camera',terrain_camera=custom)
+                time.sleep(.3)
+                readback=directory/'readback';readback.mkdir()
+                native=self._native(readback,'terrain-camera-read')
+                from .map_cameras import verify_custom_readback
+                verify_custom_readback(custom,native.get('mapCamera',{}))
             else:native=self._native(directory,'terrain')
             if not native.get('viewport'):raise RuntimeError('Original Terrain viewport was not confirmed')
             if selected:
@@ -471,6 +483,12 @@ class Worker:
                 result['mapCamera']={'saved':selected,'actual':native['mapCamera'],'nativeSelectionVerified':True,
                     'verification':verification,
                     'triggerExecution':False,'scope':'saved map camera and editor placement state; no Galaxy/gameplay execution'}
+            if custom:
+                from .map_cameras import verify_custom_readback
+                verification=verify_custom_readback(custom,native.get('mapCamera',{}))
+                result['terrainCamera']={'requested':custom,'actual':native['mapCamera'],'verification':verification,
+                    'implementation':'original Camera Editor Set Game Camera and Get Game Camera; no archive modification',
+                    'triggerExecution':False}
             if not result['sourceUnchanged']:result.update(status='FAILED',error='Source map changed during capture')
             # Publish only after viewport, pixels and background checks passed.
             if result['status']!='FAILED':

@@ -22,6 +22,6 @@ static void TerrainOperation(Block* b,HWND target){
     SetActiveWindow(terrain);SetFocus(reinterpret_cast<HWND>(b->viewport));b->privateFocusUsed=1;
     wcsncpy_s(b->loadedTitle,Text(terrain).c_str(),_TRUNCATE);
     if(b->operation==TerrainExport){ExportWholeMap(b,terrain);return;}
-    if((b->operation==TerrainCamera||b->operation==TerrainCameraLayer||b->operation==TerrainCameraSelect)){TerrainCameraOperation(b,terrain);return;}
+    if((b->operation==TerrainCamera||b->operation==TerrainCameraLayer||b->operation==TerrainCameraSelect||b->operation==TerrainCameraRead)){TerrainCameraOperation(b,terrain);return;}
     RedrawWindow(terrain,nullptr,nullptr,RDW_INVALIDATE|RDW_ALLCHILDREN);
 }

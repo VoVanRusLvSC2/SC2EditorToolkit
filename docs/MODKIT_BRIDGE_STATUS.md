@@ -1,6 +1,11 @@
 # Current bridge contract — 1.0.0
 
 The stable integration has 31 MCP tools, API contract 1 and native protocol 15.
+
+Development 1.1.0-rc.1 retains the tool names and API contract, requires native
+protocol 16, and adds explicit Terrain camera parameters plus effective field
+value snapshots and indexed field comparison. Updating this toolkit does not
+automatically replace a separate ModKit integration's installed package.
 It adds precise tool schemas/errors, installation preflight, indexed native Data
 audit queries, incoming typed object uses, audit comparison and project dependency
 revision manifests. [Setup and contract](MCP_CONTRACT.md), [final acceptance](V1_ACCEPTANCE.md).
@@ -55,7 +60,7 @@ camera extends the existing `sc2_capture_terrain` tool.
 | 1. Original GUI triggers → Galaxy → Compile All → diagnostics/script | Implemented and live-tested on Nydus v54 with installed dependencies. Native generation and compilation passed with zero compiler errors. Galaxy file and HTTP download matched exactly: 342,851 bytes. | A broader map/dependency matrix, invalid-source cases and explicit Trigger Reviser integration tests. A successful native compile is not a gameplay test. |
 | 2. Map/Data load errors with message type, related ID and new/old separation | Implemented as operation-scoped native observations. Private archive load and original Data opening retain before/after snapshots, output mutations, new errors/warnings and old baselines. Text classification and explicit IDs are returned when available. | Broader localized/native failure-format coverage. This collects what the Editor actually reports; opening Data is not an exhaustive engine validator. Silent invalid references are not certified. Unreadable, truncated or ambiguous output remains unknown. |
 | 3. Reliable original map image with terrain, water, units and doodads | Partial, with successful visual evidence. Original full-map export of the corrected fixture shows textured ground, both hills, four corner buildings, ten Marines and four doodads at 1024×768. | Water-specific acceptance and broader map/dependency coverage. Category exclusion is corrected through original model setter/getter readback; painted checkbox state is insufficient. The first generated test fixture omitted native Objects registration/preloads; correcting that private fixture made placements visible without changing renderer/API code. |
-| 4. Real local-area capture with native camera controls | Saved map-camera framing is implemented: select an exact saved camera ID, invoke original View Selected Camera, read actual target/angles/distance/FOV with original Get Game Camera, verify core values and capture the native Terrain viewport. Full-map cropping and cutscene cameras remain separate. | Arbitrary target/angle/distance/resolution overrides and broader map/UI coverage. This is static editor placement state, not Galaxy-trigger playback or a gameplay timeline. |
+| 4. Real local-area capture with native camera controls | Saved camera selection remains supported. Development 1.1 additionally accepts explicit target XYZ, pitch/yaw/roll, distance and FOV through the original Camera Editor, commits the view and reads it again before renderer capture. Full-map cropping and cutscene cameras remain separate. | Arbitrary viewport resolution and broader map/UI coverage. This is static editor placement state; Galaxy-trigger playback requires the game. |
 | 5. Native Editor save → reopen → diagnostics/component differences | Implemented. Original File/Save As serializes a private copy, File/Close removes that document, then original File/Open reads the saved archive. Per-phase diagnostics and exact enumerated MPQ member comparisons include locales, metadata and optional bounded text diffs. | Broader map/dependency and Editor-version coverage. Only confirmed commands, complete component reads, stable hashes and known-clear new diagnostics permit publishing a verified saved archive. Failure after saving still retains the save comparison report. |
 
 ## Existing supporting behavior
@@ -121,6 +126,6 @@ foreground samples and desktop changes. The test closed its owned worker.
 
 Prioritize item 1's broader verification and expand the failure matrix for items
 2 and 5. Finish item 3's visual acceptance next. Item 4 now supplies original
-saved-camera views; arbitrary camera overrides remain future work. A
+saved-camera views; development 1.1 adds explicit camera overrides. A
 gameplay/ability test harness and trigger-cinematic execution are separate later
 tasks. See the dated saved-camera evidence in [validation history](VALIDATION.md).

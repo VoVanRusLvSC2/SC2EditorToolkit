@@ -1,9 +1,12 @@
+import sys
 import os
 """No Editor required: verify the windowed MCP EXE inherits and restores stdio."""
 from pathlib import Path
 import json,subprocess,sys
 from map_archive_fixture import create_archive
 root=Path(__file__).resolve().parents[1]
+sys.path.insert(0,str(root/'app'))
+from sc2native.version import VERSION
 work=root/'local-tests'/'packaged-mcp';work.mkdir(parents=True,exist_ok=True)
 import tempfile
 archive_dir=tempfile.TemporaryDirectory();archive=create_archive(Path(archive_dir.name),root/'tools/mpqcli/mpqcli.exe')
@@ -18,7 +21,7 @@ run=subprocess.run([str(root/os.environ.get('SC2_PACKAGE_DIR','dist')/'SC2Native
 assert run.returncode==0,run.stderr
 result=[json.loads(line) for line in run.stdout.splitlines()]
 assert [r['id'] for r in result]==[1,2,3,4,5,6],run.stdout
-assert result[0]['result']['serverInfo']['version']=='1.0.0'
+assert result[0]['result']['serverInfo']['version']==VERSION
 for tool in result[1]['result']['tools']:
     assert 'outputSchema' in tool and 'annotations' in tool
     assert tool['inputSchema']['additionalProperties'] is False

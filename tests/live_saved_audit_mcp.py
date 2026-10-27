@@ -9,6 +9,7 @@ import subprocess
 from pathlib import Path
 
 from live_parallel_workers import existing_editors, process_time
+from sc2native.version import VERSION
 
 
 def main():
@@ -53,7 +54,7 @@ def main():
     assert run.returncode == 0, run.stderr
     rows = [json.loads(line) for line in run.stdout.splitlines()]
     assert [r['id'] for r in rows] == list(range(1, 9)), run.stdout
-    assert rows[0]['result']['serverInfo']['version'] == '1.0.0'
+    assert rows[0]['result']['serverInfo']['version'] == VERSION
     tools = rows[1]['result']['tools']
     assert len(tools) == 31
     assert all(t['inputSchema']['additionalProperties'] is False and

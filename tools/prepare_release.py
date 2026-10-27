@@ -10,11 +10,13 @@ import marshal
 import shutil
 import subprocess
 import zipfile
+import sys
 from pathlib import Path
 from PyInstaller.archive.readers import CArchiveReader
 
 ROOT=Path(__file__).resolve().parents[1]
-VERSION='1.0.0'
+sys.path.insert(0,str(ROOT/'app'))
+from sc2native.version import VERSION,NATIVE_PROTOCOL
 NO_WINDOW=getattr(subprocess,'CREATE_NO_WINDOW',0)
 
 
@@ -31,7 +33,7 @@ def main():
     def git(*parts):return subprocess.check_output(['git',*parts],cwd=ROOT,text=True,creationflags=NO_WINDOW).strip()
     if git('status','--porcelain'):raise RuntimeError('Commit reviewed source and acceptance documentation before packaging')
     commit=git('rev-parse','HEAD');components=json.loads((native/'native-manifest.json').read_text(encoding='utf-8-sig'))
-    assert components['version']==VERSION and components['nativeProtocol']==15
+    assert components['version']==VERSION and components['nativeProtocol']==NATIVE_PROTOCOL
     hashes={name:sha(native/name) for name in components['sha256']};assert hashes==components['sha256']
     for name in ('SC2NativeAPI.exe','SC2NativeMCP.exe'):
         archive=CArchiveReader(str(dist/name));pyz=archive.open_embedded_archive('PYZ.pyz')
@@ -54,9 +56,9 @@ def main():
     (dist/'docs').mkdir(exist_ok=True)
     for name in docs:shutil.copyfile(ROOT/'docs'/name,dist/'docs'/name)
     for name in ('README.md','LICENSE','NOTICE','THIRD_PARTY.txt'):shutil.copyfile(ROOT/name,dist/name)
-    manifest={'project':'SC2 Editor Toolkit','version':VERSION,'prerelease':False,'apiContractVersion':1,'nativeProtocol':15,
+    manifest={'project':'SC2 Editor Toolkit','version':VERSION,'prerelease':'-' in VERSION,'apiContractVersion':1,'nativeProtocol':NATIVE_PROTOCOL,
               'sourceCommit':commit,'platform':'Windows x64','supportedEditorBuild':'5.0.17.98310',
-              'nativeSha256':hashes,'frozenToolkitSourceVerified':True,'mcpTools':31,'acceptance':'docs/V1_ACCEPTANCE.md'}
+              'nativeSha256':hashes,'frozenToolkitSourceVerified':True,'mcpTools':31,'acceptance':'docs/V1_1_ACCEPTANCE.md' if VERSION.startswith('1.1.') else 'docs/V1_ACCEPTANCE.md'}
     (dist/'BUILD.json').write_text(json.dumps(manifest,indent=2)+'\n',encoding='utf8')
     allowed={'SC2NativeAPI.exe','SC2NativeMCP.exe','README.md','LICENSE','NOTICE','THIRD_PARTY.txt','BUILD.json','SHA256SUMS.txt'}
     allowed.update('docs/'+name for name in docs)

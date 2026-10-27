@@ -9,6 +9,7 @@
 #include <filesystem>
 #include <thread>
 #include <atomic>
+#include <cmath>
 #include <commctrl.h>
 #pragma comment(lib,"user32.lib")
 #pragma comment(lib,"ole32.lib")
@@ -52,10 +53,21 @@ static void DumpMenu(std::ostream& out,HMENU menu){
         DumpMenu(out,GetSubMenu(menu,i));out<<"}";
     }out<<"]";
 }
+static bool ParseTerrainCamera(const std::wstring& value,TerrainCameraRequest& r){
+    double* fields[]={&r.x,&r.y,&r.z,&r.pitch,&r.yaw,&r.roll,&r.distance,&r.fov};size_t start=0;
+    for(size_t i=0;i<8;i++){
+        auto end=value.find(L',',start);if((end==value.npos)!=(i==7))return false;
+        auto part=value.substr(start,end==value.npos?value.npos:end-start);wchar_t* tail=nullptr;
+        *fields[i]=wcstod(part.c_str(),&tail);if(part.empty()||!tail||*tail||!std::isfinite(*fields[i]))return false;
+        start=end+1;
+    }
+    r.enabled=1;return std::abs(r.x)<=100000&&std::abs(r.y)<=100000&&std::abs(r.z)<=100000&&
+        std::abs(r.pitch)<=90&&std::abs(r.yaw)<=360&&std::abs(r.roll)<=360&&r.distance>=.1&&r.distance<=100000&&r.fov>=1&&r.fov<=179;
+}
 int wmain(int argc,wchar_t** argv){
     if(argc<3){std::cout<<"SC2NativeBridge.exe inspect|generate|compile|read|freshness-probe --pid PID --expect-document NativeEmitterProbe.SC2Map --marker MARKER --out NEW_DIRECTORY\n";return 2;}
-    std::wstring op=argv[1],expected,marker,context,scope=L"mapRoot",desktop,camera;uint32_t imageSize=2048,auditCatalog=0,auditOffset=0,auditLimit=64;bool includeUnits=true,includeDoodads=true;int64_t timeMs=0;fs::path out,map,editor;bool resumeDialog=false;
-    for(int i=2;i<argc;i++){std::wstring arg=argv[i];if(i+1>=argc)return Error("Missing option value");std::wstring value=argv[++i];if(arg==L"--pid")wantedPid=std::stoul(value);else if(arg==L"--expect-document")expected=value;else if(arg==L"--marker")marker=value;else if(arg==L"--out")out=value;else if(arg==L"--editor")editor=value;else if(arg==L"--map")map=value;else if(arg==L"--resume-dialog")resumeDialog=value==L"yes";else if(arg==L"--context-label")context=value;else if(arg==L"--scope")scope=value;else if(arg==L"--desktop")desktop=value;else if(arg==L"--camera")camera=value;else if(arg==L"--time-ms")timeMs=std::stoll(value);else if(arg==L"--audit-catalog")auditCatalog=std::stoul(value);else if(arg==L"--audit-offset")auditOffset=std::stoul(value);else if(arg==L"--audit-limit")auditLimit=std::stoul(value);else if(arg==L"--image-size")imageSize=std::stoul(value);else if(arg==L"--include-units"||arg==L"--include-doodads"){if(value!=L"yes"&&value!=L"no")return Error("Boolean options require yes/no");if(arg==L"--include-units")includeUnits=value==L"yes";else includeDoodads=value==L"yes";}else return Error("Unknown option");}
+    std::wstring op=argv[1],expected,marker,context,scope=L"mapRoot",desktop,camera;uint32_t imageSize=2048,auditCatalog=0,auditOffset=0,auditLimit=64;bool includeUnits=true,includeDoodads=true;int64_t timeMs=0;fs::path out,map,editor;bool resumeDialog=false;TerrainCameraRequest customCamera{};
+    for(int i=2;i<argc;i++){std::wstring arg=argv[i];if(i+1>=argc)return Error("Missing option value");std::wstring value=argv[++i];if(arg==L"--pid")wantedPid=std::stoul(value);else if(arg==L"--expect-document")expected=value;else if(arg==L"--marker")marker=value;else if(arg==L"--out")out=value;else if(arg==L"--editor")editor=value;else if(arg==L"--map")map=value;else if(arg==L"--resume-dialog")resumeDialog=value==L"yes";else if(arg==L"--context-label")context=value;else if(arg==L"--scope")scope=value;else if(arg==L"--desktop")desktop=value;else if(arg==L"--camera")camera=value;else if(arg==L"--terrain-camera"){if(!ParseTerrainCamera(value,customCamera))return Error("Invalid custom Terrain camera parameters");}else if(arg==L"--time-ms")timeMs=std::stoll(value);else if(arg==L"--audit-catalog")auditCatalog=std::stoul(value);else if(arg==L"--audit-offset")auditOffset=std::stoul(value);else if(arg==L"--audit-limit")auditLimit=std::stoul(value);else if(arg==L"--image-size")imageSize=std::stoul(value);else if(arg==L"--include-units"||arg==L"--include-doodads"){if(value!=L"yes"&&value!=L"no")return Error("Boolean options require yes/no");if(arg==L"--include-units")includeUnits=value==L"yes";else includeDoodads=value==L"yes";}else return Error("Unknown option");}
     if(!desktop.empty()){
         if(desktop.rfind(L"SC2Native-",0)!=0)return Error("Only a private SC2Native desktop is allowed");
         HDESK isolated=OpenDesktopW(desktop.c_str(),0,FALSE,GENERIC_ALL);
@@ -93,7 +105,7 @@ int wmain(int argc,wchar_t** argv){
     }
     if(!target)return Error("Expected Triggers test-document workspace not found");
     DWORD tid=GetWindowThreadProcessId(target,nullptr);if(!tid)return Error("No owner thread");
-    if(op!=L"inspect"&&op!=L"generate"&&op!=L"compile"&&op!=L"read"&&op!=L"freshness-probe"&&op!=L"load"&&op!=L"cancel-load"&&op!=L"diagnostics"&&op!=L"cutscene"&&op!=L"scene-inspect"&&op!=L"scene-load"&&op!=L"scene-seek"&&op!=L"scene-advance"&&op!=L"scene-audio"&&op!=L"terrain"&&op!=L"terrain-export"&&op!=L"save-document"&&op!=L"reopen-document"&&op!=L"load-data"&&op!=L"terrain-camera"&&op!=L"terrain-camera-layer"&&op!=L"terrain-camera-select"&&op!=L"data-read"&&op!=L"data-links"&&op!=L"data-resources"&&op!=L"data-inspect"&&op!=L"data-asset"&&op!=L"data-audit"&&op!=L"data-audit-files")return Error("Unsupported operation");
+    if(op!=L"inspect"&&op!=L"generate"&&op!=L"compile"&&op!=L"read"&&op!=L"freshness-probe"&&op!=L"load"&&op!=L"cancel-load"&&op!=L"diagnostics"&&op!=L"cutscene"&&op!=L"scene-inspect"&&op!=L"scene-load"&&op!=L"scene-seek"&&op!=L"scene-advance"&&op!=L"scene-audio"&&op!=L"terrain"&&op!=L"terrain-export"&&op!=L"save-document"&&op!=L"reopen-document"&&op!=L"load-data"&&op!=L"terrain-camera"&&op!=L"terrain-camera-layer"&&op!=L"terrain-camera-select"&&op!=L"terrain-camera-read"&&op!=L"data-read"&&op!=L"data-links"&&op!=L"data-resources"&&op!=L"data-inspect"&&op!=L"data-asset"&&op!=L"data-audit"&&op!=L"data-audit-files")return Error("Unsupported operation");
     if(op==L"load"&&(map.empty()||!map.is_absolute()||!fs::is_regular_file(map)))return Error("Existing absolute --map archive required");
     fs::create_directories(out);
     std::ofstream inventory(out/"windows-before.json",std::ios::binary);inventory<<"[";
@@ -103,12 +115,12 @@ int wmain(int argc,wchar_t** argv){
     HANDLE mapping=CreateFileMappingW(INVALID_HANDLE_VALUE,nullptr,PAGE_READWRITE,0,sizeof(Block),mappingName.c_str());if(!mapping||GetLastError()==ERROR_ALREADY_EXISTS)return Error("Cannot create unique IPC mapping");
     auto b=static_cast<Block*>(MapViewOfFile(mapping,FILE_MAP_ALL_ACCESS,0,0,sizeof(Block)));if(!b)return Error("Cannot map IPC");
     ZeroMemory(b,sizeof(Block));b->compilerErrors=-1;b->magic=kMagic;b->version=kProtocolVersion;b->pid=wantedPid;b->tid=tid;b->target=reinterpret_cast<uint64_t>(target);
-    b->operation=op==L"generate"?Generate:op==L"compile"?Compile:op==L"read"?ReadSource:op==L"freshness-probe"?FreshnessProbe:op==L"load"?LoadDocument:op==L"cancel-load"?CancelLoad:op==L"diagnostics"?Diagnostics:op==L"cutscene"?OpenCutscene:op==L"scene-inspect"?SceneInspect:op==L"scene-load"?SceneLoad:op==L"scene-seek"?SceneSeek:op==L"scene-advance"?SceneAdvance:op==L"scene-audio"?SceneAudio:op==L"terrain"?TerrainView:op==L"terrain-export"?TerrainExport:op==L"save-document"?SaveDocument:op==L"reopen-document"?ReopenDocument:op==L"load-data"?LoadDataModule:op==L"terrain-camera"?TerrainCamera:op==L"terrain-camera-layer"?TerrainCameraLayer:op==L"terrain-camera-select"?TerrainCameraSelect:op==L"data-read"?DataRead:op==L"data-links"?DataLinks:op==L"data-resources"?DataResources:op==L"data-inspect"?DataInspect:op==L"data-asset"?DataAsset:op==L"data-audit"?DataAudit:op==L"data-audit-files"?DataAuditFiles:Inspect;
+    b->operation=op==L"generate"?Generate:op==L"compile"?Compile:op==L"read"?ReadSource:op==L"freshness-probe"?FreshnessProbe:op==L"load"?LoadDocument:op==L"cancel-load"?CancelLoad:op==L"diagnostics"?Diagnostics:op==L"cutscene"?OpenCutscene:op==L"scene-inspect"?SceneInspect:op==L"scene-load"?SceneLoad:op==L"scene-seek"?SceneSeek:op==L"scene-advance"?SceneAdvance:op==L"scene-audio"?SceneAudio:op==L"terrain"?TerrainView:op==L"terrain-export"?TerrainExport:op==L"save-document"?SaveDocument:op==L"reopen-document"?ReopenDocument:op==L"load-data"?LoadDataModule:op==L"terrain-camera"?TerrainCamera:op==L"terrain-camera-layer"?TerrainCameraLayer:op==L"terrain-camera-select"?TerrainCameraSelect:op==L"terrain-camera-read"?TerrainCameraRead:op==L"data-read"?DataRead:op==L"data-links"?DataLinks:op==L"data-resources"?DataResources:op==L"data-inspect"?DataInspect:op==L"data-asset"?DataAsset:op==L"data-audit"?DataAudit:op==L"data-audit-files"?DataAuditFiles:Inspect;
     wcsncpy_s(b->expectedDocument,expected.c_str(),_TRUNCATE);wcsncpy_s(b->expectedMarker,marker.c_str(),_TRUNCATE);
     wcsncpy_s(b->mapPath,map.c_str(),_TRUNCATE);
     wcsncpy_s(b->contextLabel,context.c_str(),_TRUNCATE);
     wcsncpy_s(b->scope,scope.c_str(),_TRUNCATE);
-    b->dataAudit={auditCatalog,auditOffset,auditLimit};
+    b->dataAudit={auditCatalog,auditOffset,auditLimit};b->terrainCamera=customCamera;
     b->terrain.size=imageSize;b->terrain.includeUnits=includeUnits;b->terrain.includeDoodads=includeDoodads;
     b->resumeDialog=resumeDialog;b->timeMs=timeMs;wcsncpy_s(b->camera,camera.c_str(),_TRUNCATE);
     bool dispatchReady=!desktop.empty()&&reinterpret_cast<uintptr_t>(GetPropW(target,kDispatchProperty))==kProtocolVersion;

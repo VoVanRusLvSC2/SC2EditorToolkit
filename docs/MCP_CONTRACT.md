@@ -64,7 +64,7 @@ does not cancel a queued job. Work artifacts may remain after cancellation.
 MCP currently supports protocol negotiation for 2024-11-05, 2025-03-26 and
 2025-06-18. API contract 1 preserves named fields and meanings within 1.x;
 new optional fields/tools may be added. Breaking changes require a major version.
-Native protocol 15 requires the complete matching package and a restarted worker.
+Native protocol 16 requires the complete matching package and a restarted worker.
 
 ## Audit workflow
 
@@ -88,7 +88,13 @@ retain their identity and original full JSONL artifact references.
 
 Incoming uses exclude actor event/message strings, trigger references and
 computed/runtime links. Object comparison covers recorded references/resources
-and coverage counters; it is not a complete scalar effective-value diff.
+and coverage counters. Version 1.1 schema 2 audits additionally record original
+effective field serialization. Use `section:fields` with optional exact `field`
+to query or compare scalar values, array elements and nested fields. Unsupported
+serialization/getters are explicit coverage gaps, and comparisons expose
+`comparisonCoverageComplete`. Reports from 1.0 cannot provide a field-value diff;
+the request rejects them rather than reporting no changes. Runtime upgrades and
+player-dependent values still require a running game.
 Missing files are aggregate findings: object-filtered finding pages select
 directly identified findings; consult the aggregate samples or object resource
 observations for file occurrences. These limitations are deliberate and explicit.

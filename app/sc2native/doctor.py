@@ -8,6 +8,7 @@ from pathlib import Path
 from editor_installation import resolve_editor,validate_editor
 from .render_backend import select_backend
 from .contracts import error_info
+from .version import VERSION,NATIVE_PROTOCOL
 
 
 def doctor(worker,request):
@@ -23,10 +24,10 @@ def doctor(worker,request):
         missing=[name for name in names if not (RES/name).is_file()]
         if missing:raise FileNotFoundError('Missing matching package components: '+', '.join(missing))
         manifest=json.loads((RES/'native-manifest.json').read_text(encoding='utf-8-sig'))
-        if manifest.get('version')!='1.0.0' or manifest.get('nativeProtocol')!=15:raise ValueError('Mixed toolkit/native package versions')
+        if manifest.get('version')!=VERSION or manifest.get('nativeProtocol')!=NATIVE_PROTOCOL:raise ValueError('Mixed toolkit/native package versions')
         from .revisions import digest
         if any(manifest.get('sha256',{}).get(name)!=digest(RES/name) for name in names):raise ValueError('Native package component SHA-256 mismatch')
-        return {'nativeProtocol':15,'directory':str(RES),'components':names,'componentHashesVerified':True,'matchingBundleRequired':True,'binaryRuntimeHandshake':'checked on each live request'}
+        return {'nativeProtocol':NATIVE_PROTOCOL,'directory':str(RES),'components':names,'componentHashesVerified':True,'matchingBundleRequired':True,'binaryRuntimeHandshake':'checked on each live request'}
     check('nativeComponents',helpers)
     def storage():
         probe=worker.work/('doctor-'+uuid.uuid4().hex+'.tmp')
@@ -34,7 +35,9 @@ def doctor(worker,request):
             with probe.open('xb') as stream:stream.write(b'SC2 Editor Toolkit write probe')
         finally:probe.unlink(missing_ok=True)
         free=shutil.disk_usage(worker.work).free
-        return {'work':str(worker.work),'freeBytes':free,'largeAuditSpaceRecommendedBytes':2*1024**3,'lowSpace':free<2*1024**3}
+        from .data_audit import AUDIT_MINIMUM_FREE
+        return {'work':str(worker.work),'freeBytes':free,'largeAuditSpaceRecommendedBytes':AUDIT_MINIMUM_FREE,
+                'fullDataAuditCanStart':free>=AUDIT_MINIMUM_FREE,'lowSpace':free<AUDIT_MINIMUM_FREE}
     check('workStorage',storage)
     def desktop():
         name=input_desktop()

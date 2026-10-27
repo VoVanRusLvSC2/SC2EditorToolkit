@@ -32,6 +32,28 @@ static thread_local TerrainCameraTask* terrainCameraTask;
 static void CALLBACK TerrainCameraTimer(HWND,UINT,UINT_PTR,DWORD){
     auto t=terrainCameraTask;if(!t||t->done)return;auto b=t->b;HWND dialog=ExactRoot(L"Camera Editor");
     if(!dialog){if(GetTickCount64()>t->deadline){Fail(b,140,L"Original Camera Editor dialog not found");t->done=true;}return;}
+    if(t->stage==0&&b->terrainCamera.enabled){
+        auto& r=b->terrainCamera;
+        struct Input{int id;double value;const wchar_t* following;};
+        const Input inputs[]={{50,r.x,nullptr},{52,r.y,nullptr},{54,r.z,nullptr},{45,r.pitch,nullptr},{46,r.roll,nullptr},
+                              {47,r.yaw,L"StaticImageClass"},{47,r.distance,L"Static"},{41,r.fov,nullptr}};
+        HWND set=Control(dialog,L"Button",58);
+        if(!set||Clean(Text(set))!=L"Set Game Camera"){Fail(b,157,L"Original Set Game Camera unavailable");t->stage=2;}
+        else{
+            bool valid=true;
+            for(auto& input:inputs){
+                HWND edit=CameraScalarControl(dialog,input.id,input.following);
+                if(!edit){valid=false;break;}
+                wchar_t text[64]{};swprintf_s(text,L"%.9f",input.value);
+                SendMessageW(edit,WM_SETTEXT,0,reinterpret_cast<LPARAM>(text));
+                SendMessageW(GetParent(edit),WM_COMMAND,MAKEWPARAM(input.id,EN_CHANGE),reinterpret_cast<LPARAM>(edit));
+                SendMessageW(GetParent(edit),WM_COMMAND,MAKEWPARAM(input.id,EN_KILLFOCUS),reinterpret_cast<LPARAM>(edit));
+            }
+            if(!valid){Fail(b,157,L"Original camera input controls are ambiguous");t->stage=2;}
+            else {t->stage=3;++b->commandsDispatched;SendMessageW(dialog,WM_COMMAND,MAKEWPARAM(58,BN_CLICKED),reinterpret_cast<LPARAM>(set));return;}
+        }
+    }
+    if(t->stage==3)t->stage=0;
     if(t->stage==0){
         HWND get=Control(dialog,L"Button",57);
         if(!get||Clean(Text(get))!=L"Get Game Camera"){Fail(b,144,L"Original current-camera readback command missing");t->stage=2;}
@@ -45,14 +67,23 @@ static void CALLBACK TerrainCameraTimer(HWND,UINT,UINT_PTR,DWORD){
         if(valid&&m.distance>0&&m.fov>0&&m.fov<180)m.valuesRead=1;else Fail(b,145,L"Original camera parameters could not be read uniquely");
         Log(b,L"map camera name=%s target=%.6f,%.6f,%.6f pitch=%.6f yaw=%.6f roll=%.6f distance=%.6f fov=%.6f read=%u\n",m.name,m.x,m.y,m.z,m.pitch,m.yaw,m.roll,m.distance,m.fov,m.valuesRead);
     }
-    HWND cancel=Control(dialog,L"Button",12);if(!cancel||Clean(Text(cancel))!=L"Cancel"){
+    // Cancel restores the pre-dialog camera, including a Set Game Camera
+    // preview. Commit a successful explicit view change with the original OK.
+    bool commit=b->terrainCamera.enabled&&!b->error;
+    int closeId=commit?11:12;HWND cancel=Control(dialog,L"Button",closeId);
+    if(!cancel||Clean(Text(cancel))!=(commit?L"OK":L"Cancel")){
         Fail(b,146,L"Original camera dialog cancellation unavailable");t->done=true;PostMessageW(dialog,WM_CLOSE,0,0);return;
     }
-    t->done=true;PostMessageW(dialog,WM_COMMAND,MAKEWPARAM(12,BN_CLICKED),reinterpret_cast<LPARAM>(cancel));
+    t->done=true;PostMessageW(dialog,WM_COMMAND,MAKEWPARAM(closeId,BN_CLICKED),reinterpret_cast<LPARAM>(cancel));
 }
+static void RunTerrainCameraDialog(Block* b,HWND terrain);
 static void TerrainCameraOperation(Block* b,HWND terrain){
-    if(!b->camera[0]){Fail(b,147,L"Explicit unique saved-camera display name required");return;}
+    if(!b->camera[0]&&!b->terrainCamera.enabled&&b->operation!=TerrainCameraRead){Fail(b,147,L"Explicit saved camera or custom parameters required");return;}
     if(ExactRoot(L"Camera Editor")){Fail(b,148,L"A pre-existing camera dialog blocks selection");return;}
+    if(b->terrainCamera.enabled||b->operation==TerrainCameraRead){
+        b->mapCamera.selected=1;wcsncpy_s(b->mapCamera.name,L"Current Terrain Camera",_TRUNCATE);
+        RunTerrainCameraDialog(b,terrain);return;
+    }
     if(b->operation==TerrainCameraLayer){
         auto layer=FindCommand(terrain,{L"Layer"},{L"Cameras"});if(!layer){Fail(b,143,L"Original Cameras layer missing");return;}
         ++b->commandsDispatched;SendMessageW(terrain,WM_COMMAND,layer,0);
@@ -106,6 +137,9 @@ static void TerrainCameraOperation(Block* b,HWND terrain){
     // manipulator from the shot. This does not edit the saved camera record.
     selected.state=0;SendMessageW(list,LVM_SETITEMSTATE,WPARAM(-1),reinterpret_cast<LPARAM>(&selected));
     SendMessageW(list,LVM_SETSELECTIONMARK,0,-1);
+    RunTerrainCameraDialog(b,terrain);
+}
+static void RunTerrainCameraDialog(Block* b,HWND terrain){
     UINT command=TerrainCameraCommand(terrain,L"Camera Editor");if(!command){Fail(b,141,L"Original Terrain Camera Editor command missing");return;}
     HMODULE pinned=nullptr;if(!GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS|GET_MODULE_HANDLE_EX_FLAG_PIN,reinterpret_cast<LPCWSTR>(&TerrainCameraTimer),&pinned)){Fail(b,142,L"Cannot retain camera callback lifetime");return;}
     TerrainCameraTask task{b,false,GetTickCount64()+10000};terrainCameraTask=&task;auto timer=SetTimer(nullptr,0,100,TerrainCameraTimer);

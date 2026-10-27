@@ -27,6 +27,12 @@ Submit this body to `POST /jobs/submit`, then use the existing job status/wait
 routes. MCP supports the same body with `sc2_submit_job`. A synchronous call can
 use `POST /data/audit` or `sc2_audit_data` with just the `arguments` object.
 Omit `map` to audit the worker's current saved document. `.SC2Mod` is supported.
+Use a `--work` volume with at least **12 GiB free** for a full field-value audit.
+The native page evidence, large JSONL, SQLite field index and immutable artifact
+copies are retained. An observed Nydus index alone is about 3.8 GB. The operation
+checks storage before launching an Editor, maintains a 512 MiB reserve while
+traversing/indexing, and checks room for artifact copies. Low space fails with
+`STORAGE_FULL`; it does not silently omit fields or delete old user files.
 `limit` bounds summary finding samples to 1–500; it never limits traversal or the
 downloadable reports. Use a different `--work` for each independent server.
 
@@ -47,6 +53,36 @@ the archive bytes are never rewritten to normalize it.
 
 ## Results and coverage
 
+Version 1.1 records effective field values as well as link/resource observations.
+Schema 2 object records include `fieldValues`: exact native field paths (including
+array indices and nested members), original type names, serialized UTF-8 values
+and a per-value status. Values come from the original type formatters applied to
+the original getter result; they are not reconstructed from authored XML.
+Verified numeric, color and vector storage additionally carries `valueBits`
+(little-endian hex, encoding version 2). `CFixed` also retains `scalarBits` in
+numeric hex form. This means a change smaller
+than the native textual precision is still detectable. No raw pointers or opaque
+native memory are exported. Empty text is distinct from unavailable/error status.
+
+`fieldValueCoverage` reports recording availability, the serialized/recorded
+counts, serialization errors and completeness separately from reference/resource
+validation. A serialized string does not by itself prove that embedded actor
+events or computed links are semantically valid. Unsupported formatters and
+getter failures remain explicit gaps; they do not produce a complete verdict.
+The snapshot is the saved effective default variant, not a running player's
+upgrade/behavior state.
+
+Query with `section:"fields"`, optional exact `catalog`, `object_id` and `field`,
+and the normal offset/limit. Compare two reports using the same section to obtain
+added, removed or modified fields with before/after values. Array members and
+nested fields have their own identities. These operations remain available after
+the Editor closes and the artifact store restarts. Old schema 1 reports contain
+no scalar values: field queries/comparison reject them explicitly. Re-audit the
+source rather than interpreting missing observations as unchanged values.
+Different field-value encoding versions are rejected for comparison; regenerate
+both reports with the same toolkit. Bit storage is restricted to verified
+primitive/value layouts; opaque pointers are never compared as addresses.
+
 - `catalogTraversalComplete`: every effective object in all native catalogs
   was traversed, with verified pagination and stable original Data sources.
 - `referenceAndFileValidationComplete`: false when getters could not be read,
@@ -57,7 +93,8 @@ the archive bytes are never rewritten to normalize it.
 - `mapRevision`: SHA-256 of the supplied archive. Both supplied and private
   archives must remain unchanged for a successful report.
 - `objectsArtifact`: complete JSONL records with catalog/ID/class, default flag,
-  typed references, resource paths and coverage counters/samples.
+  typed references, resource paths and coverage counters/samples; schema 2 also
+  includes the materialized effective `fieldValues`.
 - `findingsArtifact`: complete JSONL findings; summary samples may be limited.
 - `reportArtifact`: downloadable JSON summary, including native diagnostics and
   the hidden-desktop observation. Artifacts use the existing authenticated,

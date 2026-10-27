@@ -1,6 +1,7 @@
 import argparse,base64,io,json,os,sys
 from pathlib import Path
 from .modules import capabilities
+from .version import VERSION
 from .runtime import watch_frozen_parent
 from .session import Worker
 from .jobs import JobQueue,OPERATIONS
@@ -11,6 +12,7 @@ PROPERTIES={'editor_path':{'type':'string','description':'Owned startup: origina
  'scope':{'type':'string'},'context_label':{'type':'string'},'locale':{'type':'string'},'compile':{'type':'boolean'},
  'output':{'type':'string'},'overwrite':{'type':'boolean'},'scene':{'type':'string'},'camera':{'type':'string'},
  'map_camera_id':{'type':'string','description':'Exact saved ObjectCamera ID from sc2_list_map_cameras; applies only to Terrain capture'},
+ 'terrain_camera':{'type':'object','properties':{k:{'type':'number'} for k in ('x','y','z','pitch','yaw','roll','distance','fov')},'required':['x','y','z','pitch','yaw','roll','distance','fov'],'additionalProperties':False,'description':'Custom native Terrain camera: target XYZ, pitch/yaw/roll in degrees, distance and FOV in degrees. Mutually exclusive with map_camera_id. Uses the original Camera Editor Set Game Camera and verifies native numeric readback.'},
  'time_ms':{'type':'number','minimum':0,'maximum':600000},'allow_empty':{'type':'boolean'},
  'size':{'type':'integer','enum':[512,1024,2048,4096],'default':2048},'include_units':{'type':'boolean','default':True},'include_doodads':{'type':'boolean','default':True},
  'query':{'type':'string','maxLength':256},'kinds':{'type':'array','minItems':1,'items':{'type':'string','enum':['unit','doodad','point','camera','other']}},
@@ -27,7 +29,8 @@ PROPERTIES={'editor_path':{'type':'string','description':'Owned startup: origina
 PROPERTIES.update({
  'report_id':{'type':'string','minLength':32,'maxLength':32},
  'before_report_id':{'type':'string','minLength':32,'maxLength':32},'after_report_id':{'type':'string','minLength':32,'maxLength':32},
- 'section':{'type':'string','enum':['objects','findings'],'default':'findings'},
+ 'section':{'type':'string','enum':['objects','findings','fields'],'default':'findings'},
+ 'field':{'type':'string','minLength':1,'maxLength':1024,'description':'Exact native effective field path; requires section=fields'},
  'kind':{'type':'string','minLength':1},'finding_status':{'type':'string','enum':['present','missing','unknown']},
  'target_catalog':{'type':'string','minLength':1},'target_id':{'type':'string','minLength':1},
  'trigger_strings':{'type':'string','minLength':1},'game_strings':{'type':'string','minLength':1},
@@ -36,15 +39,15 @@ for _name in ('editor_path','template','map','scope','context_label','locale','o
     PROPERTIES[_name]['minLength']=1
 TOOLS=[
  ('sc2_doctor','Read-only installation preflight: supported Editor binary, packaged helpers, renderer, work storage, desktop and optional media helpers. Does not launch Editor or claim a GPU device was tested.','doctor',[]),
- ('sc2_query_audit','Read a bounded page of immutable audit objects or findings by report_id (reportArtifact.id). Exact catalog/object and finding filters; no Editor launch.','query_audit',['report_id']),
+ ('sc2_query_audit','Read a bounded page of immutable audit objects, findings or original effective field values by report_id (reportArtifact.id). Use section=fields and optional exact catalog/object_id/field for recorded scalar, array-member and nested values, type, serialization status and exact bits where supported. Field-value audits are required for that section. No Editor launch.','query_audit',['report_id']),
  ('sc2_find_object_uses','Find incoming original typed catalog references to target_catalog/target_id in a completed audit. Return source object and exact native field path. Excludes opaque actor strings, computed references and trigger uses. No Editor launch.','find_object_uses',['report_id','target_catalog','target_id']),
- ('sc2_compare_audits','Compare two immutable audit report IDs. Paginate added/removed findings or added/removed/modified typed object observations. Reports project revisions and adapter comparability; not a complete scalar Data value diff. No Editor launch.','compare_audits',['before_report_id','after_report_id']),
+ ('sc2_compare_audits','Compare two immutable audit report IDs. Paginate added/removed findings or added/removed/modified typed object observations. Reports project revisions and adapter comparability; section=fields compares original effective values by exact catalog/object/field path, including scalar bits where supported; requires new field-value audits and reports coverage. No Editor launch.','compare_audits',['before_report_id','after_report_id']),
  ('sc2_submit_job','Queue one operation on the owned hidden Editor. Returns immediately; use job status/wait. FIFO, bounded queue, deadline, no automatic replay.','jobs.submit',['operation']),
  ('sc2_job_status','Read queued/running/finished job state and native phase without controlling the desktop.','jobs.status',['job_id']),
  ('sc2_job_wait','Wait up to 30 seconds for a job; may return RUNNING.','jobs.wait',['job_id']),
  ('sc2_job_cancel','Cancel a queued job, or discard only the owned private Editor to stop a running job. Running cancellation can leave private artifacts; no automatic retry.','jobs.cancel',['job_id']),
  ('sc2_check_map','Create an immutable report bound to the source SHA-256: original loading/Data diagnostics, Galaxy generation, native compilation and Galaxy export; optional private save/reopen. Unknown is not success.','check_document',[]),
- ('sc2_audit_data','Traverse all original effective Data catalogs in an owned hidden Editor, including loaded map/mod dependencies. Check typed catalog targets and file paths through the original merged Archive Browser; return exact revision, per-catalog coverage, findings and full JSONL artifacts. Opaque types, tokens and runtime/computed references remain explicit coverage gaps. Does not validate resource binary integrity or gameplay semantics. Optional map autostarts a worker; use a queued audit_data job for long audits.','audit_data',[]),
+ ('sc2_audit_data','Traverse all original effective Data catalogs in an owned hidden Editor, including loaded map/mod dependencies. Record every materialized leaf through original native type serialization, including nested arrays and scalar values with explicit failures. Check typed catalog targets and file paths through the original merged Archive Browser; return exact revision, per-catalog coverage, findings and full JSONL artifacts. Opaque types, tokens and runtime/computed references remain explicit coverage gaps. Does not validate resource binary integrity or gameplay semantics. Optional map autostarts a worker; use a queued audit_data job for long audits.','audit_data',[]),
  ('sc2_read_data','Select exact catalog/object ID in the original Data editor and read native fields, inherited/effective UI values, original object columns and observed object source.','read_data',['catalog','object_id']),
  ('sc2_data_links','Read original Editor object explorer links for an exact catalog/object ID. Returns observed native links, not a reconstructed XML graph.','data_links',['catalog','object_id']),
  ('sc2_check_resources','Check the selected Model main file in the original merged Archive Browser with native path-token resolution and diagnostics. Binary integrity, nested resources and other catalogs remain unvalidated.','check_resources',['catalog','object_id']),
@@ -58,7 +61,7 @@ TOOLS=[
  ('sc2_cutscene_open','Load a private copy of a native cutscene in the hidden original Editor. Supply scene and optional template.','cutscene_open',[]),
  ('sc2_cutscene_seek','Select a unique native camera and time_ms. Return actual Editor time and confirmation.','cutscene_seek',[]),
  ('sc2_capture_frame','Capture the selected cutscene renderer to PNG. Optional camera/time_ms selects a frame first. Black frames fail by default.','capture_frame',[]),
- ('sc2_capture_terrain','Capture original Terrain to PNG in the background. Optional map opens a private .SC2Map; map_camera_id selects a unique saved camera with native target readback. Captures editor placements; does not execute Galaxy triggers or play a trigger cinematic. Cutscene time_ms/camera remain separate.','capture_terrain',[]),
+ ('sc2_capture_terrain','Capture original Terrain to PNG in the background. Optional map opens a private .SC2Map; map_camera_id selects a unique saved camera; terrain_camera sets explicit target XYZ, pitch/yaw/roll, distance and FOV through the original Camera Editor, with fresh native readback after closing it. Supply only one camera selector. Captures editor placements; does not execute Galaxy triggers or play a trigger cinematic. Cutscene time_ms/camera remain separate.','capture_terrain',[]),
  ('sc2_list_map_cameras','List saved ObjectCamera IDs, names, original attributes and CameraValue entries without starting Editor. Supply map or use the current saved map. Optional locale resolves GameStrings names. Runtime-created/moved cameras and trigger playback are outside this operation.','list_map_cameras',[]),
  ('sc2_export_map_image','Export the COMPLETE map from above with the original Editor Map Image Export: full bounds, all quadrants, 90 degree camera, terrain/water/shadows and units/doodads enabled by default. Unit and doodad visibility are independent original-model filters with native readback before PNG publication. Optional map autostarts a hidden worker. size is horizontal pixel resolution; native bounds determine height. Returns full PNG download plus bounded preview.','export_map_image',[]),
  ('sc2_export_video','Export the entire cutscene or start_ms..end_ms (exclusive) to H.264 MP4 with the selected camera. Original native frames and original Editor audio (AAC by default; include_audio=false for silent video), requires FFmpeg/ffprobe.','export_video',[]),
@@ -96,7 +99,7 @@ def main():
                 if method=='initialize':
                     version=params.get('protocolVersion','2025-06-18')
                     if version not in ('2024-11-05','2025-03-26','2025-06-18'):version='2025-06-18'
-                    result={'protocolVersion':version,'serverInfo':{'name':'sc2-native-toolkit','version':'1.0.0'},'capabilities':{'tools':{'listChanged':False}},
+                    result={'protocolVersion':version,'serverInfo':{'name':'sc2-native-toolkit','version':VERSION},'capabilities':{'tools':{'listChanged':False}},
                         'instructions':'Run sc2_doctor first. Use sc2_submit_job for long native operations, then status/wait/cancel. Job SUCCEEDED means execution completed, not validation passed: inspect result.outcome and native validation/compiler fields. Use audit reportArtifact.id for query, incoming uses and comparison. Unknown coverage is incomplete. Each server owns one hidden Editor; multiple servers require distinct work directories. No physical input or visible Editor attachment.'};initialized=True
                 elif method=='ping':result={}
                 elif not initialized:raise ValueError('Initialize the MCP session first')

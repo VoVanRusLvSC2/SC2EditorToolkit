@@ -328,7 +328,7 @@ static void Process(Block* b) {
     if(b->operation==ReopenDocument){if(!IsWindowEnabled(target)){Fail(b,12,L"A modal dialog blocks native reopen");return;}ReopenNativeDocument(b,target);return;}
     if(b->operation==LoadDataModule){if(!IsWindowEnabled(target)){Fail(b,12,L"A modal dialog blocks native Data loading");return;}LoadNativeDataModule(b,target);return;}
     if(b->operation==DataRead||b->operation==DataLinks||b->operation==DataResources||b->operation==DataInspect||b->operation==DataAsset||b->operation==DataAudit||b->operation==DataAuditFiles){DataOperation(b,target);return;}
-    if(b->operation==TerrainView||b->operation==TerrainExport||(b->operation==TerrainCamera||b->operation==TerrainCameraLayer||b->operation==TerrainCameraSelect)){if(!IsWindowEnabled(target)){Fail(b,12,L"A modal dialog blocks the document");return;}TerrainOperation(b,target);return;}
+    if(b->operation==TerrainView||b->operation==TerrainExport||(b->operation==TerrainCamera||b->operation==TerrainCameraLayer||b->operation==TerrainCameraSelect||b->operation==TerrainCameraRead)){if(!IsWindowEnabled(target)){Fail(b,12,L"A modal dialog blocks the document");return;}TerrainOperation(b,target);return;}
     if(b->operation==SceneInspect||b->operation==SceneLoad||(b->operation==SceneSeek||b->operation==SceneAdvance||b->operation==SceneAudio)){SceneOperation(b);return;}
     if(b->operation==OpenCutscene){
         UINT command=FindCommand(target,{L"Modules",L"Модули"},{L"Cutscene Editor",L"Cutscenes",L"Редактор сцен",L"Редактор кат-сцен"});

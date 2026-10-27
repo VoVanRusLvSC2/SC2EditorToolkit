@@ -1,6 +1,6 @@
 param([string]$OutputDirectory='bin-release')
 . (Join-Path $PSScriptRoot 'scripts\toolchain.ps1')
-$destination=Join-Path $PSScriptRoot $OutputDirectory
+$destination=if([IO.Path]::IsPathRooted($OutputDirectory)){$OutputDirectory}else{Join-Path $PSScriptRoot $OutputDirectory}
 New-Item -ItemType Directory -Path $destination -Force | Out-Null
 Push-Location $destination
 try {

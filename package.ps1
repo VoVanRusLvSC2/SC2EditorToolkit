@@ -16,7 +16,12 @@ if($hasVulkan -and (Get-FileHash -LiteralPath (Join-Path $renderer 'd3d9.dll')).
 $nativeHashes=@{}
 foreach($file in $binaries){$nativeHashes[$file]=(Get-FileHash -LiteralPath (Join-Path $nativeDirectory $file)).Hash.ToLowerInvariant()}
 $nativeManifest=Join-Path $nativeDirectory 'native-manifest.json'
-@{version='1.0.0';nativeProtocol=15;sha256=$nativeHashes} | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath $nativeManifest -Encoding utf8
+$versionSource=Get-Content -LiteralPath (Join-Path $PSScriptRoot 'app\sc2native\version.py') -Raw
+$toolkitVersion=[regex]::Match($versionSource,"VERSION='([^']+)'").Groups[1].Value
+$nativeProtocol=[int][regex]::Match($versionSource,'NATIVE_PROTOCOL=(\d+)').Groups[1].Value
+$protocolSource=Get-Content -LiteralPath (Join-Path $PSScriptRoot 'src\protocol.h') -Raw
+if([int][regex]::Match($protocolSource,'kProtocolVersion=(\d+)').Groups[1].Value -ne $nativeProtocol){throw 'Python and native protocol versions disagree'}
+@{version=$toolkitVersion;nativeProtocol=$nativeProtocol;sha256=$nativeHashes} | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath $nativeManifest -Encoding utf8
 foreach($program in @(@{Name='SC2NativeAPI';Entry='hidden_api.py'},@{Name='SC2NativeMCP';Entry='mcp_server.py'})){
  # Pillow's optional NumPy integration is unused. Do not pull build-machine
  # analysis extras (and their BLAS DLLs) into the redistributable toolkit.

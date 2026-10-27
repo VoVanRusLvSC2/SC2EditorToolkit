@@ -38,6 +38,24 @@ def choose_camera(cameras,ident):
 FIELDS={'Pitch':'pitch','Yaw':'yaw','Roll':'roll','Distance':'distance','FieldOfView':'fov'}
 
 
+def terrain_camera_options(value):
+    """Explicit camera request; defaults are never taken from another scene."""
+    from .map_objects import number
+    keys={'x','y','z','pitch','yaw','roll','distance','fov'}
+    if not isinstance(value,dict) or set(value)!=keys:
+        raise ValueError('terrain_camera must contain exactly x, y, z, pitch, yaw, roll, distance and fov')
+    result={key:number(value[key],'terrain_camera.'+key) for key in keys}
+    for key in ('x','y','z'):
+        if abs(result[key])>100000:raise ValueError('terrain_camera.'+key+' exceeds the supported world bound')
+    if not -90<=result['pitch']<=90:raise ValueError('terrain_camera.pitch must be -90..90 degrees')
+    for key in ('yaw','roll'):
+        if not -360<=result[key]<=360:raise ValueError('terrain_camera.'+key+' must be -360..360 degrees')
+    if not .1<=result['distance']<=100000:raise ValueError('terrain_camera.distance must be .1..100000')
+    if not 1<=result['fov']<=179:raise ValueError('terrain_camera.fov must be 1..179 degrees')
+    return result
+
+
+
 def verify_readback(camera,actual):
     if not actual.get('selected') or not actual.get('valuesRead') or actual.get('name')!=camera['name']:
         raise RuntimeError('Original map camera selection/readback was not confirmed')
@@ -55,6 +73,16 @@ def verify_readback(camera,actual):
         checked.append(key)
     return {'checked':checked,'unverifiedSavedParameters':[key for key in camera['values'] if key not in FIELDS],
             'numericTolerance':.11,'targetTolerance':.02,'source':'original Get Game Camera controls; bounded native UI precision'}
+
+
+def verify_custom_readback(request,actual):
+    expected=terrain_camera_options(request)
+    saved={'name':'Current Terrain Camera','target':{k:expected[k] for k in ('x','y')},
+           'values':{source:expected[key] for source,key in FIELDS.items()}}
+    result=verify_readback(saved,actual)
+    if abs(actual['target']['z']-expected['z'])>.02:raise RuntimeError('Original camera target Z does not match the request')
+    result['checked'].append('target.z')
+    return result
 
 
 def read_camera_records(archive,tool,locale='enUS'):

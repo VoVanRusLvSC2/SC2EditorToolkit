@@ -42,6 +42,16 @@ Preview is disabled, complete sibling lists are cached, matching is case
 insensitive, and only file leaves count as present. The browser is cancelled,
 not accepted or exported.
 
+Schema 2 also invokes each materialized leaf's original type formatter on the
+owned GUI thread. Its output is an original growable UTF-8 SSO string, initialized
+with bounded inline storage; any original heap allocation is released with the
+same original allocator. Formatter errors, unsupported/no-op struct formatters
+and truncation never become successful empty values. Native allocation/read
+failures abort publication. Verified numeric types also expose scalar bits,
+preserving differences below textual formatter precision. Other raw native
+layouts and pointers are not exported. This serializes actor-event strings but
+does not turn their contents into verified reference edges.
+
 Pages contain whole objects and an explicit next offset. The transport bound
 may shorten a page at an object boundary; it never truncates an object and
 reports success. One oversized object or an unbounded/unsupported native

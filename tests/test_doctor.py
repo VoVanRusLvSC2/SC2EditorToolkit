@@ -1,3 +1,4 @@
+from sc2native.version import VERSION,NATIVE_PROTOCOL
 import hashlib
 import json
 import tempfile
@@ -14,7 +15,7 @@ class Preflight(unittest.TestCase):
             hashes={}
             for name in names:
                 (root/name).write_bytes(name.encode());hashes[name]=hashlib.sha256(name.encode()).hexdigest()
-            (root/'native-manifest.json').write_text(json.dumps({'version':'1.0.0','nativeProtocol':15,'sha256':hashes}),encoding='utf8')
+            (root/'native-manifest.json').write_text(json.dumps({'version':VERSION,'nativeProtocol':NATIVE_PROTOCOL,'sha256':hashes}),encoding='utf8')
             worker=SimpleNamespace(work=root,editor_preference=None,alive=lambda:False)
             with patch('sc2native.runtime.RES',root),patch('sc2native.runtime.input_desktop',return_value='Default'),patch('sc2native.doctor.resolve_editor',return_value='editor'),patch('sc2native.doctor.validate_editor',return_value={'originalBinaryVerified':True}),patch('sc2native.doctor.select_backend',return_value='legacy'),patch('sc2native.video.encoder_tools',side_effect=RuntimeError('FFmpeg missing')):
                 value=doctor(worker,{})

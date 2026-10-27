@@ -43,7 +43,37 @@ not publish an apparently successful PNG.
 The same operation is available through the existing
 `sc2_export_map_image` MCP tool. No additional MCP tools are required.
 
-## What the filters mean
+## Explicit Terrain camera (1.1)
+
+Use `POST /terrain/capture` or the existing `sc2_capture_terrain` with:
+
+```json
+{
+  "map": "D:/Projects/Example.SC2Map",
+  "terrain_camera": {
+    "x": 32, "y": 24, "z": 8.5,
+    "pitch": 56, "yaw": 180, "roll": 0,
+    "distance": 34, "fov": 27.8
+  }
+}
+```
+
+All eight fields are explicit finite numbers. Angles and FOV are degrees; XYZ
+is the native camera target, not the camera eye position. This selector is
+mutually exclusive with `map_camera_id`. It uses the original Camera Editor's
+Set Game Camera command on the owned private desktop, commits the view and reads
+Get Game Camera again in a fresh dialog before publishing a renderer PNG.
+Clamped/mismatched settings fail numeric verification. It does not alter the
+source archive, send physical input, create a saved camera or execute triggers.
+The image resolution is the original native viewport resolution, returned in
+the response; arbitrary output resolution is not currently exposed.
+
+This operation is a perspective viewport capture. Use `sc2_export_map_image`
+for the separate complete overhead image at 512/1024/2048/4096 pixels wide. A
+`capture_map_region` rectangle remains a crop of that complete overhead export;
+it is not used for custom-camera captures.
+
+## Native visibility filters
 
 The visibility filters control native unit and doodad models. They do not delete
 placements from a map. Terrain effects such as Hatchery creep may remain when

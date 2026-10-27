@@ -18,6 +18,19 @@ static std::string String(uintptr_t p){
 static std::string Range(uintptr_t p){auto a=At<uintptr_t>(p),z=At<uintptr_t>(p+8);if(z<a||z-a>1048576)throw std::runtime_error("Original Data range bound exceeded");std::string v(z-a,0);if(z>a&&!Copy(a,v.data(),v.size()))throw std::runtime_error("Unreadable original Data range");return v;}
 static std::string Q(const std::string& value){std::string out="\"";for(unsigned char c:value){if(c=='"'||c=='\\'){out+='\\';out+=char(c);}else if(c<32){char b[7];sprintf_s(b,"\\u%04x",c);out+=b;}else out+=char(c);}return out+'"';}
 struct Ref{uintptr_t pointer=0;uint64_t extra=0;};
+// The original type formatter takes a value reference and the Editor's UTF-8
+// growable SSO string. Its allocation must be released by the same allocator.
+struct NativeText{uint32_t length=1,capacity=(256u<<2)|1u;char bytes[256]{};};
+static uint32_t Format(uintptr_t method,const Ref* value,NativeText* text){
+    __try{return reinterpret_cast<uint32_t(__fastcall*)(const Ref*,NativeText*)>(method)(value,text);}
+    __except(EXCEPTION_EXECUTE_HANDLER){return 0xffffffff;}
+}
+static bool ReleaseText(uintptr_t base,NativeText* text){
+    __try{
+        if((text->capacity&3)==3)reinterpret_cast<void(__fastcall*)(void*,uint32_t)>(base+0x2062f0)(*reinterpret_cast<void**>(text->bytes),0);
+        return true;
+    }__except(EXCEPTION_EXECUTE_HANDLER){return false;}
+}
 using Getter=uint32_t(__fastcall*)(uintptr_t,const Ref*,Ref*,uint32_t*,uint8_t*,uint32_t*);
 static uint32_t Get(uintptr_t method,uintptr_t field,const Ref* object,Ref* value,uint32_t* index,uint8_t* selector,uint32_t* aux){
     __try{return reinterpret_cast<Getter>(method)(field,object,value,index,selector,aux);}
@@ -27,7 +40,7 @@ struct Catalog{uint32_t index;uintptr_t pointer;std::string name;std::vector<uin
 struct Context{
     uintptr_t base;std::vector<Catalog> catalogs;std::map<std::string,size_t> byName;
     std::string activePath,activeType;
-    uint64_t fields=0,leaves=0,getterErrors=0,opaque=0;std::vector<std::string> references,resources,unknown;
+    uint64_t fields=0,leaves=0,getterErrors=0,opaque=0,valueErrors=0;std::vector<std::string> references,resources,unknown,values;
     explicit Context():base(reinterpret_cast<uintptr_t>(GetModuleHandleW(nullptr))){
         const uint8_t signature[]={0x48,0x89,0x5c,0x24,0x08,0x57,0x48,0x83,0xec,0x40};
         if(memcmp(reinterpret_cast<void*>(base+0x21c9e40),signature,sizeof(signature))||memcmp(reinterpret_cast<void*>(base+0x21c77e0),signature,sizeof(signature)))throw std::runtime_error("Original Data reflection signature mismatch");
@@ -46,6 +59,37 @@ struct Context{
         }
     }
     void Unknown(const std::string& path,const std::string& type,const char* reason){opaque++;if(unknown.size()<100)unknown.push_back("{\"field\":"+Q(path)+",\"type\":"+Q(type)+",\"reason\":"+Q(reason)+"}");}
+    void Value(uintptr_t type,const Ref& value,const std::string& path,const std::string& typeName){
+        auto method=At<uintptr_t>(type+0x80);std::string text,status="serialized",reason;
+        if(method<base||method>=base+0x3700000||method==base+0x21c9200){status="unsupported";reason="No verified original leaf formatter";}
+        else{
+            NativeText output;auto code=Format(method,&value,&output);
+            try{
+                if(code) {status="error";reason="Original formatter rejected the value: "+std::to_string(code);}
+                else if(output.length&2){status="error";reason="Original formatter truncated its output";}
+                else text=String(reinterpret_cast<uintptr_t>(&output));
+            }catch(...){ReleaseText(base,&output);throw;}
+            if(!ReleaseText(base,&output))throw std::runtime_error("Original formatted value allocation could not be released");
+        }
+        if(status!="serialized")valueErrors++;
+        std::string raw;
+        // Exact scalar bits preserve changes below the native textual precision.
+        // Never emit raw pointers or unknown in-memory layouts.
+        auto category=At<int32_t>(type+0x24);auto bytes=At<uint32_t>(type+0x2c);
+        bool numeric=category==2||category==3||category==5||category==6||category==7||category==8;
+        bool plain=typeName=="bool8"||typeName=="bool32"||typeName=="CFangleRate"||typeName=="CColor"||
+                   typeName=="C2Vector"||typeName=="C3Vector"||typeName=="CScaleVector"||typeName=="CQuad"||typeName=="CRange";
+        if((numeric||plain)&&bytes&&bytes<=16){
+            unsigned char bits[16]{};if(!Copy(value.pointer,bits,bytes))throw std::runtime_error("Original numeric value bytes unreadable");
+            const char* alphabet="0123456789abcdef";std::string hex;
+            for(uint32_t i=0;i<bytes;i++){hex+=alphabet[bits[i]>>4];hex+=alphabet[bits[i]&15];}
+            raw=",\"valueBits\":"+Q(hex)+",\"valueBitEncoding\":\"little-endian original numeric/color/vector storage\"";
+            if(typeName=="CFixed"){
+                char fixed[9]{};sprintf_s(fixed,"%08x",At<uint32_t>(value.pointer));raw+=",\"scalarBits\":"+Q(fixed);
+            }
+        }
+        values.push_back("{\"field\":"+Q(path)+",\"type\":"+Q(typeName)+",\"status\":"+Q(status)+",\"value\":"+Q(text)+raw+(reason.empty()?"":",\"reason\":"+Q(reason))+"}");
+    }
     void Link(uintptr_t value,const std::string& path,const std::string& typeName,const std::string& catalog){
         auto link=At<uintptr_t>(value);if(!link)return;
         auto record=At<uintptr_t>(link+0x30);auto target=record?String(record+0x18):std::string();
@@ -67,9 +111,10 @@ struct Context{
                 if(code){if(code!=0x2001002b){getterErrors++;Unknown(stem,typeName,"Original getter rejected a value");}ended=true;break;}
                 if(actual<index||actual>=65536)throw std::runtime_error("Original Data getter returned an invalid array index");index=actual;
                 fields++;auto path=stem+((size!=1)?'['+std::to_string(actual)+']':"");
-                if(!value.pointer){Unknown(path,typeName,"Original getter returned no value");continue;}
+                if(!value.pointer){Unknown(path,typeName,"Original getter returned no value");valueErrors++;values.push_back("{\"field\":"+Q(path)+",\"type\":"+Q(typeName)+",\"status\":\"unavailable\",\"value\":null}");continue;}
                 if(nested){Walk(nested,value,selected,path,depth+1);continue;}
                 leaves++;
+                Value(type,value,path,typeName);
                 if(category==9){
                     std::string catalog=typeName.size()>5&&typeName.front()=='C'&&typeName.substr(typeName.size()-4)=="Link"?typeName.substr(1,typeName.size()-5):"";
                     Link(value.pointer,path,typeName,catalog);
@@ -90,19 +135,19 @@ struct Context{
     }
 };
 static std::string Join(const std::vector<std::string>& values){std::string out="[";for(auto& v:values){if(out.size()>1)out+=',';out+=v;}return out+']';}
-static std::string Counts(const Context& c){return "\"fieldsVisited\":"+std::to_string(c.fields)+",\"leafValuesVisited\":"+std::to_string(c.leaves)+",\"getterErrors\":"+std::to_string(c.getterErrors)+",\"unclassifiedValues\":"+std::to_string(c.opaque);}
+static std::string Counts(const Context& c){return "\"fieldsVisited\":"+std::to_string(c.fields)+",\"leafValuesVisited\":"+std::to_string(c.leaves)+",\"getterErrors\":"+std::to_string(c.getterErrors)+",\"unclassifiedValues\":"+std::to_string(c.opaque)+",\"valueSerializationErrors\":"+std::to_string(c.valueErrors);}
 static void Page(Block* b,HWND data){
     try{
         auto& request=b->dataAudit;
         if(request.catalog>=109||!request.limit||request.limit>256)throw std::runtime_error("Invalid native Data audit page");
         Context c;auto& catalog=c.catalogs.at(request.catalog);if(request.offset>catalog.entries.size())throw std::runtime_error("Data audit offset exceeds catalog");
-        std::string out="{\"schemaVersion\":1,\"source\":\"original Editor effective catalog reflection\",\"catalogIndex\":"+std::to_string(catalog.index)+",\"catalog\":"+Q(catalog.name)+",\"totalEntries\":"+std::to_string(catalog.entries.size())+",\"offset\":"+std::to_string(request.offset)+",\"objects\":[";
+        std::string out="{\"schemaVersion\":2,\"source\":\"original Editor effective catalog reflection and native type formatters\",\"catalogIndex\":"+std::to_string(catalog.index)+",\"catalog\":"+Q(catalog.name)+",\"totalEntries\":"+std::to_string(catalog.entries.size())+",\"offset\":"+std::to_string(request.offset)+",\"objects\":[";
         auto requestedEnd=(std::min)(catalog.entries.size(),size_t(request.offset)+request.limit);size_t end=request.offset;
         for(size_t i=request.offset;i<requestedEnd;i++){
             auto entry=catalog.entries[i];auto identifier=catalog.names.at(At<uint32_t>(entry+8)>>16);auto scope=At<uintptr_t>(entry+0x30);
-            c.fields=c.leaves=c.getterErrors=c.opaque=0;c.references.clear();c.resources.clear();c.unknown.clear();
+            c.fields=c.leaves=c.getterErrors=c.opaque=c.valueErrors=0;c.references.clear();c.resources.clear();c.unknown.clear();c.values.clear();
             try{c.Walk(scope,Ref{entry,0},0,"");}catch(const std::exception&){Log(b,L"Data audit object=%S/%S field=%S type=%S\n",catalog.name.c_str(),identifier.c_str(),c.activePath.c_str(),c.activeType.c_str());throw;}
-            auto encoded="{\"id\":"+Q(identifier)+",\"nativeClass\":"+Q(String(scope))+",\"defaultTemplate\":"+std::string((At<uint32_t>(entry+8)&1)?"true":"false")+","+Counts(c)+",\"references\":"+Join(c.references)+",\"resources\":"+Join(c.resources)+",\"unclassifiedSamples\":"+Join(c.unknown)+"}";
+            auto encoded="{\"id\":"+Q(identifier)+",\"nativeClass\":"+Q(String(scope))+",\"defaultTemplate\":"+std::string((At<uint32_t>(entry+8)&1)?"true":"false")+","+Counts(c)+",\"references\":"+Join(c.references)+",\"resources\":"+Join(c.resources)+",\"unclassifiedSamples\":"+Join(c.unknown)+",\"fieldValues\":"+Join(c.values)+"}";
             if(out.size()+encoded.size()>kSourceCapacity-1048576){if(i==request.offset)throw std::runtime_error("One original Data object exceeds the complete transport bound");break;}
             if(i>request.offset)out+=',';out+=encoded;end=i+1;
         }
@@ -110,7 +155,7 @@ static void Page(Block* b,HWND data){
         auto filter=Control(data,L"ComboBox",19);auto n=SendMessageW(filter,CB_GETCOUNT,0,0);
         if(n<1||n>4096)throw std::runtime_error("Original Data source enumeration unavailable");
         for(int i=0;i<n;i++){auto length=SendMessageW(filter,CB_GETLBTEXTLEN,i,0);if(length<0||length>32767)throw std::runtime_error("Original Data source name bound exceeded");std::vector<wchar_t> name(size_t(length)+1);if(SendMessageW(filter,CB_GETLBTEXT,i,reinterpret_cast<LPARAM>(name.data()))!=length)throw std::runtime_error("Original Data source readback failed");if(i)out+=',';out+=DiagQ(name.data());}
-        out+="],\"traversalComplete\":true,\"variant\":0}";
+        out+="],\"traversalComplete\":true,\"variant\":0,\"fieldValueEncodingVersion\":2}";
         if(out.size()>=kSourceCapacity)throw std::runtime_error("Data audit page transport capacity exceeded");
         memcpy(b->source,out.data(),out.size());b->sourceBytes=uint32_t(out.size());b->codePage=CP_UTF8;
     }catch(const std::exception& e){Log(b,L"Data audit: %S\n",e.what());Fail(b,170,L"Original Data audit page could not be read completely");}

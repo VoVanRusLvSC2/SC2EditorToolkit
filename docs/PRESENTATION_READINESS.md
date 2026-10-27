@@ -1,6 +1,13 @@
 # Presentation readiness — 2026-10-24
 
 Current release: **1.0.0**, API contract 1, native protocol 15 and 31 MCP tools.
+
+Development **1.1.0-rc.1** uses native protocol 16 with the same 31 tool names.
+It adds explicit Terrain XYZ/pitch/yaw/roll/distance/FOV control, fresh camera
+readback after committing the original dialog, and schema 2 native effective
+field recording/query/comparison. See [MAP_EXPORT.md](MAP_EXPORT.md) and
+[DATA_AUDIT.md](DATA_AUDIT.md). The 1.0 acceptance below remains historical evidence
+for that stable release; it is not a claim that new features shipped in its ZIP.
 See [1.0 acceptance](V1_ACCEPTANCE.md) and [setup/contracts](MCP_CONTRACT.md) for
 the exact supported scope, installation preflight and current acceptance gates.
 
@@ -185,7 +192,8 @@ camera, not whole-map export or trigger-driven gameplay.
   interpretation of that text; unreadable/truncated output remains unknown,
   not zero errors. Opening Data is not an exhaustive engine validator.
 - Saved map-camera framing is implemented. Executing Galaxy triggers to play a
-  gameplay cinematic and arbitrary Terrain camera overrides are not implemented.
+  gameplay cinematic requires the game. Development 1.1 adds explicit Terrain
+  camera overrides; arbitrary viewport resolution remains outside its API.
 - Whole-map model filters have passed the scoped v0.12 acceptance above.
   A water-specific case and broader map/dependency coverage remain unverified.
   Region crops retain experimental native XY-to-image calibration status.

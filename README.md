@@ -5,6 +5,8 @@ native generator, compiler and renderer through a DLL, HTTP API and MCP.
 Previously published as SC2 Native Toolkit. Original code author and project
 owner: **VoVanRusLvSC2**.
 
+**Development 1.1.0-rc.1 adds explicit Terrain target XYZ/angles/distance/FOV and indexed comparison of native effective field values.** See [camera parameters](docs/MAP_EXPORT.md) and [field-value coverage](docs/DATA_AUDIT.md). Replace the complete package and restart its worker when updating. [Download 1.1.0-rc.1](https://github.com/VoVanRusLvSC2/SC2EditorToolkit/releases/tag/v1.1.0-rc.1). The latest stable 1.0 release remains available below.
+
 **v1.0.0 provides a versioned MCP/HTTP contract for the original Editor, indexed Data audits, incoming object references, audit comparison and installation preflight.**
 Read inherited/overridden values, search native Object Explorer associations,
 and check the selected Model's main file through the original Archive Browser
@@ -19,7 +21,7 @@ Editor installation discovery and explicit selection remain portable.
 There is no fixed drive or user-specific Editor path. Use automatic discovery,
 `SC2_EDITOR_PATH`, CLI `--editor`, or the startup API/MCP `editor_path` argument.
 The supported original binary is verified before launch; changing a live worker's
-installation requires restarting its server. Native protocol 15 requires the
+installation requires restarting its server. Development native protocol 16 requires the
 matching complete package. See [presentation readiness](docs/PRESENTATION_READINESS.md).
 
 Vulkan offscreen rendering for an owned second Editor is included.
@@ -35,7 +37,7 @@ The original full-map export supports terrain and native visibility filters for
 placed unit/doodad models. Coordinate-region cropping retains its separate
 experimental calibration status. A water-containing campaign map has also
 passed native export and visual review; broader map/water variants retain their own validation scope. Saved map cameras can drive original Terrain PNG captures.
-Arbitrary Terrain camera overrides and Galaxy-trigger playback are not implemented.
+Explicit Terrain camera overrides use the original Camera Editor and fresh native readback. Galaxy-trigger playback still requires the game.
 Operation-scoped load/Data diagnostics and native save/reopen component comparison
 are available. See
 [validation history](docs/VALIDATION.md). The stable API/MCP contract is version 1; see [the contract and setup guide](docs/MCP_CONTRACT.md) and [1.0 acceptance](docs/V1_ACCEPTANCE.md).
@@ -78,12 +80,12 @@ saved map-camera framing, remaining camera controls and validation coverage.
 | Module | Implemented capabilities |
 |---|---|
 | Jobs | Per-server FIFO, progress, cancellation, deadlines, persisted history and fresh-worker recovery |
-| Data | Full effective catalog traversal, typed catalog/file checks with coverage gaps and downloadable JSONL; individual fields, XML identity and Explorer associations |
+| Data | Full effective catalog traversal and original field-value serialization, exact field queries/diffs, typed catalog/file checks with coverage gaps and downloadable JSONL; XML identity and Explorer associations |
 | Editor | Revision-bound check report, hidden startup, private map/mod copies, new load/Data diagnostics, native save → close → disk reopen and component comparison |
 | Triggers | Original `Triggers XML → Galaxy` generation and native compilation |
 | Galaxy | Exact `.galaxy` bytes, SHA-256, artifact download, overwrite protection |
 | Objects | Search saved placements by ID/type/name, kind, owner and XY rectangle; no Editor needed |
-| Terrain | Current viewport or saved-map-camera PNG with native readback; complete overhead PNG with independent unit/doodad filters; experimental coordinate-region crops |
+| Terrain | Current viewport, saved-map-camera or explicit XYZ/angle/distance/FOV PNG with native readback; complete overhead PNG with independent unit/doodad filters; experimental coordinate-region crops |
 | Cutscene | Load `.SC2Cutscene`, select camera/time, export PNG and H.264/AAC MP4 |
 | MCP | Windowed stdio executable exposing the same worker operations |
 

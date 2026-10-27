@@ -50,7 +50,7 @@ def prepare(args):
     save(manifest_path,manifest)
     return {**result,'workingDocument':str(new),'packedTriggersByteEqual':True}
 
-def native_step(job,stage,pid,current,marker='',context='',map_path=None,scope='mapRoot',camera=None,time_ms=None,terrain=None,editor=None,audit=None):
+def native_step(job,stage,pid,current,marker='',context='',map_path=None,scope='mapRoot',camera=None,time_ms=None,terrain=None,editor=None,audit=None,terrain_camera=None):
     out=job/stage
     command=[str(RES/'SC2NativeBridge.exe'),stage.split('-',1)[1],'--pid',str(pid),'--expect-document',current,'--out',str(out)]
     if editor:command+=['--editor',str(editor)]
@@ -61,6 +61,7 @@ def native_step(job,stage,pid,current,marker='',context='',map_path=None,scope='
     if time_ms is not None:command+=['--time-ms',str(time_ms)]
     if terrain is not None:command+=['--image-size',str(terrain['size']),'--include-units','yes' if terrain['include_units'] else 'no','--include-doodads','yes' if terrain['include_doodads'] else 'no']
     if audit is not None:command+=['--audit-catalog',str(audit['catalog']),'--audit-offset',str(audit['offset']),'--audit-limit',str(audit['limit'])]
+    if terrain_camera is not None:command+=['--terrain-camera',','.join(format(terrain_camera[k],'.17g') for k in ('x','y','z','pitch','yaw','roll','distance','fov'))]
     command+=['--scope',scope]
     if ACTIVE_DESKTOP:command+=['--desktop',ACTIVE_DESKTOP]
     # A child with redirected stdio has no console to activate. Native controls

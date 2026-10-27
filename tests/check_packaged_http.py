@@ -1,3 +1,4 @@
+import sys
 import os
 """No Editor required: exercise packaged HTTP routes and fail-before-start checks."""
 import json
@@ -10,6 +11,8 @@ from pathlib import Path
 from map_archive_fixture import create_archive
 
 root = Path(__file__).resolve().parents[1]
+sys.path.insert(0,str(root/'app'))
+from sc2native.version import VERSION
 work = root / 'local-tests' / ('packaged-http-' + uuid.uuid4().hex)
 work.mkdir(parents=True)
 info = None
@@ -42,7 +45,7 @@ with (work / 'stdout.log').open('wb') as stdout, (work / 'stderr.log').open('wb'
         assert duplicate.returncode!=0,'Two servers unexpectedly acquired the same work directory'
         assert json.loads((work/'runtime/api-info.json').read_text())==info,'Duplicate startup replaced server identity'
         code, health = call('/health', authorized=False)
-        assert code == 200 and health['version'] == '1.0.0' and not health['workerRunning'], health
+        assert code == 200 and health['version'] == VERSION and not health['workerRunning'], health
         assert call('/modules', authorized=False)[0] == 403
         assert call('/terrain/export', {'size': 512}, authorized=False)[0] == 403
         code, modules = call('/modules')
