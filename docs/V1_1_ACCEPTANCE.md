@@ -1,8 +1,16 @@
 # 1.1 field values and Terrain camera acceptance
 
-Release candidate: **1.1.0-rc.1**, API contract 1, native protocol 16,
+Field/camera acceptance baseline: **1.1.0-rc.1**, API contract 1, native protocol 16,
 31 existing MCP tool names. Tested original Editor: **5.0.17.98310 x64**.
 Other Editor binaries remain unsupported until their own adapter is verified.
+
+## rc.2 input isolation
+
+The rc.2 change suppresses hardware cursor operations on wrapped hidden-renderer
+D3D9/D3D9Ex devices and rejects startup outside the selected owned Editor before
+installing hooks. It does not change Data traversal, protocol or tool names.
+The detailed field/resource acceptance below remains the rc.1 baseline and was
+not repeated as a full audit for this cursor fix. See [input isolation](INPUT_ISOLATION.md).
 
 ## Native effective fields
 

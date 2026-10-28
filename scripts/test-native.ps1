@@ -1,10 +1,14 @@
 param([string]$OutputDirectory='bin-tests')
 . (Join-Path $PSScriptRoot 'toolchain.ps1')
 $root=Split-Path -Parent $PSScriptRoot
-$destination=Join-Path $root $OutputDirectory
+$destination=if([IO.Path]::IsPathRooted($OutputDirectory)){$OutputDirectory}else{Join-Path $root $OutputDirectory}
 New-Item -ItemType Directory -Force -Path $destination | Out-Null
 Push-Location $destination
 try {
+ & $compiler /nologo /utf-8 /W4 /std:c++17 /EHsc /MT (Join-Path $root 'tests\hidden_cursor_test.cpp') /Fe:HiddenCursorTests.exe
+ if($LASTEXITCODE){throw 'Hidden cursor test build failed'}
+ & (Join-Path $destination 'HiddenCursorTests.exe')
+ if($LASTEXITCODE){throw 'Hidden cursor isolation regression failed'}
  & $compiler /nologo /utf-8 /W4 /std:c++17 /EHsc /MT (Join-Path $root 'tests\document_window_test.cpp') /Fe:DocumentWindowTests.exe
  if($LASTEXITCODE){throw 'Readiness regression test build failed'}
  & (Join-Path $destination 'DocumentWindowTests.exe')

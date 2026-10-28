@@ -11,6 +11,7 @@
 #include <wincodec.h>
 #include "capture_protocol.h"
 #include "../vendor/minhook/include/MinHook.h"
+#include "hidden_cursor.h"
 #pragma comment(lib,"user32.lib")
 #pragma comment(lib,"windowscodecs.lib")
 #pragma comment(lib,"ole32.lib")
@@ -140,6 +141,7 @@ static HRESULT STDMETHODCALLTYPE AdditionalSwapChain(void* self,D3DPRESENT_PARAM
 static void WrapDevice(IDirect3DDevice9* device,HWND focus,bool ex){
     auto table=Clone(device,ex?134:119,focus,ex);if(!table)return;
     if(ex)Fill_IDirect3DDevice9Ex(table);else Fill_IDirect3DDevice9(table);
+    HiddenCursor::Apply(table);
     table[3]=reinterpret_cast<void*>(Cooperative);table[9]=reinterpret_cast<void*>(CreationParameters);table[13]=reinterpret_cast<void*>(AdditionalSwapChain);table[16]=reinterpret_cast<void*>(Reset);table[17]=reinterpret_cast<void*>(Present);
     if(ex){table[121]=reinterpret_cast<void*>(PresentEx);table[132]=reinterpret_cast<void*>(ResetEx);}
     InterlockedExchangePointer(reinterpret_cast<void* volatile*>(device),table);

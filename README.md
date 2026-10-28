@@ -5,7 +5,7 @@ native generator, compiler and renderer through a DLL, HTTP API and MCP.
 Previously published as SC2 Native Toolkit. Original code author and project
 owner: **VoVanRusLvSC2**.
 
-**Development 1.1.0-rc.1 adds explicit Terrain target XYZ/angles/distance/FOV and indexed comparison of native effective field values.** See [camera parameters](docs/MAP_EXPORT.md) and [field-value coverage](docs/DATA_AUDIT.md). Replace the complete package and restart its worker when updating. [Download 1.1.0-rc.1](https://github.com/VoVanRusLvSC2/SC2EditorToolkit/releases/tag/v1.1.0-rc.1). The latest stable 1.0 release remains available below.
+**Development 1.1.0-rc.2 adds cursor isolation for the hidden Editor to the Terrain camera and native field-value features introduced in rc.1.** See [input isolation](docs/INPUT_ISOLATION.md), [camera parameters](docs/MAP_EXPORT.md) and [field-value coverage](docs/DATA_AUDIT.md). Replace the complete package and restart its worker when updating. [Download 1.1.0-rc.2](https://github.com/VoVanRusLvSC2/SC2EditorToolkit/releases/tag/v1.1.0-rc.2). The latest stable 1.0 release remains available below.
 
 **v1.0.0 provides a versioned MCP/HTTP contract for the original Editor, indexed Data audits, incoming object references, audit comparison and installation preflight.**
 Read inherited/overridden values, search native Object Explorer associations,

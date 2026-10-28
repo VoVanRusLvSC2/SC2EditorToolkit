@@ -5,6 +5,7 @@
 #include "graphics_bridge.h"
 #include "audio_protocol.h"
 #include "protocol.h"
+#include "editor_identity.h"
 #pragma comment(lib,"user32.lib")
 static std::wstring suffix,logPath;
 static SRWLOCK logLock=SRWLOCK_INIT;
@@ -56,7 +57,9 @@ static DWORD PatchImports(HMODULE module,Patch* patches,size_t count){
     }return done;
 }
 extern "C" __declspec(dllexport) DWORD WINAPI BootstrapInit(void* raw){
-    auto config=static_cast<BootstrapConfig*>(raw);if(!config)return 1;suffix=config->suffix;logPath=config->logPath;
+    auto config=static_cast<BootstrapConfig*>(raw);if(!config)return 1;
+    if(!CurrentOwnedEditorProcess()){config->error=ERROR_ACCESS_DENIED;return config->error;}
+    suffix=config->suffix;logPath=config->logPath;
     auto n=GetModuleHandleW(L"ntdll.dll");realEvent=reinterpret_cast<FnCreateEvent>(GetProcAddress(n,"NtCreateEvent"));realMutant=reinterpret_cast<FnCreateMutant>(GetProcAddress(n,"NtCreateMutant"));
     realSection=reinterpret_cast<FnCreateSection>(GetProcAddress(n,"NtCreateSection"));realSemaphore=reinterpret_cast<FnCreateSemaphore>(GetProcAddress(n,"NtCreateSemaphore"));
     openEvent=reinterpret_cast<FnOpenObject>(GetProcAddress(n,"NtOpenEvent"));openMutant=reinterpret_cast<FnOpenObject>(GetProcAddress(n,"NtOpenMutant"));openSection=reinterpret_cast<FnOpenObject>(GetProcAddress(n,"NtOpenSection"));openSemaphore=reinterpret_cast<FnOpenObject>(GetProcAddress(n,"NtOpenSemaphore"));
