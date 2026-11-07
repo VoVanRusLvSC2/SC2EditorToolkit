@@ -28,6 +28,11 @@ backend is not a universal multi-instance guarantee.
 - Each worker uses private map/mod copies, TEMP/TMP, renderer config, shader
   cache, logs and output files. Closing its API Job closes its own hidden tree.
   It does not close, inject into, save or send GUI commands to a normal Editor.
+- Starting with 1.1.0-rc.3, the owned Editor's `Recent Files` registry subtree
+  (including its remembered open-document list) is redirected to a GUID-scoped
+  private volatile key before the Editor's primary thread starts. Normal Editor
+  history is not copied, cleared or rewritten. The private key is removed only
+  after the exact owned process exits. See [complaint fixes](COMPLAINT_FIXES.md).
 - This is not complete Windows-profile virtualization. General Editor user
   preferences may still share the Windows profile. Do not arrange for two
   editors to independently save the same source archive.

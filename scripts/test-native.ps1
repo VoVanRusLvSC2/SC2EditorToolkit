@@ -5,6 +5,15 @@ $destination=if([IO.Path]::IsPathRooted($OutputDirectory)){$OutputDirectory}else
 New-Item -ItemType Directory -Force -Path $destination | Out-Null
 Push-Location $destination
 try {
+ & $compiler /nologo /utf-8 /W4 /std:c++17 /EHsc /MT (Join-Path $root 'tests\startup_readiness_test.cpp') /Fe:StartupReadinessTests.exe
+ if($LASTEXITCODE){throw 'Startup readiness test build failed'}
+ & (Join-Path $destination 'StartupReadinessTests.exe')
+ if($LASTEXITCODE){throw 'Startup readiness regression failed'}
+ $registrySources=@('tests\recent_files_isolation_test.cpp','src\recent_files_isolation.cpp','vendor\minhook\src\buffer.c','vendor\minhook\src\hook.c','vendor\minhook\src\trampoline.c','vendor\minhook\src\hde\hde64.c') | ForEach-Object {Join-Path $root $_}
+ & $compiler /nologo /utf-8 /W4 /std:c++17 /EHsc /MT /DSC2_RECENT_FILES_TESTING @registrySources /Fe:RecentFilesIsolationTests.exe
+ if($LASTEXITCODE){throw 'Recent Files isolation test build failed'}
+ & (Join-Path $destination 'RecentFilesIsolationTests.exe')
+ if($LASTEXITCODE){throw 'Recent Files isolation regression failed'}
  & $compiler /nologo /utf-8 /W4 /std:c++17 /EHsc /MT (Join-Path $root 'tests\hidden_cursor_test.cpp') /Fe:HiddenCursorTests.exe
  if($LASTEXITCODE){throw 'Hidden cursor test build failed'}
  & (Join-Path $destination 'HiddenCursorTests.exe')

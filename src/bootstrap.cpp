@@ -6,6 +6,7 @@
 #include "audio_protocol.h"
 #include "protocol.h"
 #include "editor_identity.h"
+#include "recent_files_isolation.h"
 #pragma comment(lib,"user32.lib")
 static std::wstring suffix,logPath;
 static SRWLOCK logLock=SRWLOCK_INIT;
@@ -60,6 +61,9 @@ extern "C" __declspec(dllexport) DWORD WINAPI BootstrapInit(void* raw){
     auto config=static_cast<BootstrapConfig*>(raw);if(!config)return 1;
     if(!CurrentOwnedEditorProcess()){config->error=ERROR_ACCESS_DENIED;return config->error;}
     suffix=config->suffix;logPath=config->logPath;
+    DWORD recentError=StartRecentFilesIsolation(suffix.c_str());
+    if(recentError){config->error=300+recentError;return config->error;}
+    Log("recent-files-isolation",L"Editor Recent Files",L"private volatile worker key",0);
     auto n=GetModuleHandleW(L"ntdll.dll");realEvent=reinterpret_cast<FnCreateEvent>(GetProcAddress(n,"NtCreateEvent"));realMutant=reinterpret_cast<FnCreateMutant>(GetProcAddress(n,"NtCreateMutant"));
     realSection=reinterpret_cast<FnCreateSection>(GetProcAddress(n,"NtCreateSection"));realSemaphore=reinterpret_cast<FnCreateSemaphore>(GetProcAddress(n,"NtCreateSemaphore"));
     openEvent=reinterpret_cast<FnOpenObject>(GetProcAddress(n,"NtOpenEvent"));openMutant=reinterpret_cast<FnOpenObject>(GetProcAddress(n,"NtOpenMutant"));openSection=reinterpret_cast<FnOpenObject>(GetProcAddress(n,"NtOpenSection"));openSemaphore=reinterpret_cast<FnOpenObject>(GetProcAddress(n,"NtOpenSemaphore"));

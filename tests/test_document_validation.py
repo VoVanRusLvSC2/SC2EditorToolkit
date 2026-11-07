@@ -14,6 +14,20 @@ class WorkerStub:
     def _reset_owned_editor(self):self.state=None;self.reset=True
 
 class DocumentValidation(unittest.TestCase):
+    def test_startup_evidence_survives_worker_state_reset(self):
+        from sc2native.startup_failure import NativeStartupError
+        with tempfile.TemporaryDirectory() as directory:
+            root=Path(directory);source=root/'Source.SC2Map';source.write_bytes(b'original')
+            worker=WorkerStub(root/'runtime');worker.work.mkdir()
+            error=NativeStartupError(root,2,{'status':'HIDDEN_BOOTSTRAP_FAILED','bootstrapFailure':{'win32Error':126}})
+            with patch.object(worker,'ensure',side_effect=error):
+                result=validate_document(worker,{'map':str(source)},roundtrip=False)
+            self.assertEqual(result['status'],'FAILED')
+            self.assertEqual(result['errorInfo']['code'],'EDITOR_STARTUP_FAILED')
+            self.assertEqual(result['startupState']['bootstrapFailure']['win32Error'],126)
+            self.assertEqual(result['startupEvidence'],str(root))
+            self.assertTrue(worker.reset);self.assertTrue(result['sourceUnchanged'])
+
     def test_invalid_arguments_never_start_editor(self):
         with tempfile.TemporaryDirectory() as directory:
             worker=WorkerStub(Path(directory))

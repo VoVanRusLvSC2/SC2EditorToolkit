@@ -4,6 +4,8 @@ from .artifacts import ArtifactStore
 from .diagnostics import parse_native_diagnostics,operation_diagnostics
 from .cutscenes import scene_file,seek_arguments,scene_duration
 from .render_backend import requested_backend,select_backend,render_environment
+from .recent_files import remove_worker_history
+from .startup_failure import NativeStartupError
 class Worker:
     def _background_result(self,result):
         state=getattr(self,'state',None) or {}
@@ -95,22 +97,28 @@ class Worker:
                 if getattr(self,'operation_abort',None) and self.operation_abort.is_set():self.abort_owned_operation('STARTUP_ABORT')
                 time.sleep(.05)
         state_path=startup/'state.json'
-        if not state_path.is_file():raise RuntimeError('Hidden startup failed; see '+str(directory))
-        self.state=json.loads(state_path.read_text())
+        try:self.state=json.loads(state_path.read_text())
+        except (OSError,ValueError) as error:
+            failure=NativeStartupError(directory,child.returncode,self.state,self.monitor.snapshot() if self.monitor else None,str(error))
+            self._reset_owned_editor();raise failure from error
         if child.returncode or self.state['status']!='HIDDEN_EDITOR_READY':
-            reason='Hidden Editor not ready: '+str(self.state['status'])+'; hostExitCode='+str(child.returncode)+'; '+str(directory)
+            failure=NativeStartupError(directory,child.returncode,self.state,self.monitor.snapshot() if self.monitor else None)
             self._reset_owned_editor()
-            raise RuntimeError(reason)
+            raise failure
         self.state['currentDocument']=seed.name;self.state['documentPath']=str(seed);self.state['startupReport']=str(state_path);self.state['renderBackend']=selected;self.state['editorPath']=installation['path'];self.state['editorInfo']=installation
         if self.monitor is None:self.monitor=Observation(self.state['pid'])
         oracle.save(self.work/'worker.json',self.state)
     def _reset_owned_editor(self):
+        state=self.state
         if self.alive():
-            handle=kernel.OpenProcess(0x1000|1,False,self.state['pid'])
+            handle=kernel.OpenProcess(0x100000|0x1000|1,False,self.state['pid'])
             if handle:
                 # Creation time protects against terminating an unrelated reused PID.
-                if process_time(self.state['pid'])==self.state['createTimeFiletime']:kernel.TerminateProcess(handle,0)
+                if process_time(self.state['pid'])==self.state['createTimeFiletime']:
+                    kernel.TerminateProcess(handle,0);kernel.WaitForSingleObject(handle,5000)
                 kernel.CloseHandle(handle)
+        if state and process_time(state['pid'])!=state['createTimeFiletime']:
+            remove_worker_history(state.get('instanceId'))
         if self.monitor:self.monitor.stop();self.monitor=None
         self.state=None;self.scene=None;self.last_result=None
     def close(self):

@@ -247,7 +247,7 @@ DWORD StartHiddenGraphics(const wchar_t* log){
         if(!alternateCreate9||!alternateCreate9Ex){Log(L"requested Vulkan D3D9 backend unavailable",HRESULT_FROM_WIN32(GetLastError()));return 7;}
         offscreenPresent=true;Log(L"selected Vulkan offscreen D3D9 backend");
     }else if(backend[0]&&_wcsicmp(backend,L"legacy")){Log(L"unknown requested render backend",E_INVALIDARG);return 8;}
-    if(MH_Initialize()!=MH_OK)return 3;
+    auto initialized=MH_Initialize();if(initialized!=MH_OK&&initialized!=MH_ERROR_ALREADY_INITIALIZED)return 3;
     if(MH_CreateHook(reinterpret_cast<void*>(create),reinterpret_cast<void*>(Create9),reinterpret_cast<void**>(&realCreate9))!=MH_OK)return 4;
     if(createEx&&MH_CreateHook(reinterpret_cast<void*>(createEx),reinterpret_cast<void*>(Create9Ex),reinterpret_cast<void**>(&realCreate9Ex))!=MH_OK)return 5;
     if(MH_EnableHook(MH_ALL_HOOKS)!=MH_OK)return 6;Log(L"hidden graphics hooks installed");return 0;

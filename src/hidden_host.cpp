@@ -10,6 +10,7 @@
 #include "bootstrap.h"
 #include "document_window.h"
 #include "protocol.h"
+#include "startup_readiness.h"
 #pragma comment(lib,"user32.lib")
 #pragma comment(lib,"ole32.lib")
 namespace fs=std::filesystem;
@@ -23,26 +24,42 @@ static std::vector<HWND> windows;
 static BOOL CALLBACK Enum(HWND w,LPARAM){DWORD pid=0;GetWindowThreadProcessId(w,&pid);if(pid==childPid)windows.push_back(w);return TRUE;}
 static BOOL CALLBACK Children(HWND w,LPARAM p){auto v=reinterpret_cast<std::vector<HWND>*>(p);v->push_back(w);return TRUE;}
 static int E(const char* message){std::cerr<<message<<" Win32="<<GetLastError()<<"\n";return 2;}
-static bool InjectBootstrap(PROCESS_INFORMATION& process,const fs::path& dllPath,const fs::path& logPath,DWORD& patches,const std::wstring& instanceId){
+struct BootstrapFailure {
+    std::wstring phase;DWORD win32Error=0,remoteExitCode=0,bootstrapError=0;
+    bool Set(const wchar_t* stage,DWORD error,DWORD remote=0,DWORD native=0){phase=stage;win32Error=error;remoteExitCode=remote;bootstrapError=native;return false;}
+    std::string Json()const{return "{\"phase\":"+Q(phase)+",\"win32Error\":"+std::to_string(win32Error)+",\"remoteExitCode\":"+std::to_string(remoteExitCode)+",\"bootstrapError\":"+std::to_string(bootstrapError)+"}";}
+};
+static bool InjectBootstrap(PROCESS_INFORMATION& process,const fs::path& dllPath,const fs::path& logPath,DWORD& patches,const std::wstring& instanceId,BootstrapFailure& failure){
+    HMODULE local=LoadLibraryExW(dllPath.c_str(),nullptr,LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR|LOAD_LIBRARY_SEARCH_SYSTEM32);
+    if(!local)return failure.Set(L"load-local-bootstrap",GetLastError());
+    auto exported=GetProcAddress(local,"BootstrapInit");
+    if(!exported){auto error=GetLastError();FreeLibrary(local);return failure.Set(L"resolve-bootstrap-export",error);}
+    uintptr_t rva=reinterpret_cast<uintptr_t>(exported)-reinterpret_cast<uintptr_t>(local);FreeLibrary(local);
     auto text=dllPath.wstring();SIZE_T bytes=(text.size()+1)*sizeof(wchar_t),written=0;
-    void* remote=VirtualAllocEx(process.hProcess,nullptr,bytes,MEM_COMMIT|MEM_RESERVE,PAGE_READWRITE);if(!remote)return false;
-    if(!WriteProcessMemory(process.hProcess,remote,text.c_str(),bytes,&written))return false;
+    void* remote=VirtualAllocEx(process.hProcess,nullptr,bytes,MEM_COMMIT|MEM_RESERVE,PAGE_READWRITE);if(!remote)return failure.Set(L"allocate-bootstrap-path",GetLastError());
+    if(!WriteProcessMemory(process.hProcess,remote,text.c_str(),bytes,&written)||written!=bytes)return failure.Set(L"write-bootstrap-path",GetLastError());
     auto load=reinterpret_cast<LPTHREAD_START_ROUTINE>(GetProcAddress(GetModuleHandleW(L"kernel32.dll"),"LoadLibraryW"));
-    HANDLE thread=CreateRemoteThread(process.hProcess,nullptr,0,load,remote,0,nullptr);if(!thread)return false;
-    DWORD wait=WaitForSingleObject(thread,30000),result=0;GetExitCodeThread(thread,&result);CloseHandle(thread);if(wait!=WAIT_OBJECT_0||!result)return false;
+    HANDLE thread=CreateRemoteThread(process.hProcess,nullptr,0,load,remote,0,nullptr);if(!thread)return failure.Set(L"start-bootstrap-loader",GetLastError());
+    DWORD wait=WaitForSingleObject(thread,30000),result=0;
+    if(wait!=WAIT_OBJECT_0){auto error=wait==WAIT_TIMEOUT?ERROR_TIMEOUT:GetLastError();CloseHandle(thread);return failure.Set(L"wait-bootstrap-loader",error);}
+    if(!GetExitCodeThread(thread,&result)){auto error=GetLastError();CloseHandle(thread);return failure.Set(L"read-loader-result",error);}CloseHandle(thread);
     VirtualFreeEx(process.hProcess,remote,0,MEM_RELEASE);
     uintptr_t base=0;
     HANDLE snapshot=CreateToolhelp32Snapshot(TH32CS_SNAPMODULE|TH32CS_SNAPMODULE32,process.dwProcessId);
-    if(snapshot==INVALID_HANDLE_VALUE)return false;MODULEENTRY32W module{};module.dwSize=sizeof(module);
+    if(snapshot==INVALID_HANDLE_VALUE)return failure.Set(L"enumerate-bootstrap-module",GetLastError());MODULEENTRY32W module{};module.dwSize=sizeof(module);
     if(Module32FirstW(snapshot,&module))do{if(!_wcsicmp(module.szExePath,dllPath.c_str())){base=reinterpret_cast<uintptr_t>(module.modBaseAddr);break;}}while(Module32NextW(snapshot,&module));CloseHandle(snapshot);
-    if(!base)return false;HMODULE local=LoadLibraryW(dllPath.c_str());if(!local)return false;
-    auto exported=GetProcAddress(local,"BootstrapInit");if(!exported){FreeLibrary(local);return false;}uintptr_t rva=reinterpret_cast<uintptr_t>(exported)-reinterpret_cast<uintptr_t>(local);FreeLibrary(local);
+    if(!base)return failure.Set(L"find-loaded-bootstrap",ERROR_DLL_INIT_FAILED,result);
     BootstrapConfig config{};config.primaryThreadId=process.dwThreadId;wcsncpy_s(config.suffix,(L".SC2Native-"+instanceId).c_str(),_TRUNCATE);wcsncpy_s(config.logPath,logPath.c_str(),_TRUNCATE);
-    remote=VirtualAllocEx(process.hProcess,nullptr,sizeof(config),MEM_COMMIT|MEM_RESERVE,PAGE_READWRITE);if(!remote)return false;
-    if(!WriteProcessMemory(process.hProcess,remote,&config,sizeof(config),&written))return false;
-    thread=CreateRemoteThread(process.hProcess,nullptr,0,reinterpret_cast<LPTHREAD_START_ROUTINE>(base+rva),remote,0,nullptr);if(!thread)return false;
-    wait=WaitForSingleObject(thread,30000);GetExitCodeThread(thread,&result);CloseHandle(thread);if(wait!=WAIT_OBJECT_0||result)return false;
-    if(!ReadProcessMemory(process.hProcess,remote,&config,sizeof(config),&written))return false;VirtualFreeEx(process.hProcess,remote,0,MEM_RELEASE);patches=config.patches;return patches>0;
+    remote=VirtualAllocEx(process.hProcess,nullptr,sizeof(config),MEM_COMMIT|MEM_RESERVE,PAGE_READWRITE);if(!remote)return failure.Set(L"allocate-bootstrap-config",GetLastError());
+    if(!WriteProcessMemory(process.hProcess,remote,&config,sizeof(config),&written)||written!=sizeof(config))return failure.Set(L"write-bootstrap-config",GetLastError());
+    thread=CreateRemoteThread(process.hProcess,nullptr,0,reinterpret_cast<LPTHREAD_START_ROUTINE>(base+rva),remote,0,nullptr);if(!thread)return failure.Set(L"start-bootstrap-init",GetLastError());
+    wait=WaitForSingleObject(thread,30000);
+    if(wait!=WAIT_OBJECT_0){auto error=wait==WAIT_TIMEOUT?ERROR_TIMEOUT:GetLastError();CloseHandle(thread);return failure.Set(L"wait-bootstrap-init",error);}
+    if(!GetExitCodeThread(thread,&result)){auto error=GetLastError();CloseHandle(thread);return failure.Set(L"read-bootstrap-result",error);}CloseHandle(thread);
+    if(!ReadProcessMemory(process.hProcess,remote,&config,sizeof(config),&written)||written!=sizeof(config))return failure.Set(L"read-bootstrap-config",GetLastError());
+    VirtualFreeEx(process.hProcess,remote,0,MEM_RELEASE);patches=config.patches;
+    if(result||config.error||!patches)return failure.Set(L"initialize-bootstrap",ERROR_DLL_INIT_FAILED,result,config.error);
+    return true;
 }
 int wmain(int argc,wchar_t** argv){
     fs::path out,document;std::wstring editor,jobName,startupModule=L"default",renderBackend=L"legacy";int timeout=90;
@@ -74,12 +91,20 @@ int wmain(int argc,wchar_t** argv){
     if(!CreateProcessW(editor.c_str(),command.data(),nullptr,nullptr,FALSE,CREATE_UNICODE_ENVIRONMENT|CREATE_NO_WINDOW|CREATE_SUSPENDED,nullptr,fs::path(editor).parent_path().c_str(),&si,&process))return E("Original Editor creation failed");
     childPid=process.dwProcessId;
     FILETIME creation{},exit{},kernel{},user{};GetProcessTimes(process.hProcess,&creation,&exit,&kernel,&user);
-    {std::ofstream initial(out/"state.json");initial<<"{\"status\":\"BOOTSTRAPPING\",\"pid\":"<<childPid<<",\"createTimeFiletime\":"<<((uint64_t(creation.dwHighDateTime)<<32)|creation.dwLowDateTime)<<"}";}
+    auto identity="\"pid\":"+std::to_string(childPid)+",\"createTimeFiletime\":"+std::to_string((uint64_t(creation.dwHighDateTime)<<32)|creation.dwLowDateTime)+",\"instanceId\":"+Q(guid);
+    {std::ofstream initial(out/"state.json");initial<<"{\"status\":\"BOOTSTRAPPING\","<<identity<<"}";}
     wchar_t self[32768]{};GetModuleFileNameW(nullptr,self,32768);auto bootstrap=fs::path(self).parent_path()/L"SC2StartupBootstrap.dll";DWORD patches=0;
-    if(!InjectBootstrap(process,bootstrap,out/L"bootstrap.log",patches,guid)){TerminateProcess(process.hProcess,42);CloseHandle(process.hThread);CloseHandle(process.hProcess);return E("Private worker singleton bootstrap failed");}
+    BootstrapFailure bootstrapFailure;
+    if(!InjectBootstrap(process,bootstrap,out/L"bootstrap.log",patches,guid,bootstrapFailure)){
+        {std::ofstream report(out/"state.json");report<<"{\"status\":\"HIDDEN_BOOTSTRAP_FAILED\","<<identity<<",\"bootstrapFailure\":"<<bootstrapFailure.Json()<<"}";}
+        TerminateProcess(process.hProcess,42);WaitForSingleObject(process.hProcess,10000);CloseHandle(process.hThread);CloseHandle(process.hProcess);
+        SetThreadDesktop(original);CloseDesktop(isolated);
+        std::cerr<<"Private worker bootstrap failed phase="<<U(bootstrapFailure.phase)<<" Win32="<<bootstrapFailure.win32Error<<" remote="<<bootstrapFailure.remoteExitCode<<" bootstrap="<<bootstrapFailure.bootstrapError<<"\n";return 2;
+    }
     ResumeThread(process.hThread);CloseHandle(process.hThread);
     std::string state;std::wstring currentDocument,readyModule;DWORD exitCode=STILL_ACTIVE;ULONGLONG deadline=GetTickCount64()+ULONGLONG(timeout)*1000;
     bool ready=false,singleton=false,graphics=false,busy=false,dispatchReady=false;
+    DispatchStartupReadiness dispatchStartup;
     while(GetTickCount64()<deadline){
         windows.clear();EnumWindows(Enum,0);ready=false;singleton=false;graphics=false;busy=false;dispatchReady=false;
         std::ostringstream snapshots;snapshots<<"[";bool comma=false;
@@ -99,7 +124,7 @@ int wmain(int argc,wchar_t** argv){
             }
         }snapshots<<"]";
         GetExitCodeProcess(process.hProcess,&exitCode);
-        bool dispatcherFailed=ready&&!busy&&!dispatchReady;
+        bool dispatcherFailed=dispatchStartup.Failed(ready,busy,dispatchReady,GetTickCount64());
         ready=ready&&dispatchReady&&!busy&&!singleton&&!graphics&&exitCode==STILL_ACTIVE;
         auto status=ready?L"HIDDEN_EDITOR_READY":dispatcherFailed?L"NATIVE_DISPATCH_STARTUP_FAILED":singleton?L"BLOCKED_BY_EDITOR_SINGLETON":graphics?L"GRAPHICS_STARTUP_FAILED":exitCode!=STILL_ACTIVE?L"EDITOR_EXITED":L"STARTING";
         std::ostringstream r;r<<"{\"status\":"<<Q(status)<<",\"pid\":"<<childPid<<",\"createTimeFiletime\":"<<((uint64_t(creation.dwHighDateTime)<<32)|creation.dwLowDateTime)<<",\"desktop\":"<<Q(desktop)<<",\"inputDesktopBefore\":"<<Q(inputBefore)<<",\"currentDocument\":"<<Q(currentDocument)<<",\"exitCode\":"<<exitCode<<",\"desktopSwitched\":false,\"inputInjectionUsed\":false,\"windows\":"<<snapshots.str()<<"}";

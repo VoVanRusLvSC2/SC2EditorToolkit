@@ -1,9 +1,9 @@
 """Versioned local HTTP API over independently callable modules."""
 from .version import VERSION
-import argparse,json,os,secrets,sys,threading,time,shutil
+import argparse,json,os,secrets,sys,threading,time
 from pathlib import Path
-from urllib.parse import quote
-from http.server import BaseHTTPRequestHandler,ThreadingHTTPServer
+from http.server import ThreadingHTTPServer
+from .http_transport import LocalHTTPHandler
 from .runtime import watch_frozen_parent
 from .session import Worker
 from .modules import capabilities
@@ -45,15 +45,9 @@ def main():
             return 2
         finally:worker.close()
     jobs=JobQueue(worker);token=secrets.token_urlsafe(32)
-    class Handler(BaseHTTPRequestHandler):
+    class Handler(LocalHTTPHandler):
         def log_message(self,fmt,*values):
             with (worker.work/'http.log').open('a',encoding='utf8') as f:f.write(time.strftime('%Y-%m-%dT%H:%M:%S')+' '+fmt%values+'\n')
-        def reply(self,code,value):
-            data=json.dumps(value,ensure_ascii=False).encode('utf8');self.send_response(code)
-            self.send_header('Content-Type','application/json; charset=utf-8');self.send_header('Content-Length',str(len(data)))
-            self.send_header('Cache-Control','no-store');self.end_headers()
-            try:self.wfile.write(data)
-            except (BrokenPipeError,ConnectionResetError):pass
         def authorized(self):
             return not self.headers.get('Origin') and secrets.compare_digest(self.headers.get('X-SC2-Token',''),token)
         def do_GET(self):
@@ -67,13 +61,14 @@ def main():
                 return
             if self.path.startswith('/artifacts/'):
                 try:
-                    item=worker.artifacts.get(self.path[len('/artifacts/'):]);path=Path(item['path'])
-                    self.send_response(200);self.send_header('Content-Type',item['mime']);self.send_header('Content-Length',str(path.stat().st_size))
-                    self.send_header('Content-Disposition',"attachment; filename*=UTF-8''"+quote(Path(item['path']).name,safe=''))
-                    self.send_header('X-Content-SHA256',item['sha256']);self.end_headers()
-                    with path.open('rb') as incoming:shutil.copyfileobj(incoming,self.wfile,1024**2)
+                    item=worker.artifacts.get(self.path[len('/artifacts/'):])
+                    self.send_artifact(item)
                 except KeyError:self.reply(404,{'error':'Unknown artifact'})
-                except Exception as e:self.reply(409,{'error':str(e)})
+                except Exception as e:
+                    if getattr(self,'_response_started',False):
+                        self.close_connection=True
+                        raise
+                    self.reply(409,{'error':str(e)})
                 return
             self.reply(404,{'error':'Unknown endpoint'})
         def do_POST(self):

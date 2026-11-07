@@ -10,6 +10,7 @@ import file_prepare as files
 import native_xml_oracle as oracle
 from .components import snapshot_components,compare_components
 from .diagnostics import operation_diagnostics
+from .contracts import error_info
 
 
 def _archive(value):
@@ -142,9 +143,13 @@ def validate_document(worker,request,*,roundtrip=False):
         result['status']=('NATIVE_SAVE_REOPEN_VERIFIED' if roundtrip else 'NATIVE_DOCUMENT_VALIDATED') if result['nativeValidationPassed'] is True else 'FAILED' if result['nativeValidationPassed'] is False else 'NATIVE_DOCUMENT_CHECK_INCOMPLETE'
         if result['status']=='FAILED':result['error']='New native errors or an unconfirmed native operation were observed; see phase diagnostics'
     except Exception as error:
-        result.update(status='FAILED',error=str(error),nativeValidationPassed=False)
+        result.update(status='FAILED',error=str(error),errorInfo=error_info(error),nativeValidationPassed=False)
         result['diagnostics']=_checks(phases) if phases else {'newErrorsClear':None,'inspectionComplete':False,'newErrors':[],'newWarnings':[],'failedPhases':['startup']}
-        if not phases and worker.state:
+        startup=result['errorInfo'].get('evidence',{})
+        if not phases and result['errorInfo'].get('code')=='EDITOR_STARTUP_FAILED':
+            result['startupEvidence']=startup.get('directory')
+            result['startupState']=startup.get('native',{})
+        elif not phases and worker.state:
             # Startup can fail before a document workspace exists. Preserve the
             # original host evidence; never turn unreadable startup logs into zero.
             report=worker.state.get('startupReport')
