@@ -45,7 +45,8 @@ def main():
         for source in (ROOT/'app/sc2native').glob('*.py'):
             module='sc2native' if source.stem=='__init__' else 'sc2native.'+source.stem
             if module not in pyz.toc:
-                if name=='SC2NativeMCP.exe' and module=='sc2native.service':continue
+                # The stdio MCP executable does not host an HTTP listener.
+                if name=='SC2NativeMCP.exe' and module in ('sc2native.service','sc2native.http_transport'):continue
                 raise RuntimeError('Missing toolkit module: '+module)
             code=pyz.extract(module)
             if code!=compile(source.read_bytes(),code.co_filename,'exec'):raise RuntimeError('Frozen source differs from committed source: '+module)
