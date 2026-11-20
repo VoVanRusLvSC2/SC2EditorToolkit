@@ -116,7 +116,10 @@ See [validation](VALIDATION.md) for the actual tested build, device and results.
 
 ## Native adapter maintenance
 
-The Editor build is SHA-verified before startup. Protocol 13 requires a matching
+Portable startup verifies a known SHA-256 or the original Blizzard signature.
+Native map-filter operations additionally require an exact verified offset
+profile; portable viewport capture does not inherit that requirement.
+Protocol 13 introduced a matching
 host, bootstrap, controller, bridge and renderer capture bundle; restart workers
 when upgrading. Installation paths are discovered, not tied to one machine.
 

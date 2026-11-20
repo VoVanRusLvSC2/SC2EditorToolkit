@@ -1,8 +1,9 @@
 # Version 1 MCP and HTTP contract
 
-SC2 Editor Toolkit 1.0 targets Windows x64, an interactive user session and the
-original 5.0.17.98310 x64 Editor. Installation discovery is portable; an unsupported
-binary fails before launch. Every server owns one hidden Editor on a private
+SC2 Editor Toolkit targets Windows x64 and an interactive user session. Since
+1.2, original Blizzard-signed x64 Editors can start without a build-number
+allowlist. Native-offset capabilities require their own exact verified profile;
+see [multi-version support](MULTIVERSION_PLAN.md). Every server owns one hidden Editor on a private
 desktop. Independent servers need independent work directories and ports/tokens.
 No physical mouse/keyboard input or desktop switching is used. User-visible
 Editors are never attached to or controlled.

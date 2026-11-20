@@ -42,6 +42,10 @@ grant permission to concurrently overwrite one map file.
 
 ## Portable Editor selection
 
+Starting with 1.2.0-rc.1, startup accepts original Blizzard-signed x64 Editors
+without a numeric build allowlist. Known identity profiles and native-offset
+capabilities are separate. See [the multi-version plan](MULTIVERSION_PLAN.md).
+
 No machine-specific Editor path is compiled into the host, controller, bridge or
 capture helper. The API resolves a unique installation or accepts `editor_path`,
 CLI `--editor`, or `SC2_EDITOR_PATH`. Each hidden child receives its selected

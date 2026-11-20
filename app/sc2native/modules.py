@@ -1,5 +1,6 @@
 """Explicit capabilities; future timeline methods stay unadvertised until implemented."""
 from .version import VERSION,NATIVE_PROTOCOL
+from editor_profiles import PROFILES
 MODULES=[
  {'id':'jobs','version':1,'methods':['submit','status','wait','cancel'],'perServerEditors':1,'pendingCapacity':32,'history':256,
   'executionDeadlineSeconds':{'default':1800,'videoDefault':14400,'maximum':14400},'automaticRetry':False,'restartReplay':False,'restartIncompleteStatus':'INTERRUPTED'},
@@ -24,6 +25,10 @@ def capabilities():return {'version':VERSION,'apiContractVersion':1,'nativeProto
  'auditQueries':{'immutable':True,'maxPageSize':500,'incomingTypedReferences':True,'findingAndTypedObjectComparison':True,'effectiveFieldComparison':True,'fieldValueSchema':2,'runtimeReferences':False},
  'editorSelection':{'requestArgument':'editor_path','environmentVariable':'SC2_EDITOR_PATH','cliArgument':'--editor',
  'discovery':['Windows registry','Program Files environment locations','PATH'],'ambiguousInstallation':'explicit selection required',
- 'supportedBuilds':['5.0.17.98310 x64'],'binarySha256Verified':True,'pathTiedToOneMachine':False},
+ 'supportedBuilds':[p['version']+' x64' for p in PROFILES],'binarySha256Verified':True,'pathTiedToOneMachine':False,
+ 'unlistedBuildPolicy':'Blizzard Authenticode plus Editor role; portable UI only; live confirmation required',
+ 'startupVersionAllowlistRequired':False,
+ 'nativeOffsetBuilds':[p['version'] for p in PROFILES if p['nativeOffsets']],
+ 'perInstallationCapabilities':'doctor originalEditor details and live editorInfo; startup does not approve native offsets'},
  'ownedWorkerRendering':{'selection':['auto','legacy','vulkan'],'startupArgument':'render_backend','dependency':'DXVK 3.1.1 x64, SHA-256 pinned',
  'scope':'owned hidden Editor only','offscreenVulkan':True,'backendChangeRequiresRestart':True,'normalEditorAttachment':False}}

@@ -5,7 +5,7 @@ native generator, compiler and renderer through a DLL, HTTP API and MCP.
 Previously published as SC2 Native Toolkit. Original code author and project
 owner: **VoVanRusLvSC2**.
 
-**Development 1.1.0-rc.3 isolates hidden-worker Recent Files, handles disconnected HTTP clients and improves startup diagnostics.** It retains the cursor isolation, Terrain camera and native field-value features from rc.1/rc.2. See [complaint fixes and limits](docs/COMPLAINT_FIXES.md), [input isolation](docs/INPUT_ISOLATION.md), [camera parameters](docs/MAP_EXPORT.md) and [field-value coverage](docs/DATA_AUDIT.md). Replace the complete package and restart its worker when updating. [Download 1.1.0-rc.3](https://github.com/VoVanRusLvSC2/SC2EditorToolkit/releases/tag/v1.1.0-rc.3). The latest stable 1.0 release remains available below.
+**Development 1.2.0-rc.1 adds version-independent hidden startup for original Blizzard-signed x64 Editors.** New versions do not need a startup allowlist update. Known fingerprints and per-operation capabilities are reported separately; unverified native offsets are never enabled by a version string. See the [multi-version plan, implementation and limits](docs/MULTIVERSION_PLAN.md). [Download 1.2.0-rc.1](https://github.com/VoVanRusLvSC2/SC2EditorToolkit/releases/tag/v1.2.0-rc.1). Replace the complete package and restart its worker when updating. The latest stable 1.0 release remains available below.
 
 **v1.0.0 provides a versioned MCP/HTTP contract for the original Editor, indexed Data audits, incoming object references, audit comparison and installation preflight.**
 Read inherited/overridden values, search native Object Explorer associations,
@@ -107,7 +107,7 @@ Required:
 - The original x64 SC2 Editor in any local installation directory; discovery and
   explicit path selection are described below.
 - The map/mod's actual dependencies installed locally. The tested adapter targets
-  Editor **5.0.17.98310**, using D3D9. Other builds require validation.
+  Editor **5.0.17.98310** has the complete verified offset profile. **5.0.17.98745** passed portable hidden startup, native compilation and viewport capture. Other original Blizzard-signed x64 builds can start through the same portable path and require live UI confirmation. Rendering uses D3D9.
 - For MP4: separately installed **FFmpeg and ffprobe** on PATH, or the
   `SC2_FFMPEG` and `SC2_FFPROBE` environment variables. They are not bundled.
 - For native audio: an available Windows output audio endpoint.
@@ -141,12 +141,12 @@ Alternatively set `SC2_EDITOR_PATH`, or start through HTTP/MCP with:
 {"template":"D:\\Fixtures\\Empty.SC2Map","editor_path":"D:\\Games\\StarCraft II"}
 ```
 
-This is path portability, not unverified support for every Editor version or
-language. The adapter currently supports the original **5.0.17.98310 x64** binary
-and verifies its SHA-256 before launch. Native components additionally check
-version, architecture and the selected file's identity. Other builds need adapter
-validation; they fail explicitly instead of receiving commands intended for the
-tested UI. A complete valid installation is required; the original Editor
+This is path portability plus portable startup for original Blizzard-signed x64
+Editors. The native offset adapter remains tied to **5.0.17.98310 x64**
+and verifies the running image's exact SHA-256 before internal-offset calls.
+Native components also check architecture and the selected file's identity.
+Other builds use portable GUI discovery and need a separately verified adapter
+for offset-based features. A complete valid installation is required; the original Editor
 resolves its game assets and dependencies. Selection does not virtualize its
 Windows/Battle.net profile or certify physically distinct asset installations.
 

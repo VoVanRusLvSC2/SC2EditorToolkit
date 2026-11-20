@@ -1,4 +1,6 @@
-param([string]$OutputDirectory='bin-release')
+param([string]$OutputDirectory='bin-release',[string]$Python='python')
+& $Python (Join-Path $PSScriptRoot 'tools\generate_editor_profiles.py') --check
+if($LASTEXITCODE){throw 'Generate matching Editor profiles before building'}
 . (Join-Path $PSScriptRoot 'scripts\toolchain.ps1')
 $destination=if([IO.Path]::IsPathRooted($OutputDirectory)){$OutputDirectory}else{Join-Path $PSScriptRoot $OutputDirectory}
 New-Item -ItemType Directory -Path $destination -Force | Out-Null

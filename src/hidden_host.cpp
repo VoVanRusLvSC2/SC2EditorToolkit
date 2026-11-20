@@ -62,6 +62,13 @@ static bool InjectBootstrap(PROCESS_INFORMATION& process,const fs::path& dllPath
     return true;
 }
 int wmain(int argc,wchar_t** argv){
+    if(argc==3&&(!wcscmp(argv[1],L"--inspect-editor")||!wcscmp(argv[1],L"--inspect-portable-editor"))){
+        auto identity=InspectCompatibleEditor(argv[2],!wcscmp(argv[1],L"--inspect-portable-editor"));auto profile=identity.profile;
+        std::cout<<"{\"trusted\":"<<(identity.trusted?"true":"false")<<",\"sha256\":\""<<identity.sha256<<"\",\"version\":"<<Q(identity.version)
+            <<",\"adapter\":\""<<(profile?profile->id:"portable-editor-ui")<<"\",\"nativeOffsets\":"<<(profile&&profile->nativeOffsets?"true":"false")
+            <<",\"verificationMethod\":\""<<(profile?"pinned-sha256":"authenticode-blizzard")<<"\",\"editorLaunched\":false}\n";
+        return identity.trusted?0:2;
+    }
     fs::path out,document;std::wstring editor,jobName,startupModule=L"default",renderBackend=L"legacy";int timeout=90;
     for(int i=1;i<argc;i++){if(i+1>=argc)return E("Missing argument");std::wstring k=argv[i],v=argv[++i];if(k==L"--out")out=v;else if(k==L"--editor")editor=v;else if(k==L"--document")document=v;else if(k==L"--timeout")timeout=std::stoi(v);else if(k==L"--job-name")jobName=v;else if(k==L"--module")startupModule=v;else if(k==L"--render-backend")renderBackend=v;else return E("Unknown argument");}
     if(startupModule!=L"default"&&startupModule!=L"triggers"&&startupModule!=L"terrain")return E("Unsupported startup module");
@@ -74,7 +81,8 @@ int wmain(int argc,wchar_t** argv){
         CloseHandle(job);
     }
     if(out.empty()||fs::exists(out))return E("Fresh --out required");fs::create_directories(out);
-    if(editor.empty()||!SupportedEditorFile(editor))return E("Explicit supported original --editor required (5.0.17.98310 x64)");
+    auto selectedEditor=InspectCompatibleEditor(editor);
+    if(editor.empty()||!selectedEditor.trusted)return E("Explicit original x64 --editor required: known fingerprint or valid Blizzard Editor signature");
     if(!SetEnvironmentVariableW(L"SC2EDITOR_EXPECTED_EXE",editor.c_str()))return E("Cannot bind selected Editor identity");
     SetEnvironmentVariableW(L"SC2EDITOR_ATTACH_LOG",(out/L"dispatch.log").c_str());
     HDESK input=OpenInputDesktop(0,FALSE,DESKTOP_READOBJECTS);if(!input)return E("Cannot identify input desktop");auto inputBefore=DesktopName(input);CloseDesktop(input);
@@ -128,7 +136,7 @@ int wmain(int argc,wchar_t** argv){
         ready=ready&&dispatchReady&&!busy&&!singleton&&!graphics&&exitCode==STILL_ACTIVE;
         auto status=ready?L"HIDDEN_EDITOR_READY":dispatcherFailed?L"NATIVE_DISPATCH_STARTUP_FAILED":singleton?L"BLOCKED_BY_EDITOR_SINGLETON":graphics?L"GRAPHICS_STARTUP_FAILED":exitCode!=STILL_ACTIVE?L"EDITOR_EXITED":L"STARTING";
         std::ostringstream r;r<<"{\"status\":"<<Q(status)<<",\"pid\":"<<childPid<<",\"createTimeFiletime\":"<<((uint64_t(creation.dwHighDateTime)<<32)|creation.dwLowDateTime)<<",\"desktop\":"<<Q(desktop)<<",\"inputDesktopBefore\":"<<Q(inputBefore)<<",\"currentDocument\":"<<Q(currentDocument)<<",\"exitCode\":"<<exitCode<<",\"desktopSwitched\":false,\"inputInjectionUsed\":false,\"windows\":"<<snapshots.str()<<"}";
-        state=r.str();state.insert(state.size()-1,",\"instanceId\":"+Q(guid)+",\"renderBackend\":"+Q(renderBackend)+",\"readyModule\":"+Q(ready?readyModule:L"")+",\"dispatchReady\":"+std::string(dispatchReady?"true":"false")+",\"nativeProtocolVersion\":"+std::to_string(kProtocolVersion));std::ofstream file(out/"state.json",std::ios::binary);file<<state;file.close();
+        state=r.str();state.insert(state.size()-1,",\"instanceId\":"+Q(guid)+",\"renderBackend\":"+Q(renderBackend)+",\"readyModule\":"+Q(ready?readyModule:L"")+",\"dispatchReady\":"+std::string(dispatchReady?"true":"false")+",\"nativeProtocolVersion\":"+std::to_string(kProtocolVersion)+",\"editorSha256\":\""+selectedEditor.sha256+"\",\"editorVersion\":"+Q(selectedEditor.version));std::ofstream file(out/"state.json",std::ios::binary);file<<state;file.close();
         if(ready||dispatcherFailed||singleton||graphics||exitCode!=STILL_ACTIVE)break;
         WaitForSingleObject(process.hProcess,500);
     }

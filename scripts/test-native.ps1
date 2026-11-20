@@ -5,6 +5,10 @@ $destination=if([IO.Path]::IsPathRooted($OutputDirectory)){$OutputDirectory}else
 New-Item -ItemType Directory -Force -Path $destination | Out-Null
 Push-Location $destination
 try {
+ & $compiler /nologo /utf-8 /W4 /std:c++17 /EHsc /MT (Join-Path $root 'tests\editor_profiles_test.cpp') /Fe:EditorProfileTests.exe
+ if($LASTEXITCODE){throw 'Editor profile test build failed'}
+ & (Join-Path $destination 'EditorProfileTests.exe')
+ if($LASTEXITCODE){throw 'Editor profile regression failed'}
  & $compiler /nologo /utf-8 /W4 /std:c++17 /EHsc /MT (Join-Path $root 'tests\startup_readiness_test.cpp') /Fe:StartupReadinessTests.exe
  if($LASTEXITCODE){throw 'Startup readiness test build failed'}
  & (Join-Path $destination 'StartupReadinessTests.exe')

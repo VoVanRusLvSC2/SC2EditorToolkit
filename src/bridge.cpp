@@ -302,6 +302,9 @@ static void Process(Block* b) {
     b->dllPid=GetCurrentProcessId();b->dllTid=GetCurrentThreadId();b->foregroundBefore=reinterpret_cast<uint64_t>(GetForegroundWindow());
     HWND target=reinterpret_cast<HWND>(b->target);DWORD pid=0;DWORD tid=GetWindowThreadProcessId(target,&pid);
     if(pid!=b->pid||tid!=b->tid||pid!=GetCurrentProcessId()||tid!=GetCurrentThreadId()){Fail(b,10,L"PID/thread/HWND identity mismatch");return;}
+    if((b->operation==TerrainExport||b->operation==DataAudit)&&!CurrentEditorHasVerifiedOffsets()){
+        Fail(b,160,L"Native offset adapter unavailable for this Editor fingerprint; portable startup and GUI operations remain available");return;
+    }
     auto title=Text(target);
     bool sceneOperation=b->operation==SaveDocument||b->operation==TerrainExport||b->operation==TerrainView||b->operation==SceneInspect||b->operation==SceneLoad||(b->operation==SceneSeek||b->operation==SceneAdvance||b->operation==SceneAudio)||b->operation==OpenCutscene;
     bool readableDirty=PrivateDesktop()&&(sceneOperation||b->operation==Inspect||b->operation==Diagnostics);

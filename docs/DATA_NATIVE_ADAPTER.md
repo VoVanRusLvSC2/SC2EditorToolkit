@@ -5,7 +5,8 @@ This note explains why the adapter must not be enabled for an unverified binary.
 
 The adapter applies only to the original x64 Editor 5.0.17.98310, SHA-256
 `e561d76903221bdcd4585b9496bba1d2b9c5ae13b8fbe8c8469d213f22823d91`.
-The host/controller validate that identity before startup/native requests. The
+The DLL's operation gate validates that fingerprint before reflection calls.
+Portable startup of another signed build does not authorize this adapter. The
 DLL also checks the original scope/field lookup signatures, module ranges,
 catalog identities, pointer readability and traversal bounds. No EXE bytes are
 patched. Calls are confined to the exact owned document GUI thread/private

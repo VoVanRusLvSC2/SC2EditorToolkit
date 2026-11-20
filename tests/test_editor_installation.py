@@ -54,6 +54,8 @@ class EditorInstallation(unittest.TestCase):
             path=self.editor(root)
             with self.assertRaisesRegex(ValueError,'Unsupported Editor binary'):install.validate_editor(path)
             digest=hashlib.sha256(path.read_bytes()).hexdigest()
+            self.assertEqual(install.inspect_editor(path), {'path':str(path.resolve()),'sha256':digest})
+            with self.assertRaisesRegex(ValueError,digest):install.validate_editor(path)
             with patch.object(install,'SUPPORTED_SHA256',digest):
                 self.assertTrue(install.validate_editor(path)['originalBinaryVerified'])
                 path.write_bytes(path.read_bytes()+b'changed')

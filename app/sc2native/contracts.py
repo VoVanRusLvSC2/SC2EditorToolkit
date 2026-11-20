@@ -75,7 +75,8 @@ def error_info(error):
         if getattr(error,'job_id',None):result['jobId']=error.job_id
         return result
     text=str(error);lower=text.lower()
-    if isinstance(error,(ValueError,TypeError)):code='INVALID_ARGUMENT';step='Correct the request using the tool input schema.'
+    if (getattr(error,'native_result',None) or {}).get('error')==160:code='NATIVE_ADAPTER_UNAVAILABLE';step='Use a verified offset adapter for this Editor; portable UI operations remain available.'
+    elif isinstance(error,(ValueError,TypeError)):code='INVALID_ARGUMENT';step='Correct the request using the tool input schema.'
     elif isinstance(error,KeyError):code='NOT_FOUND';step='Use an ID returned by this server and work directory.'
     elif isinstance(error,FileExistsError):code='OUTPUT_EXISTS';step='Choose another output path or explicitly set overwrite=true.'
     elif isinstance(error,FileNotFoundError):code='FILE_NOT_FOUND';step='Check the configured installation and input paths.'

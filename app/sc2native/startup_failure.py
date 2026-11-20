@@ -20,7 +20,7 @@ class NativeStartupError(RuntimeError):
         for name in ('host.stdout.log','host.stderr.log','startup/bootstrap.log','startup/bootstrap.log.graphics.log','startup/dispatch.log'):
             value=tail(directory/name)
             if value is not None:logs[name]=value
-        native={key:state[key] for key in ('status','pid','createTimeFiletime','instanceId','renderBackend','exitCode','dispatchReady','readyModule','bootstrapFailure') if key in state}
+        native={key:state[key] for key in ('status','pid','createTimeFiletime','instanceId','renderBackend','exitCode','dispatchReady','readyModule','bootstrapFailure','editorSha256','editorVersion') if key in state}
         message=f'Hidden Editor not ready: {status}; hostExitCode={exit_code}; {directory}'
         if reason:message+='; '+reason
         super().__init__(message)

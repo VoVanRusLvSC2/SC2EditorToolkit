@@ -137,8 +137,9 @@ errors.
 
 The reflection adapter is pinned to the verified original x64 Editor build
 5.0.17.98310 and checks native lookup signatures and metadata bounds. Installation
-paths are discovered/configurable. Other binaries are rejected before native
-calls; the code does not guess offsets for another version.
+paths are discovered/configurable. Portable startup can accept other signed
+builds, but the DLL rejects unverified reflection fingerprints before native
+offset calls; the code does not guess offsets for another version.
 
 ## Indexed queries, incoming uses and comparison (1.0)
 

@@ -1,5 +1,5 @@
 from .runtime import *
-from editor_installation import resolve_editor,validate_editor
+from editor_installation import resolve_editor,validate_editor,require_editor_capability
 from .artifacts import ArtifactStore
 from .diagnostics import parse_native_diagnostics,operation_diagnostics
 from .cutscenes import scene_file,seek_arguments,scene_duration
@@ -101,8 +101,9 @@ class Worker:
         except (OSError,ValueError) as error:
             failure=NativeStartupError(directory,child.returncode,self.state,self.monitor.snapshot() if self.monitor else None,str(error))
             self._reset_owned_editor();raise failure from error
-        if child.returncode or self.state['status']!='HIDDEN_EDITOR_READY':
-            failure=NativeStartupError(directory,child.returncode,self.state,self.monitor.snapshot() if self.monitor else None)
+        if child.returncode or self.state['status']!='HIDDEN_EDITOR_READY' or self.state.get('editorSha256')!=installation['sha256']:
+            failure=NativeStartupError(directory,child.returncode,self.state,self.monitor.snapshot() if self.monitor else None,
+                'Editor fingerprint changed during startup' if self.state.get('status')=='HIDDEN_EDITOR_READY' and self.state.get('editorSha256')!=installation['sha256'] else None)
             self._reset_owned_editor()
             raise failure
         self.state['currentDocument']=seed.name;self.state['documentPath']=str(seed);self.state['startupReport']=str(state_path);self.state['renderBackend']=selected;self.state['editorPath']=installation['path'];self.state['editorInfo']=installation
@@ -224,6 +225,8 @@ class Worker:
     def _native(self,directory,operation,scope='mapRoot',context='',_progress=None,**options):
         self._check_abort()
         if not self.alive():raise RuntimeError('Start or open a document first')
+        required={'data-audit':'dataAudit','terrain-export':'terrainObjectFilters'}.get(operation)
+        if required:require_editor_capability(self.state.get('editorInfo',{}),required)
         self.operation_progress={**(_progress or {}),'phase':operation,'evidenceDirectory':str(directory)}
         oracle.ACTIVE_DESKTOP=self.state['desktop']
         return oracle.native_step(directory,'01-'+operation,self.state['pid'],self.state['currentDocument'],context=context,scope=scope,editor=self.state['editorPath'],**options)

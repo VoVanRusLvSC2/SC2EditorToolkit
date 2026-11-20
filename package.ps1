@@ -1,5 +1,7 @@
 param([string]$Python='python',[string]$OutputDirectory='dist',[string]$BinaryDirectory='bin-release',[string]$BuildDirectory='pyinstaller-build',[string]$MpqCli=(Join-Path $PSScriptRoot 'tools\mpqcli\mpqcli.exe'),[switch]$WithVulkan)
 $ErrorActionPreference='Stop'
+& $Python (Join-Path $PSScriptRoot 'tools\generate_editor_profiles.py') --check
+if($LASTEXITCODE){throw 'Generate matching Editor profiles before packaging'}
 function ResolveBuildPath([string]$Path){
  if([IO.Path]::IsPathRooted($Path)){return [IO.Path]::GetFullPath($Path)}
  return Join-Path $PSScriptRoot $Path

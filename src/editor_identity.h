@@ -3,6 +3,7 @@
 #include <filesystem>
 #include <string>
 #include <vector>
+#include "editor_compatibility.h"
 #pragma comment(lib,"version.lib")
 #pragma comment(lib,"user32.lib")
 
@@ -14,15 +15,9 @@ inline bool SameEditorFile(const std::filesystem::path& first,const std::filesys
     if(a!=INVALID_HANDLE_VALUE)CloseHandle(a);if(b!=INVALID_HANDLE_VALUE)CloseHandle(b);return same;
 }
 inline bool SupportedEditorFile(const std::filesystem::path& path){
-    if(_wcsicmp(path.filename().c_str(),L"SC2Editor_x64.exe"))return false;
-    DWORD kind=0;if(!GetBinaryTypeW(path.c_str(),&kind)||kind!=SCS_64BIT_BINARY)return false;
-    DWORD unused=0,size=GetFileVersionInfoSizeW(path.c_str(),&unused);if(!size||size>1024*1024)return false;
-    std::vector<unsigned char> data(size);if(!GetFileVersionInfoW(path.c_str(),0,size,data.data()))return false;
-    VS_FIXEDFILEINFO* info=nullptr;UINT bytes=0;
-    // The fixed Windows version resource stores the build modulo 65536.
-    // The API additionally verifies the complete original executable SHA-256.
-    return VerQueryValueW(data.data(),L"\\",reinterpret_cast<void**>(&info),&bytes)&&bytes>=sizeof(*info)&&info->dwSignature==0xfeef04bd&&
-        info->dwFileVersionMS==MAKELONG(0,5)&&info->dwFileVersionLS==MAKELONG(98310,17);
+    // Runtime helpers bind to the exact already-validated owned image. This is
+    // the portable role/architecture check, not approval of internal offsets.
+    return ReadEditorResourceIdentity(path).editor;
 }
 inline std::wstring OwnedEditorPath(){
     DWORD size=GetEnvironmentVariableW(L"SC2EDITOR_EXPECTED_EXE",nullptr,0);if(!size||size>32768)return {};

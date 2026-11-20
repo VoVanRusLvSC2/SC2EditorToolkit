@@ -1,4 +1,6 @@
-param([string]$OutputDirectory='bin-release',[switch]$WithVulkan)
+param([string]$OutputDirectory='bin-release',[switch]$WithVulkan,[string]$Python='python')
+& $Python (Join-Path $PSScriptRoot 'tools\generate_editor_profiles.py') --check
+if($LASTEXITCODE){throw 'Generate matching Editor profiles before building'}
 . (Join-Path $PSScriptRoot 'scripts\toolchain.ps1')
 $destination=if([IO.Path]::IsPathRooted($OutputDirectory)){$OutputDirectory}else{Join-Path $PSScriptRoot $OutputDirectory}
 New-Item -ItemType Directory -Path $destination -Force | Out-Null
@@ -13,5 +15,5 @@ try {
  & $compiler @options (Join-Path $PSScriptRoot 'src\render_capture.cpp') /Fe:RenderCapture.exe
  if($LASTEXITCODE){throw 'Frame capture controller build failed'}
 }finally{Pop-Location}
-& (Join-Path $PSScriptRoot 'build_host.ps1') -OutputDirectory $OutputDirectory
+& (Join-Path $PSScriptRoot 'build_host.ps1') -OutputDirectory $OutputDirectory -Python $Python
 if($WithVulkan){& (Join-Path $PSScriptRoot 'scripts\fetch-vulkan.ps1') -Destination (Join-Path $destination 'renderers\dxvk')}

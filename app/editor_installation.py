@@ -3,7 +3,11 @@ import hashlib
 import os
 import shutil
 import struct
+import json
+import subprocess
+import sys
 from pathlib import Path
+from editor_profiles import PROFILES
 
 SUPPORTED_VERSION = (5, 0, 17, 98310)
 SUPPORTED_SHA256 = 'e561d76903221bdcd4585b9496bba1d2b9c5ae13b8fbe8c8469d213f22823d91'
@@ -74,7 +78,8 @@ def resolve_editor(value=None):
     raise FileNotFoundError('SC2 Editor not found; set SC2_EDITOR_PATH or supply editor_path to its x64 EXE or installation directory')
 
 
-def validate_editor(path):
+def inspect_editor(path):
+    """Identify an x64 Editor without launching it or assuming adapter compatibility."""
     path = editor_candidate(path)
     with path.open('rb') as stream:
         dos = stream.read(64)
@@ -82,8 +87,65 @@ def validate_editor(path):
         stream.seek(struct.unpack_from('<I', dos, 60)[0])
         pe = stream.read(6)
         if pe != b'PE\0\0\x64\x86': raise ValueError('Editor must be a Windows AMD64 executable')
-    digest = hashlib.sha256(path.read_bytes()).hexdigest()
-    if digest != SUPPORTED_SHA256:
-        raise ValueError('Unsupported Editor binary: this UI adapter is verified for original 5.0.17.98310 x64; no Editor was launched. Select a supported installation; other builds need adapter validation')
-    return {'path': str(path), 'version': '.'.join(map(str, SUPPORTED_VERSION)), 'sha256': digest,
-            'adapter': 'sc2-editor-5.0.17.98310-ui-v1', 'originalBinaryVerified': True}
+        stream.seek(0)
+        fingerprint = hashlib.sha256()
+        for chunk in iter(lambda: stream.read(1024 * 1024), b''):
+            fingerprint.update(chunk)
+    return {'path': str(path), 'sha256': fingerprint.hexdigest()}
+
+
+def validate_editor(path):
+    identity = inspect_editor(path)
+    digest = identity['sha256']
+    # Retain the original public identity constants and the already-started
+    # streaming inspect_editor helper; profile matching now covers more builds.
+    profile=next((p for p in PROFILES if p['sha256']==digest),None)
+    if digest==SUPPORTED_SHA256:profile=next(p for p in PROFILES if p['version']=='.'.join(map(str,SUPPORTED_VERSION)))
+    if profile:
+        native={'version':profile['version'],'adapter':profile['id'],
+                'nativeOffsets':profile['nativeOffsets'],'verificationMethod':'pinned-sha256'}
+    else:
+        native=inspect_trusted_editor(identity)
+    offsets=bool(native['nativeOffsets'])
+    return {**identity,'version':native['version'],'adapter':native['adapter'],
+            'originalBinaryVerified':True,'verificationMethod':native['verificationMethod'],
+            'compatibility':'verified-offset-profile' if offsets else 'portable-ui',
+            'nativeOffsetsVerified':offsets,'liveUiProbeRequired':not offsets,
+            'capabilities':{'hiddenStartup':True,'portableGui':True,'dataAudit':offsets,'terrainObjectFilters':offsets}}
+
+
+def inspect_trusted_editor(identity):
+    """Ask the matching native host to verify role and Blizzard Authenticode.
+
+    This mode does not create an Editor process or a desktop. Unlisted signed
+    builds can use portable UI operations; no internal-offset profile is inferred.
+    """
+    resources=Path(getattr(sys,'_MEIPASS',os.environ.get('SC2_NATIVE_BIN',str(Path(__file__).resolve().parent.parent/'bin-release'))))
+    helper=resources/'HiddenEditorHost.exe'
+    reason='Matching native identity inspector is missing'
+    if helper.is_file():
+        try:
+            run=subprocess.run([str(helper),'--inspect-portable-editor',identity['path']],capture_output=True,timeout=30,
+                creationflags=getattr(subprocess,'CREATE_NO_WINDOW',0))
+            native=json.loads(run.stdout.decode('utf8'))
+            if run.returncode==0 and native.get('trusted') is True and native.get('editorLaunched') is False and native.get('sha256')==identity['sha256']:
+                if inspect_editor(identity['path'])!=identity:raise ValueError('Editor changed during identity verification')
+                # An unlisted file can never acquire native offsets from the
+                # generic inspector, even if its version string matches a profile.
+                return {**native,'nativeOffsets':False,'adapter':'portable-editor-ui'}
+            reason='Editor role or trusted Blizzard signature was not confirmed'
+        except (OSError,ValueError,subprocess.TimeoutExpired) as error:reason=str(error)
+    raise ValueError(f"Unsupported Editor binary: {identity['path']} (SHA-256 {identity['sha256']}). {reason}; no Editor was launched")
+
+
+class EditorCapabilityUnavailable(RuntimeError):
+    def __init__(self,identity,capability):
+        message=f"Native capability {capability} is unavailable for Editor {identity.get('version','unknown')} ({identity.get('sha256','unknown')}); portable startup and GUI operations remain available"
+        super().__init__(message)
+        self.error_info={'code':'NATIVE_ADAPTER_UNAVAILABLE','message':message,'automaticRetry':False,
+            'nextStep':'Use a verified native-offset profile for this operation; inspect doctor for available capabilities.',
+            'editorVersion':identity.get('version'),'editorSha256':identity.get('sha256'),'capability':capability}
+
+
+def require_editor_capability(identity,capability):
+    if not identity.get('capabilities',{}).get(capability,False):raise EditorCapabilityUnavailable(identity,capability)

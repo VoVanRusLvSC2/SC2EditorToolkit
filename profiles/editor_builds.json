@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "profiles": [
+    {
+      "id": "sc2-editor-5.0.17.98310-ui-v1",
+      "version": "5.0.17.98310",
+      "sha256": "e561d76903221bdcd4585b9496bba1d2b9c5ae13b8fbe8c8469d213f22823d91",
+      "nativeOffsets": true
+    },
+    {
+      "id": "sc2-editor-5.0.17.98745-portable-ui",
+      "version": "5.0.17.98745",
+      "sha256": "c31f1ac714f237a0190179f5dbb49298c8e2dbcbda30008297a316b1b18394c4",
+      "nativeOffsets": false
+    }
+  ]
+}

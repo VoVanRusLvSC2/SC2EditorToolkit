@@ -17,6 +17,7 @@ from PyInstaller.archive.readers import CArchiveReader
 ROOT=Path(__file__).resolve().parents[1]
 sys.path.insert(0,str(ROOT/'app'))
 from sc2native.version import VERSION,NATIVE_PROTOCOL
+from editor_profiles import PROFILES
 NO_WINDOW=getattr(subprocess,'CREATE_NO_WINDOW',0)
 
 
@@ -50,6 +51,9 @@ def main():
                 raise RuntimeError('Missing toolkit module: '+module)
             code=pyz.extract(module)
             if code!=compile(source.read_bytes(),code.co_filename,'exec'):raise RuntimeError('Frozen source differs from committed source: '+module)
+        for module in ('editor_installation','editor_profiles','native_xml_oracle','file_prepare'):
+            code=pyz.extract(module);source=ROOT/'app'/(module+'.py')
+            if code!=compile(source.read_bytes(),code.co_filename,'exec'):raise RuntimeError('Frozen identity/source module differs: '+module)
         entry='hidden_api' if name=='SC2NativeAPI.exe' else 'mcp_server'
         code=marshal.loads(archive.extract(entry));assert code==compile((ROOT/'app'/(entry+'.py')).read_bytes(),code.co_filename,'exec')
         assert not any('numpy' in n.lower() for n in archive.toc)
@@ -58,8 +62,9 @@ def main():
     for name in docs:shutil.copyfile(ROOT/'docs'/name,dist/'docs'/name)
     for name in ('README.md','LICENSE','NOTICE','THIRD_PARTY.txt'):shutil.copyfile(ROOT/name,dist/name)
     manifest={'project':'SC2 Editor Toolkit','version':VERSION,'prerelease':'-' in VERSION,'apiContractVersion':1,'nativeProtocol':NATIVE_PROTOCOL,
-              'sourceCommit':commit,'platform':'Windows x64','supportedEditorBuild':'5.0.17.98310',
-              'nativeSha256':hashes,'frozenToolkitSourceVerified':True,'mcpTools':31,'acceptance':'docs/V1_1_ACCEPTANCE.md' if VERSION.startswith('1.1.') else 'docs/V1_ACCEPTANCE.md'}
+              'sourceCommit':commit,'platform':'Windows x64','supportedEditorBuild':'portable-Blizzard-signed-x64',
+              'editorCompatibility':{'startupVersionAllowlistRequired':False,'knownBuildProfiles':PROFILES,'unverifiedNativeOffsetsAllowed':False},
+              'nativeSha256':hashes,'frozenToolkitSourceVerified':True,'mcpTools':31,'acceptance':'docs/MULTIVERSION_PLAN.md' if VERSION.startswith('1.2.') else 'docs/V1_1_ACCEPTANCE.md' if VERSION.startswith('1.1.') else 'docs/V1_ACCEPTANCE.md'}
     (dist/'BUILD.json').write_text(json.dumps(manifest,indent=2)+'\n',encoding='utf8')
     allowed={'SC2NativeAPI.exe','SC2NativeMCP.exe','README.md','LICENSE','NOTICE','THIRD_PARTY.txt','BUILD.json','SHA256SUMS.txt'}
     allowed.update('docs/'+name for name in docs)
